@@ -1,0 +1,38 @@
+{
+  "name": "education-erp-system",
+  "version": "1.0.0",
+  "description": "Complete Education ERP System (CMS + LMS + IMS)",
+  "main": "server.js",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "node backend/server.js",
+    "server:watch": "nodemon backend/server.js",
+    "client": "cd frontend && npm start",
+    "client:win": "cd frontend && npm start",
+    "install-all": "npm install && cd frontend && npm install",
+    "create-admin": "node backend/scripts/createAdmin.js",
+    "start:backend": "node backend/server.js",
+    "start:frontend": "cd frontend && npm start"
+  },
+  "keywords": ["education", "erp", "lms", "cms", "ims"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "mongoose": "^7.5.0",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "dotenv": "^16.3.1",
+    "cors": "^2.8.5",
+    "multer": "^1.4.5-lts.1",
+    "express-validator": "^7.0.1",
+    "nodemailer": "^6.9.7",
+    "qrcode": "^1.5.3",
+    "pdfkit": "^0.13.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1",
+    "concurrently": "^8.2.1"
+  }
+}
+

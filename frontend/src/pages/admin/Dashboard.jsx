@@ -1,0 +1,472 @@
+import { useQuery } from 'react-query';
+import api from '../../utils/api';
+import { 
+  Users, 
+  GraduationCap, 
+  BookOpen, 
+  DollarSign, 
+  TrendingUp, 
+  AlertCircle,
+  Building2,
+  Wallet,
+  ArrowUpCircle,
+  ArrowDownCircle,
+  PieChart,
+  UserPlus,
+  Calendar,
+  Clock
+} from 'lucide-react';
+
+const AdminDashboard = () => {
+  const { data: stats, isLoading } = useQuery('adminStats', async () => {
+    const response = await api.get('/dashboard/admin');
+    return response.data;
+  });
+
+  if (isLoading) {
+    return <div className="text-center py-12">Loading...</div>;
+  }
+
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount || 0);
+  };
+
+  const formatDate = (date) => {
+    if (!date) return 'N/A';
+    const d = new Date(date);
+    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  };
+
+  const statCards = [
+    {
+      title: 'Total Students',
+      value: stats?.totalStudents || 0,
+      icon: Users,
+      color: 'bg-blue-500',
+      subtitle: `${stats?.activeStudents || 0} active`
+    },
+    {
+      title: 'Total Fee Amount',
+      value: formatCurrency(stats?.totalFeeAmount || 0),
+      icon: Wallet,
+      color: 'bg-purple-500',
+      subtitle: 'All students combined'
+    },
+    {
+      title: 'Amount Collected',
+      value: formatCurrency(stats?.amountCollected || 0),
+      icon: DollarSign,
+      color: 'bg-green-500',
+      subtitle: formatCurrency((stats?.totalFeeAmount || 0) - (stats?.amountCollected || 0)) + ' pending'
+    },
+    {
+      title: 'Monthly Income',
+      value: formatCurrency(stats?.monthlyIncome || 0),
+      icon: ArrowUpCircle,
+      color: 'bg-emerald-500',
+      subtitle: 'This month'
+    },
+    {
+      title: 'Monthly Expenses',
+      value: formatCurrency(stats?.monthlyExpenses || 0),
+      icon: ArrowDownCircle,
+      color: 'bg-red-500',
+      subtitle: 'This month'
+    },
+    {
+      title: 'Net Balance',
+      value: formatCurrency(stats?.netBalance || 0),
+      icon: TrendingUp,
+      color: stats?.netBalance >= 0 ? 'bg-indigo-500' : 'bg-orange-500',
+      subtitle: 'Income - Expenses'
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+          Admin Dashboard
+        </h1>
+        <p className="text-gray-600 dark:text-gray-400">
+          Comprehensive overview of students, departments, and finances
+        </p>
+      </div>
+
+      {/* Main Statistics Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {statCards.map((stat, index) => {
+          const Icon = stat.icon;
+          return (
+            <div key={index} className="card-hover animate-fade-in" style={{ animationDelay: `${index * 0.1}s` }}>
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
+                    {stat.title}
+                  </p>
+                  <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">
+                    {stat.value}
+                  </p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    {stat.subtitle}
+                  </p>
+                </div>
+                <div className={`${stat.color} p-4 rounded-xl shadow-lg`}>
+                  <Icon className="w-8 h-8 text-white" />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Department Breakdown and Financial Summary */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Department Breakdown */}
+        <div className="card animate-slide-up">
+          <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                <Building2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              Students by Department
+            </h2>
+            <span className="text-sm font-semibold text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-3 py-1 rounded-full">
+              Total: {stats?.totalStudents || 0}
+            </span>
+          </div>
+          <div className="space-y-3">
+            {stats?.departmentBreakdown && stats.departmentBreakdown.length > 0 ? (
+              stats.departmentBreakdown.map((dept, index) => {
+                const percentage = stats.totalStudents > 0 
+                  ? ((dept.count / stats.totalStudents) * 100).toFixed(1) 
+                  : 0;
+                const colors = [
+                  'bg-blue-500',
+                  'bg-green-500',
+                  'bg-purple-500',
+                  'bg-yellow-500',
+                  'bg-indigo-500',
+                  'bg-pink-500',
+                  'bg-red-500',
+                  'bg-teal-500'
+                ];
+                const color = colors[index % colors.length];
+                
+                return (
+                  <div key={index} className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-900 dark:text-white">
+                        {dept.name}
+                      </span>
+                      <span className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                        {dept.count} ({percentage}%)
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+                      <div
+                        className={`${color} h-2.5 rounded-full transition-all duration-300`}
+                        style={{ width: `${percentage}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+                No department data available
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Financial Summary */}
+        <div className="card animate-slide-up" style={{ animationDelay: '0.1s' }}>
+          <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                <PieChart className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+              </div>
+              Monthly Financial Summary
+            </h2>
+          </div>
+          <div className="space-y-4">
+            <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-green-700 dark:text-green-400">
+                    Total Income
+                  </p>
+                  <p className="text-2xl font-bold text-green-900 dark:text-green-300 mt-1">
+                    {formatCurrency(stats?.monthlyIncome || 0)}
+                  </p>
+                </div>
+                <ArrowUpCircle className="w-8 h-8 text-green-500" />
+              </div>
+            </div>
+            
+            <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-red-700 dark:text-red-400">
+                    Total Expenses
+                  </p>
+                  <p className="text-2xl font-bold text-red-900 dark:text-red-300 mt-1">
+                    {formatCurrency(stats?.monthlyExpenses || 0)}
+                  </p>
+                </div>
+                <ArrowDownCircle className="w-8 h-8 text-red-500" />
+              </div>
+            </div>
+            
+            <div className={`p-4 rounded-lg border ${
+              (stats?.netBalance || 0) >= 0
+                ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800'
+                : 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800'
+            }`}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className={`text-sm font-medium ${
+                    (stats?.netBalance || 0) >= 0
+                      ? 'text-indigo-700 dark:text-indigo-400'
+                      : 'text-orange-700 dark:text-orange-400'
+                  }`}>
+                    Net Balance
+                  </p>
+                  <p className={`text-2xl font-bold mt-1 ${
+                    (stats?.netBalance || 0) >= 0
+                      ? 'text-indigo-900 dark:text-indigo-300'
+                      : 'text-orange-900 dark:text-orange-300'
+                  }`}>
+                    {formatCurrency(stats?.netBalance || 0)}
+                  </p>
+                </div>
+                <TrendingUp className={`w-8 h-8 ${
+                  (stats?.netBalance || 0) >= 0 ? 'text-indigo-500' : 'text-orange-500'
+                }`} />
+              </div>
+            </div>
+
+            {/* Fee Collection Summary */}
+            <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                Fee Collection Status
+              </h3>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600 dark:text-gray-400">Total Fee Amount:</span>
+                  <span className="font-semibold text-gray-900 dark:text-white">
+                    {formatCurrency(stats?.totalFeeAmount || 0)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600 dark:text-gray-400">Amount Collected:</span>
+                  <span className="font-semibold text-green-600 dark:text-green-400">
+                    {formatCurrency(stats?.amountCollected || 0)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600 dark:text-gray-400">Pending Amount:</span>
+                  <span className="font-semibold text-red-600 dark:text-red-400">
+                    {formatCurrency((stats?.totalFeeAmount || 0) - (stats?.amountCollected || 0))}
+                  </span>
+                </div>
+                {stats?.totalFeeAmount > 0 && (
+                  <div className="mt-2">
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-gray-500 dark:text-gray-400">Collection Rate</span>
+                      <span className="text-gray-700 dark:text-gray-300">
+                        {((stats.amountCollected / stats.totalFeeAmount) * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                      <div
+                        className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                        style={{ 
+                          width: `${(stats.amountCollected / stats.totalFeeAmount) * 100}%` 
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Additional Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="card">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                Total Teachers
+              </p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
+                {stats?.totalTeachers || 0}
+              </p>
+            </div>
+            <div className="bg-green-500 p-4 rounded-lg">
+              <GraduationCap className="w-8 h-8 text-white" />
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                Total Courses
+              </p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
+                {stats?.totalCourses || 0}
+              </p>
+            </div>
+            <div className="bg-purple-500 p-4 rounded-lg">
+              <BookOpen className="w-8 h-8 text-white" />
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                Pending Fees
+              </p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
+                {formatCurrency(stats?.pendingFees || 0)}
+              </p>
+            </div>
+            <div className="bg-red-500 p-4 rounded-lg">
+              <AlertCircle className="w-8 h-8 text-white" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Admission Details Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Admission Statistics */}
+        <div className="lg:col-span-1">
+          <div className="card animate-slide-up">
+            <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
+                  <UserPlus className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                </div>
+                Admission Statistics
+              </h2>
+            </div>
+            <div className="space-y-4">
+              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-blue-700 dark:text-blue-400">
+                      This Month
+                    </p>
+                    <p className="text-2xl font-bold text-blue-900 dark:text-blue-300 mt-1">
+                      {stats?.admissionsThisMonth || 0}
+                    </p>
+                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                      New admissions
+                    </p>
+                  </div>
+                  <Calendar className="w-8 h-8 text-blue-500" />
+                </div>
+              </div>
+              
+              <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+                      Today
+                    </p>
+                    <p className="text-2xl font-bold text-emerald-900 dark:text-emerald-300 mt-1">
+                      {stats?.admissionsToday || 0}
+                    </p>
+                    <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
+                      Admissions today
+                    </p>
+                  </div>
+                  <Clock className="w-8 h-8 text-emerald-500" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Recent Admissions */}
+        <div className="lg:col-span-2">
+          <div className="card animate-slide-up" style={{ animationDelay: '0.1s' }}>
+            <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <div className="p-2 bg-teal-100 dark:bg-teal-900/30 rounded-lg">
+                  <Users className="w-5 h-5 text-teal-600 dark:text-teal-400" />
+                </div>
+                Recent Admissions
+              </h2>
+              <span className="text-sm font-semibold text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-3 py-1 rounded-full">
+                Last 10 admissions
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              {stats?.recentAdmissions && stats.recentAdmissions.length > 0 ? (
+                <table className="table">
+                  <thead className="table-header">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        SR NO
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Name
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Course
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Date
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                    {stats.recentAdmissions.map((admission, index) => (
+                      <tr key={index} className="table-row">
+                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                          {admission.srNo || 'N/A'}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                          {admission.name}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                          {admission.course}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                          {formatDate(admission.admissionDate)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  <UserPlus className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                  <p>No recent admissions</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default AdminDashboard;
+
