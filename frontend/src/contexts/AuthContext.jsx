@@ -24,14 +24,29 @@ export const AuthProvider = ({ children }) => {
     const token = localStorage.getItem('token');
     if (token) {
       try {
-        const response = await api.get('/auth/me');
+        // Add timeout to prevent hanging
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+        
+        const response = await api.get('/auth/me', {
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
         setUser(response.data);
       } catch (error) {
+        // Handle all errors gracefully
+        if (error.name === 'AbortError' || error.code === 'ECONNREFUSED' || !error.response) {
+          // Backend not running or network error - clear token and continue
+          console.warn('Backend server not accessible, clearing auth token');
+        }
         localStorage.removeItem('token');
         setUser(null);
+      } finally {
+        setLoading(false);
       }
+    } else {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const login = async (email, password) => {

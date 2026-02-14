@@ -98,8 +98,8 @@ router.get('/invoices/:id', authenticate, async (req, res) => {
 
 // @route   POST /api/fees/invoices
 // @desc    Create invoice
-// @access  Private (Admin)
-router.post('/invoices', authenticate, authorize('admin', 'super_admin'), async (req, res) => {
+// @access  Private (Admin, Accountant)
+router.post('/invoices', authenticate, authorize('admin', 'super_admin', 'accountant'), async (req, res) => {
   try {
     const invoiceData = req.body;
     const { collectedBy } = req.body;
@@ -176,8 +176,8 @@ router.post('/invoices', authenticate, authorize('admin', 'super_admin'), async 
 
 // @route   PUT /api/fees/invoices/:id/pay
 // @desc    Record payment
-// @access  Private (Admin)
-router.put('/invoices/:id/pay', authenticate, authorize('admin', 'super_admin'), async (req, res) => {
+// @access  Private (Admin, Accountant)
+router.put('/invoices/:id/pay', authenticate, authorize('admin', 'super_admin', 'accountant'), async (req, res) => {
   try {
     const { paidAmount, paymentMethod, paymentDate, collectedBy } = req.body;
     const invoice = await Invoice.findById(req.params.id);

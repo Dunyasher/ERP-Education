@@ -94,6 +94,9 @@ app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/classes', require('./routes/classes'));
 app.use('/api/settings', require('./routes/settings'));
+app.use('/api/audit', require('./routes/audit'));
+app.use('/api/staff-requests', require('./routes/staffRequests'));
+app.use('/api/staff-categories', require('./routes/staffCategories'));
 
 // Health Check
 app.get('/api/health', (req, res) => {

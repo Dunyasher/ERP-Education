@@ -2,16 +2,26 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
-import { Plus, Edit, Trash2, Search, GraduationCap, User, Mail, Phone, IdCard, Award } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, GraduationCap, User, Mail, Phone, CreditCard, Award, Users, X } from 'lucide-react';
 
 const Teachers = () => {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [showCategoryForm, setShowCategoryForm] = useState(false);
+  const [editingCategory, setEditingCategory] = useState(null);
   const [editingTeacher, setEditingTeacher] = useState(null);
   const [emailError, setEmailError] = useState('');
   const [isCheckingEmail, setIsCheckingEmail] = useState(false);
+  const [categoryFormData, setCategoryFormData] = useState({
+    name: '',
+    instituteType: 'college',
+    description: '',
+    isActive: true
+  });
   const [formData, setFormData] = useState({
+    staffCategoryId: '',
+    role: 'teacher',
     email: '',
     password: '',
     personalInfo: {
@@ -61,19 +71,39 @@ const Teachers = () => {
     return response.data;
   });
 
-  // Create/Update teacher mutation
+  // Fetch staff categories
+  const { data: staffCategories = [] } = useQuery('staffCategories', async () => {
+    const response = await api.get('/staff-categories');
+    return response.data;
+  });
+
+  // Create/Update teacher/accountant mutation
   const teacherMutation = useMutation(
     async (data) => {
       if (editingTeacher) {
         return api.put(`/teachers/${editingTeacher._id}`, data);
       } else {
-        return api.post('/teachers', data);
+        // If creating accountant, use settings/users route
+        if (data.role === 'accountant') {
+          return api.post('/settings/users', {
+            email: data.email,
+            password: data.password || 'password123',
+            role: 'accountant',
+            firstName: data.personalInfo.fullName.split(' ')[0] || data.personalInfo.fullName,
+            lastName: data.personalInfo.fullName.split(' ').slice(1).join(' ') || '',
+            phone: data.contactInfo.phone || ''
+          });
+        } else {
+          // Create teacher via teachers route
+          return api.post('/teachers', data);
+        }
       }
     },
     {
-      onSuccess: () => {
+      onSuccess: (response, variables) => {
         queryClient.invalidateQueries('teachers');
-        toast.success(editingTeacher ? 'Teacher updated successfully!' : 'Teacher created successfully!');
+        const roleName = variables.role === 'accountant' ? 'Accountant' : 'Teacher';
+        toast.success(editingTeacher ? `${roleName} updated successfully!` : `${roleName} created successfully!`);
         setShowForm(false);
         setEditingTeacher(null);
         resetForm();
@@ -169,6 +199,8 @@ const Teachers = () => {
     setEmailError('');
     setIsCheckingEmail(false);
     setFormData({
+      staffCategoryId: '',
+      role: 'teacher',
       email: '',
       password: '',
       personalInfo: {
@@ -203,7 +235,10 @@ const Teachers = () => {
 
   const handleEdit = (teacher) => {
     setEditingTeacher(teacher);
+    // Determine role from teacher data or default to teacher
+    const userRole = teacher.userId?.role || 'teacher';
     setFormData({
+      role: userRole,
       email: teacher.userId?.email || '',
       password: '',
       personalInfo: teacher.personalInfo || {},
@@ -218,7 +253,13 @@ const Teachers = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Check email before submission (only for new teachers)
+    // Validate phone number for accountants
+    if (formData.role === 'accountant' && !formData.contactInfo.phone) {
+      toast.error('Phone number is required for accountant accounts');
+      return;
+    }
+    
+    // Check email before submission (only for new accounts)
     if (!editingTeacher && formData.email) {
       const emailExists = await checkEmailExists(formData.email);
       if (emailExists) {
@@ -233,6 +274,90 @@ const Teachers = () => {
   const handleDelete = (id) => {
     if (window.confirm('Are you sure you want to delete this teacher?')) {
       deleteMutation.mutate(id);
+    }
+  };
+
+  // Staff Category mutation
+  const categoryMutation = useMutation(
+    async (data) => {
+      if (editingCategory) {
+        return api.put(`/staff-categories/${editingCategory._id}`, data);
+      } else {
+        return api.post('/staff-categories', data);
+      }
+    },
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('staffCategories');
+        toast.success(editingCategory ? 'Category updated successfully!' : 'Category created successfully!');
+        setShowCategoryForm(false);
+        setEditingCategory(null);
+        setCategoryFormData({
+          name: '',
+          instituteType: 'college',
+          description: '',
+          isActive: true
+        });
+      },
+      onError: (error) => {
+        console.error('Category mutation error:', error);
+        console.error('Error response:', error.response?.data);
+        const errorMessage = error.response?.data?.message || 
+                            error.response?.data?.error || 
+                            error.message ||
+                            'Failed to save category';
+        toast.error(errorMessage);
+      }
+    }
+  );
+
+  const handleCategorySubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!categoryFormData.name || !categoryFormData.instituteType) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+    
+    categoryMutation.mutate(categoryFormData);
+  };
+
+  const resetCategoryForm = () => {
+    setCategoryFormData({
+      name: '',
+      instituteType: 'college',
+      description: '',
+      isActive: true
+    });
+  };
+
+  const handleEditCategory = (category) => {
+    setEditingCategory(category);
+    setCategoryFormData({
+      name: category.name || '',
+      instituteType: category.instituteType || 'college',
+      description: category.description || '',
+      isActive: category.isActive !== undefined ? category.isActive : true
+    });
+    setShowCategoryForm(true);
+  };
+
+  const deleteCategoryMutation = useMutation(
+    async (id) => api.delete(`/staff-categories/${id}`),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('staffCategories');
+        toast.success('Category deleted successfully!');
+      },
+      onError: () => {
+        toast.error('Failed to delete category');
+      }
+    }
+  );
+
+  const handleDeleteCategory = (id) => {
+    if (window.confirm('Are you sure you want to delete this category?')) {
+      deleteCategoryMutation.mutate(id);
     }
   };
 
@@ -262,17 +387,30 @@ const Teachers = () => {
             Manage all teachers in the system
           </p>
         </div>
-        <button
-          onClick={() => {
-            setShowForm(true);
-            setEditingTeacher(null);
-            resetForm();
-          }}
-          className="btn-primary flex items-center gap-2"
-        >
-          <Plus className="w-5 h-5" />
-          Add Teacher
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={() => {
+              setShowCategoryForm(true);
+              setEditingCategory(null);
+              resetCategoryForm();
+            }}
+            className="btn-primary flex items-center gap-2"
+          >
+            <Users className="w-5 h-5" />
+            Category
+          </button>
+          <button
+            onClick={() => {
+              setShowForm(true);
+              setEditingTeacher(null);
+              resetForm();
+            }}
+            className="btn-secondary flex items-center gap-2"
+          >
+            <Plus className="w-5 h-5" />
+            Add Full Details
+          </button>
+        </div>
       </div>
 
       {/* Search Bar */}
@@ -342,7 +480,7 @@ const Teachers = () => {
                 {/* Unique ID - Prominent Display */}
                 <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-lg p-3 border border-indigo-200 dark:border-indigo-700">
                   <div className="flex items-center gap-2 mb-1">
-                    <IdCard className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                    <CreditCard className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                     <span className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Unique ID</span>
                   </div>
                   <p className="text-lg font-bold text-indigo-700 dark:text-indigo-300">
@@ -410,7 +548,9 @@ const Teachers = () => {
             <div className="p-6">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {editingTeacher ? 'Edit Teacher' : 'Add New Teacher'}
+                  {editingTeacher 
+                    ? `Edit ${formData.role === 'accountant' ? 'Accountant' : 'Teacher'}` 
+                    : `Add New ${formData.role === 'accountant' ? 'Accountant' : 'Teacher'}`}
                 </h2>
                 <button
                   onClick={() => {
@@ -425,6 +565,57 @@ const Teachers = () => {
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Category and Role Selection */}
+                {!editingTeacher && (
+                  <div className="space-y-4 border-b pb-4">
+                    <h3 className="text-lg font-semibold">Account Type</h3>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Category *</label>
+                      <select
+                        value={formData.staffCategoryId}
+                        onChange={(e) => setFormData({ ...formData, staffCategoryId: e.target.value })}
+                        className="input-field"
+                        required
+                      >
+                        <option value="">Select category...</option>
+                        {staffCategories
+                          .filter(cat => !formData.employment?.instituteType || cat.instituteType === formData.employment.instituteType)
+                          .map((category) => (
+                            <option key={category._id} value={category._id}>
+                              {category.name}
+                            </option>
+                          ))}
+                      </select>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Select the staff category (e.g., Teacher, Principal, Security, Driver)
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Role *</label>
+                      <select
+                        value={formData.role}
+                        onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                        className="input-field"
+                        required
+                      >
+                        <option value="teacher">Teacher</option>
+                        <option value="accountant">Accountant</option>
+                        <option value="security">Security</option>
+                        <option value="sweeper">Sweeper</option>
+                        <option value="admin">Admin</option>
+                        <option value="super_admin">Principal/Director</option>
+                      </select>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        {formData.role === 'accountant' 
+                          ? 'Accountant can manage students, fees, and view reports'
+                          : formData.role === 'teacher'
+                          ? 'Teacher can manage courses and students'
+                          : 'Assign the system role for this staff member'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Personal Information */}
                 <div className="space-y-4">
                   <h3 className="text-lg font-semibold">Personal Information</h3>
@@ -513,7 +704,12 @@ const Teachers = () => {
                       )}
                     </div>
                     <div>
-                      <label className="block text-sm font-medium mb-1">Phone *</label>
+                      <label className="block text-sm font-medium mb-1">
+                        Phone * 
+                        {formData.role === 'accountant' && (
+                          <span className="text-xs text-orange-600 dark:text-orange-400 ml-1">(Required for login)</span>
+                        )}
+                      </label>
                       <input
                         type="tel"
                         required
@@ -524,6 +720,11 @@ const Teachers = () => {
                         })}
                         className="input-field"
                       />
+                      {formData.role === 'accountant' && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          Accountants log in with email, password, and phone number
+                        </p>
+                      )}
                     </div>
                     {!editingTeacher && (
                       <div>
@@ -540,9 +741,10 @@ const Teachers = () => {
                   </div>
                 </div>
 
-                {/* Employment Information */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold">Employment Information</h3>
+                {/* Employment Information - Only for Teachers */}
+                {formData.role === 'teacher' && (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold">Employment Information</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium mb-1">Institute Type *</label>
@@ -577,38 +779,41 @@ const Teachers = () => {
                       </select>
                     </div>
                   </div>
-                </div>
+                  </div>
+                )}
 
-                {/* Salary Information */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold">Salary Information</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Basic Salary</label>
-                      <input
-                        type="number"
-                        value={formData.salary.basicSalary}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          salary: { ...formData.salary, basicSalary: parseFloat(e.target.value) || 0 }
-                        })}
-                        className="input-field"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Allowances</label>
-                      <input
-                        type="number"
-                        value={formData.salary.allowances}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          salary: { ...formData.salary, allowances: parseFloat(e.target.value) || 0 }
-                        })}
-                        className="input-field"
-                      />
+                {/* Salary Information - Only for Teachers */}
+                {formData.role === 'teacher' && (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold">Salary Information</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Basic Salary</label>
+                        <input
+                          type="number"
+                          value={formData.salary.basicSalary}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            salary: { ...formData.salary, basicSalary: parseFloat(e.target.value) || 0 }
+                          })}
+                          className="input-field"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Allowances</label>
+                        <input
+                          type="number"
+                          value={formData.salary.allowances}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            salary: { ...formData.salary, allowances: parseFloat(e.target.value) || 0 }
+                          })}
+                          className="input-field"
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 <div className="flex justify-end gap-4 pt-4 border-t">
                   <button
@@ -627,10 +832,173 @@ const Teachers = () => {
                     disabled={teacherMutation.isLoading}
                     className="btn-primary"
                   >
-                    {teacherMutation.isLoading ? 'Saving...' : editingTeacher ? 'Update Teacher' : 'Create Teacher'}
+                    {teacherMutation.isLoading 
+                      ? 'Saving...' 
+                      : editingTeacher 
+                        ? `Update ${formData.role === 'accountant' ? 'Accountant' : 'Teacher'}` 
+                        : `Create ${formData.role === 'accountant' ? 'Accountant' : 'Teacher'}`}
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Category Form Modal */}
+      {showCategoryForm && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowCategoryForm(false);
+              setEditingCategory(null);
+              resetCategoryForm();
+            }
+          }}
+        >
+          <div 
+            className="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  {editingCategory ? 'Edit Category' : 'Add New Category'}
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowCategoryForm(false);
+                    setEditingCategory(null);
+                    resetCategoryForm();
+                  }}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleCategorySubmit} className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Type of Employee *</label>
+                  <input
+                    type="text"
+                    required
+                    value={categoryFormData.name}
+                    onChange={(e) => setCategoryFormData({ ...categoryFormData, name: e.target.value })}
+                    className="input-field"
+                    placeholder="e.g., Teacher, Madam, Sir, Principal"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Institute Type *</label>
+                  <select
+                    required
+                    value={categoryFormData.instituteType}
+                    onChange={(e) => setCategoryFormData({ ...categoryFormData, instituteType: e.target.value })}
+                    className="input-field"
+                  >
+                    <option value="school">School</option>
+                    <option value="college">College</option>
+                    <option value="academy">Academy</option>
+                    <option value="short_course">Short Course</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Description</label>
+                  <textarea
+                    value={categoryFormData.description}
+                    onChange={(e) => setCategoryFormData({ ...categoryFormData, description: e.target.value })}
+                    className="input-field"
+                    rows="3"
+                    placeholder="Category description..."
+                  />
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="isActive"
+                    checked={categoryFormData.isActive}
+                    onChange={(e) => setCategoryFormData({ ...categoryFormData, isActive: e.target.checked })}
+                    className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                  />
+                  <label htmlFor="isActive" className="ml-2 text-sm font-medium">
+                    Active
+                  </label>
+                </div>
+                <div className="flex justify-end gap-4 pt-4 border-t">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCategoryForm(false);
+                      setEditingCategory(null);
+                      resetCategoryForm();
+                    }}
+                    className="btn-secondary"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={categoryMutation.isLoading}
+                    className="btn-primary"
+                  >
+                    {categoryMutation.isLoading ? 'Saving...' : editingCategory ? 'Update Category' : 'Create Category'}
+                  </button>
+                </div>
+              </form>
+
+              {/* Existing Categories List */}
+              <div className="mt-8 pt-6 border-t">
+                <h3 className="text-lg font-semibold mb-4">Existing Categories</h3>
+                {staffCategories.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                    <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p>No categories created yet. Add your first category above.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {staffCategories.map((category) => (
+                      <div
+                        key={category._id}
+                        className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3">
+                            <span className="font-semibold text-gray-900 dark:text-white">
+                              {category.name}
+                            </span>
+                            <span className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded">
+                              {category.instituteType}
+                            </span>
+                          </div>
+                          {category.description && (
+                            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                              {category.description}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleEditCategory(category)}
+                            className="p-2 rounded-lg text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                            title="Edit"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCategory(category._id)}
+                            className="p-2 rounded-lg text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

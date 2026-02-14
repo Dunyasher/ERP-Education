@@ -19,7 +19,8 @@ import {
   BookOpen,
   FileText,
   School,
-  DollarSign
+  DollarSign,
+  X
 } from 'lucide-react';
 
 const Settings = () => {
@@ -29,6 +30,12 @@ const Settings = () => {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [editingUserId, setEditingUserId] = useState(null);
+  const [showEditPasswordModal, setShowEditPasswordModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [editPasswordForm, setEditPasswordForm] = useState({
+    newPassword: '',
+    confirmPassword: ''
+  });
 
   // Profile form state
   const [profileForm, setProfileForm] = useState({
@@ -190,6 +197,9 @@ const Settings = () => {
     {
       onSuccess: () => {
         toast.success('Password updated successfully');
+        setShowEditPasswordModal(false);
+        setSelectedUser(null);
+        setEditPasswordForm({ newPassword: '', confirmPassword: '' });
       },
       onError: (error) => {
         toast.error(error.response?.data?.message || 'Failed to update password');
@@ -239,8 +249,33 @@ const Settings = () => {
       toast.error('Password must be at least 6 characters');
       return;
     }
-    if (window.confirm('Are you sure you want to change this user\'s password?')) {
-      changeUserPasswordMutation.mutate({ userId, password: newPassword });
+    changeUserPasswordMutation.mutate({ userId, password: newPassword });
+  };
+
+  const handleOpenEditPassword = (user) => {
+    setSelectedUser(user);
+    setEditPasswordForm({ newPassword: '', confirmPassword: '' });
+    setShowEditPasswordModal(true);
+  };
+
+  const handleEditPasswordSubmit = (e) => {
+    e.preventDefault();
+    
+    if (editPasswordForm.newPassword !== editPasswordForm.confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+    
+    if (editPasswordForm.newPassword.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+    
+    if (selectedUser) {
+      handleUserPasswordChange(selectedUser._id, editPasswordForm.newPassword);
+      setShowEditPasswordModal(false);
+      setEditPasswordForm({ newPassword: '', confirmPassword: '' });
+      setSelectedUser(null);
     }
   };
 
@@ -506,14 +541,9 @@ const Settings = () => {
                         <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
                           <div className="flex items-center gap-2">
                             <button
-                              onClick={() => {
-                                const newPassword = prompt('Enter new password (min 6 characters):');
-                                if (newPassword) {
-                                  handleUserPasswordChange(user._id, newPassword);
-                                }
-                              }}
-                              className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
-                              title="Change Password"
+                              onClick={() => handleOpenEditPassword(user)}
+                              className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 transition-colors"
+                              title="Edit Password"
                             >
                               <Lock className="w-4 h-4" />
                             </button>
@@ -530,6 +560,135 @@ const Settings = () => {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {/* Edit Password Modal */}
+          {showEditPasswordModal && selectedUser && (
+            <div 
+              className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) {
+                  setShowEditPasswordModal(false);
+                  setSelectedUser(null);
+                  setEditPasswordForm({ newPassword: '', confirmPassword: '' });
+                }
+              }}
+            >
+              <div 
+                className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full shadow-xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="p-6">
+                  <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                      <Lock className="w-6 h-6" />
+                      Edit Password
+                    </h2>
+                    <button
+                      onClick={() => {
+                        setShowEditPasswordModal(false);
+                        setSelectedUser(null);
+                        setEditPasswordForm({ newPassword: '', confirmPassword: '' });
+                      }}
+                      className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                    <p className="text-sm text-blue-800 dark:text-blue-200">
+                      <strong>User:</strong> {selectedUser.email}
+                    </p>
+                    <p className="text-xs text-blue-600 dark:text-blue-300 mt-1">
+                      Role: {selectedUser.role}
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleEditPasswordSubmit} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        New Password *
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showNewPassword ? 'text' : 'password'}
+                          value={editPasswordForm.newPassword}
+                          onChange={(e) => setEditPasswordForm({ ...editPasswordForm, newPassword: e.target.value })}
+                          required
+                          minLength={6}
+                          className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 pr-10 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+                          placeholder="Enter new password"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowNewPassword(!showNewPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                        >
+                          {showNewPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Must be at least 6 characters</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Confirm New Password *
+                      </label>
+                      <input
+                        type="password"
+                        value={editPasswordForm.confirmPassword}
+                        onChange={(e) => setEditPasswordForm({ ...editPasswordForm, confirmPassword: e.target.value })}
+                        required
+                        minLength={6}
+                        className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+                        placeholder="Confirm new password"
+                      />
+                    </div>
+
+                    <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                      <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                        <strong>Default Password:</strong> <code className="font-mono bg-yellow-100 dark:bg-yellow-900 px-2 py-1 rounded">password123</code>
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditPasswordForm({ 
+                            newPassword: 'password123', 
+                            confirmPassword: 'password123' 
+                          });
+                        }}
+                        className="mt-2 text-xs text-yellow-700 dark:text-yellow-300 hover:text-yellow-900 dark:hover:text-yellow-100 underline"
+                      >
+                        Click to reset to default password
+                      </button>
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowEditPasswordModal(false);
+                          setSelectedUser(null);
+                          setEditPasswordForm({ newPassword: '', confirmPassword: '' });
+                        }}
+                        className="px-6 py-2 border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-all font-semibold"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={changeUserPasswordMutation.isLoading}
+                        className="px-6 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
+                      >
+                        <Lock className="w-4 h-4" />
+                        {changeUserPasswordMutation.isLoading ? 'Updating...' : 'Update Password'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
               </div>
             </div>
           )}

@@ -11,8 +11,8 @@ const { authenticate, authorize } = require('../middleware/auth');
 
 // @route   GET /api/reports/students
 // @desc    Generate student report
-// @access  Private (Admin)
-router.get('/students', authenticate, authorize('admin', 'super_admin'), async (req, res) => {
+// @access  Private (Admin, Accountant)
+router.get('/students', authenticate, authorize('admin', 'super_admin', 'accountant'), async (req, res) => {
   try {
     const { instituteType, status, courseId, startDate, endDate } = req.query;
     const query = {};
@@ -43,8 +43,8 @@ router.get('/students', authenticate, authorize('admin', 'super_admin'), async (
 
 // @route   GET /api/reports/fees
 // @desc    Generate fee report
-// @access  Private (Admin)
-router.get('/fees', authenticate, authorize('admin', 'super_admin'), async (req, res) => {
+// @access  Private (Admin, Accountant)
+router.get('/fees', authenticate, authorize('admin', 'super_admin', 'accountant'), async (req, res) => {
   try {
     const { status, startDate, endDate } = req.query;
     const query = {};

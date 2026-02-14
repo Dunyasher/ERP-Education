@@ -51,10 +51,19 @@ const Layout = () => {
     { name: 'Attendance', path: '/student/attendance', icon: FileText },
   ];
 
+  const accountantMenu = [
+    { name: 'Dashboard', path: '/accountant/dashboard', icon: LayoutDashboard },
+    { name: 'Students', path: '/accountant/students', icon: Users },
+    { name: 'Fee Management', path: '/accountant/fees', icon: DollarSign },
+    { name: 'Reports', path: '/accountant/reports', icon: BarChart3 },
+  ];
+
   const menu = user?.role === 'admin' || user?.role === 'super_admin' 
     ? adminMenu 
     : user?.role === 'teacher' 
     ? teacherMenu 
+    : user?.role === 'accountant'
+    ? accountantMenu
     : studentMenu;
 
   return (
@@ -83,7 +92,9 @@ const Layout = () => {
               {user?.role === 'admin' || user?.role === 'super_admin' 
                 ? 'Admin Panel' 
                 : user?.role === 'teacher' 
-                ? 'Teacher Portal' 
+                ? 'Teacher Portal'
+                : user?.role === 'accountant'
+                ? 'Accountant Portal'
                 : 'Student Portal'}
             </p>
           </div>

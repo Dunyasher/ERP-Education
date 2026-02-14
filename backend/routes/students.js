@@ -91,8 +91,8 @@ router.get('/:id', authenticate, async (req, res) => {
 
 // @route   POST /api/students
 // @desc    Create new student
-// @access  Private (Admin)
-router.post('/', authenticate, authorize('admin', 'super_admin'), async (req, res) => {
+// @access  Private (Admin, Accountant)
+router.post('/', authenticate, authorize('admin', 'super_admin', 'accountant'), async (req, res) => {
   // Add timeout to prevent hanging requests
   const timeout = setTimeout(() => {
     if (!res.headersSent) {

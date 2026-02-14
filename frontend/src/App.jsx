@@ -4,6 +4,7 @@ import Login from './pages/Login';
 import AdminDashboard from './pages/admin/Dashboard';
 import TeacherDashboard from './pages/teacher/Dashboard';
 import StudentDashboard from './pages/student/Dashboard';
+import AccountantDashboard from './pages/accountant/Dashboard';
 import FeeManagement from './pages/admin/FeeManagement';
 import ExpenseManagement from './pages/admin/ExpenseManagement';
 import DailyExpenseReport from './pages/admin/DailyExpenseReport';
@@ -34,18 +35,22 @@ function AppRoutes() {
       
       <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route path="/admin/dashboard" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><AdminDashboard /></ProtectedRoute>} />
-        <Route path="/admin/students" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Students /></ProtectedRoute>} />
+        <Route path="/admin/students" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><Students /></ProtectedRoute>} />
         <Route path="/admin/teachers" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Teachers /></ProtectedRoute>} />
         <Route path="/admin/courses" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Courses /></ProtectedRoute>} />
         <Route path="/admin/categories" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Categories /></ProtectedRoute>} />
         <Route path="/admin/classes" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Classes /></ProtectedRoute>} />
-        <Route path="/admin/fees" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><FeeManagement /></ProtectedRoute>} />
+        <Route path="/admin/fees" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><FeeManagement /></ProtectedRoute>} />
         <Route path="/admin/expenses" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><ExpenseManagement /></ProtectedRoute>} />
         <Route path="/admin/expenses/report" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><DailyExpenseReport /></ProtectedRoute>} />
-        <Route path="/admin/reports" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Reports /></ProtectedRoute>} />
+        <Route path="/admin/reports" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><Reports /></ProtectedRoute>} />
         <Route path="/admin/settings" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Settings /></ProtectedRoute>} />
         <Route path="/teacher/dashboard" element={<ProtectedRoute allowedRoles={['teacher']}><TeacherDashboard /></ProtectedRoute>} />
         <Route path="/student/dashboard" element={<ProtectedRoute allowedRoles={['student']}><StudentDashboard /></ProtectedRoute>} />
+        <Route path="/accountant/dashboard" element={<ProtectedRoute allowedRoles={['accountant']}><AccountantDashboard /></ProtectedRoute>} />
+        <Route path="/accountant/students" element={<ProtectedRoute allowedRoles={['accountant']}><Students /></ProtectedRoute>} />
+        <Route path="/accountant/fees" element={<ProtectedRoute allowedRoles={['accountant']}><FeeManagement /></ProtectedRoute>} />
+        <Route path="/accountant/reports" element={<ProtectedRoute allowedRoles={['accountant']}><Reports /></ProtectedRoute>} />
       </Route>
       
       <Route path="/" element={<Navigate to={user ? `/${user.role}/dashboard` : '/login'} />} />
