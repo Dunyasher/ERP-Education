@@ -12,15 +12,15 @@ if (-not (Test-Path ".env")) {
     @"
 PORT=5000
 NODE_ENV=development
-MONGO_URI=mongodb://localhost:27017/furniture
+MONGODB_URI=mongodb://localhost:27017/education-erp
 CLIENT_URL=http://localhost:5173
 FRONTEND_URL=http://localhost:5173
 BACKEND_URL=http://localhost:5000
-JWT_SECRET=change-this-to-a-random-secret-key
+JWT_SECRET=change-this-to-a-random-secret-key-in-production
 JWT_EXPIRE=7d
-REFRESH_TOKEN_SECRET=change-this-to-a-random-secret-key
+REFRESH_TOKEN_SECRET=change-this-to-a-random-secret-key-in-production
 REFRESH_TOKEN_EXPIRE=30d
-SESSION_SECRET=change-this-to-a-random-secret-key
+SESSION_SECRET=change-this-to-a-random-secret-key-in-production
 "@ | Out-File -FilePath ".env" -Encoding utf8
     Write-Host "✅ .env file created. Please configure it." -ForegroundColor Green
 }

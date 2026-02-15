@@ -59,7 +59,15 @@ userSchema.pre('save', async function(next) {
 
 // Compare password method
 userSchema.methods.comparePassword = async function(candidatePassword) {
-  return await bcrypt.compare(candidatePassword, this.password);
+  if (!candidatePassword || !this.password) {
+    return false;
+  }
+  try {
+    return await bcrypt.compare(candidatePassword, this.password);
+  } catch (error) {
+    console.error('Error comparing password:', error);
+    return false;
+  }
 };
 
 // Generate SR No and Unique ID before saving

@@ -57,7 +57,7 @@ router.post('/register', [
 // @desc    Login user
 // @access  Public
 router.post('/login', [
-  body('email').isEmail().normalizeEmail(),
+  body('email').isEmail(),
   body('password').exists()
 ], async (req, res) => {
   try {
@@ -66,19 +66,52 @@ router.post('/login', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { email, password } = req.body;
+    // Get email from validated request (normalized) or fallback to lowercase
+    const email = req.body.email ? req.body.email.toLowerCase().trim() : '';
+    const password = req.body.password;
 
-    // Find user
-    const user = await User.findOne({ email });
+    console.log(`🔍 Login attempt - Email: "${email}", Password length: ${password ? password.length : 0}`);
+
+    if (!email || !password) {
+      console.log(`❌ Missing email or password`);
+      return res.status(400).json({ message: 'Email and password are required' });
+    }
+
+    // Find user - search with lowercase email
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
     if (!user) {
+      console.log(`❌ Login failed: User not found for email: "${email}"`);
+      // Check if any users exist with similar email
+      const similarUsers = await User.find({ email: { $regex: email.split('@')[0], $options: 'i' } }).select('email');
+      if (similarUsers.length > 0) {
+        console.log(`   Similar emails found: ${similarUsers.map(u => u.email).join(', ')}`);
+      }
       return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    console.log(`✅ User found: ${user.email}, Role: ${user.role}, Active: ${user.isActive}`);
+
+    // Check if user is active
+    if (!user.isActive) {
+      console.log(`❌ Login failed: User account is inactive for email: "${email}"`);
+      return res.status(401).json({ message: 'Account is inactive. Please contact administrator.' });
     }
 
     // Check password
+    console.log(`🔐 Comparing password...`);
     const isMatch = await user.comparePassword(password);
+    console.log(`🔐 Password match result: ${isMatch}`);
+    
     if (!isMatch) {
+      console.log(`❌ Login failed: Password mismatch for email: "${email}"`);
+      // Try direct bcrypt compare for debugging
+      const bcrypt = require('bcryptjs');
+      const directCompare = await bcrypt.compare(password, user.password);
+      console.log(`   Direct bcrypt compare: ${directCompare}`);
       return res.status(401).json({ message: 'Invalid credentials' });
     }
+
+    console.log(`✅ Login successful for: ${user.email} (${user.role})`);
 
     // Update last login
     user.lastLogin = new Date();

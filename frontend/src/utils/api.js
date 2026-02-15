@@ -1,10 +1,17 @@
 import axios from 'axios';
 
+// In development, always use the Vite proxy (/api) which forwards to backend
+// In production, use the environment variable if set
+const isDevelopment = import.meta.env.DEV;
+const API_BASE_URL = isDevelopment ? '/api' : (import.meta.env.VITE_API_URL || '/api');
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 30000, // 30 second timeout
+  withCredentials: true,
 });
 
 // Add token to requests

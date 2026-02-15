@@ -2,8 +2,8 @@
 Write-Host "🎨 Starting Frontend Server..." -ForegroundColor Green
 Write-Host ""
 
-$clientPath = Join-Path $PSScriptRoot "client"
-Set-Location $clientPath
+$frontendPath = Join-Path $PSScriptRoot "frontend"
+Set-Location $frontendPath
 
 # Check if .env exists
 if (-not (Test-Path ".env")) {

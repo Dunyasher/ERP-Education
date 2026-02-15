@@ -24,7 +24,7 @@ Write-Host ""
 Write-Host "📝 Checking Environment Files..." -ForegroundColor Yellow
 
 $backendEnv = "backend\.env"
-$clientEnv = "client\.env"
+$frontendEnv = "frontend\.env"
 
 if (Test-Path $backendEnv) {
     Write-Host "✅ Backend .env file exists" -ForegroundColor Green
@@ -33,11 +33,11 @@ if (Test-Path $backendEnv) {
     Write-Host "   Create backend/.env with required variables" -ForegroundColor Cyan
 }
 
-if (Test-Path $clientEnv) {
-    Write-Host "✅ Client .env file exists" -ForegroundColor Green
+if (Test-Path $frontendEnv) {
+    Write-Host "✅ Frontend .env file exists" -ForegroundColor Green
 } else {
-    Write-Host "❌ Client .env file NOT found!" -ForegroundColor Red
-    Write-Host "   Create client/.env with VITE_API_URL=http://localhost:5000/api" -ForegroundColor Cyan
+    Write-Host "❌ Frontend .env file NOT found!" -ForegroundColor Red
+    Write-Host "   Create frontend/.env with VITE_API_URL=http://localhost:5000/api" -ForegroundColor Cyan
 }
 
 Write-Host ""
@@ -53,8 +53,8 @@ Start-Sleep -Seconds 3
 
 # Start Frontend
 Write-Host "2️⃣  Starting Frontend Server..." -ForegroundColor Cyan
-Write-Host "   Running: cd client; npm run dev" -ForegroundColor Gray
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD\client'; npm run dev" -WindowStyle Normal
+Write-Host "   Running: cd frontend; npm run dev" -ForegroundColor Gray
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD\frontend'; npm run dev" -WindowStyle Normal
 
 Write-Host ""
 Write-Host "✅ Services Starting..." -ForegroundColor Green

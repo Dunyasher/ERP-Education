@@ -9,7 +9,7 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
 # Change to backend directory
-$backendPath = "C:\Users\sir dunya sher\Desktop\furtniture\backend"
+$backendPath = Join-Path $PSScriptRoot "backend"
 
 if (Test-Path $backendPath) {
     Set-Location $backendPath
