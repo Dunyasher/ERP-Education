@@ -1,111 +1,112 @@
-/**
- * Frontend-Backend Connection Test Script
- * Run this to verify your frontend and backend are properly connected
- */
+const http = require('http');
 
-const axios = require('axios');
-require('dotenv').config({ path: './backend/.env' });
+console.log('\n' + '='.repeat(60));
+console.log('   COLLEGE MANAGEMENT - CONNECTION TEST');
+console.log('='.repeat(60) + '\n');
 
-const BACKEND_URL = process.env.PORT 
-  ? `http://localhost:${process.env.PORT}` 
-  : 'http://localhost:5000';
-const API_URL = `${BACKEND_URL}/api`;
-const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
-
-console.log('\n🔍 Testing Frontend-Backend Connection...\n');
-console.log('Configuration:');
-console.log(`  Backend URL: ${BACKEND_URL}`);
-console.log(`  API URL: ${API_URL}`);
-console.log(`  Client URL: ${CLIENT_URL}\n`);
-
-async function testConnection() {
-  const results = {
-    backend: false,
-    api: false,
-    cors: false,
-    database: false,
-  };
-
-  // Test 1: Backend Server
-  try {
-    const response = await axios.get(BACKEND_URL, { timeout: 5000 });
-    if (response.status === 200) {
-      results.backend = true;
-      console.log('✅ Backend server is running');
+// Test Backend
+console.log('1. Testing Backend (http://localhost:5000/api/health)...');
+const backendReq = http.get('http://localhost:5000/api/health', (res) => {
+  let data = '';
+  res.on('data', (chunk) => { data += chunk; });
+  res.on('end', () => {
+    try {
+      const result = JSON.parse(data);
+      console.log('   ✅ Backend is RUNNING');
+      console.log(`   Status: ${result.status}`);
+      console.log(`   Message: ${result.message}\n`);
+      
+      // Test Login
+      console.log('2. Testing Login API...');
+      const loginData = JSON.stringify({
+        email: 'admin@college.com',
+        password: 'admin123'
+      });
+      
+      const loginReq = http.request({
+        hostname: 'localhost',
+        port: 5000,
+        path: '/api/auth/login',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': loginData.length
+        }
+      }, (loginRes) => {
+        let loginData = '';
+        loginRes.on('data', (chunk) => { loginData += chunk; });
+        loginRes.on('end', () => {
+          try {
+            const result = JSON.parse(loginData);
+            console.log('   ✅ Login API is WORKING');
+            console.log(`   User: ${result.user.email}`);
+            console.log(`   Role: ${result.user.role}`);
+            console.log(`   Token: ${result.token.substring(0, 30)}...`);
+            console.log('\n   🎉 Login credentials are correct!');
+            console.log('   You can now login at: http://localhost:3000/login\n');
+          } catch (e) {
+            console.log('   ❌ Login API Error:', loginData);
+            if (loginData.includes('Invalid credentials')) {
+              console.log('   ⚠️  Credentials are wrong. Use: admin@college.com / admin123');
+            }
+          }
+        });
+      });
+      
+      loginReq.on('error', (e) => {
+        console.log('   ❌ Login API Error:', e.message);
+      });
+      
+      loginReq.write(loginData);
+      loginReq.end();
+      
+    } catch (e) {
+      console.log('   ❌ Backend Error:', data);
     }
-  } catch (error) {
-    console.log('❌ Backend server is NOT running');
-    console.log(`   Error: ${error.message}`);
-    console.log(`   Make sure to run: cd backend && npm start\n`);
-    return results;
-  }
+  });
+});
 
-  // Test 2: API Endpoint
-  try {
-    const response = await axios.get(`${API_URL}/get-products?limit=1`, { timeout: 5000 });
-    if (response.status === 200) {
-      results.api = true;
-      console.log('✅ API endpoint is accessible');
-    }
-  } catch (error) {
-    console.log('❌ API endpoint test failed');
-    console.log(`   Error: ${error.response?.status || error.message}`);
-  }
+backendReq.on('error', (e) => {
+  console.log('   ❌ Backend is NOT RUNNING');
+  console.log('   Error:', e.message);
+  console.log('\n   ⚠️  SOLUTION: Start the backend server');
+  console.log('   Steps:');
+  console.log('      1. Open a terminal in this directory');
+  console.log('      2. Run: npm run server');
+  console.log('      3. Wait for: "✅ MongoDB Connected successfully"');
+  console.log('      4. Wait for: "🚀 Server running on port 5000"');
+  console.log('      5. Keep the terminal window OPEN!');
+  console.log('      6. Run this test again: node test-connection.js\n');
+  console.log('   OR use the startup script:');
+  console.log('      FIXED_START_SERVER.bat\n');
+});
 
-  // Test 3: CORS Configuration
-  try {
-    const response = await axios.get(`${API_URL}/get-products?limit=1`, {
-      timeout: 5000,
-      headers: {
-        'Origin': CLIENT_URL,
-      },
-    });
-    if (response.status === 200) {
-      results.cors = true;
-      console.log('✅ CORS is properly configured');
-    }
-  } catch (error) {
-    console.log('⚠️  CORS test - check manually in browser');
-  }
+// Test Frontend
+setTimeout(() => {
+  console.log('3. Testing Frontend (http://localhost:3000)...');
+  const frontendReq = http.get('http://localhost:3000', (res) => {
+    console.log('   ✅ Frontend is RUNNING');
+    console.log(`   Status: ${res.statusCode}\n`);
+  });
+  
+  frontendReq.on('error', (e) => {
+    console.log('   ❌ Frontend is NOT RUNNING');
+    console.log('   Error:', e.message);
+    console.log('\n   ⚠️  SOLUTION: Start the frontend');
+    console.log('   Steps:');
+    console.log('      1. Open a NEW terminal (keep backend running!)');
+    console.log('      2. Run: npm run client');
+    console.log('      3. Wait for: "Local: http://localhost:3000/"');
+    console.log('      4. Then open: http://localhost:3000/login\n');
+  });
+}, 2000);
 
-  // Test 4: Database Connection (via API)
-  try {
-    const response = await axios.get(`${API_URL}/get-products?limit=1`, { timeout: 5000 });
-    if (response.data && response.data.success !== false) {
-      results.database = true;
-      console.log('✅ Database connection appears to be working');
-    }
-  } catch (error) {
-    console.log('⚠️  Database connection test - check backend logs');
-  }
-
-  console.log('\n📊 Test Summary:');
-  console.log(`  Backend Server: ${results.backend ? '✅' : '❌'}`);
-  console.log(`  API Endpoint: ${results.api ? '✅' : '❌'}`);
-  console.log(`  CORS Config: ${results.cors ? '✅' : '⚠️'}`);
-  console.log(`  Database: ${results.database ? '✅' : '⚠️'}\n`);
-
-  if (results.backend && results.api) {
-    console.log('🎉 Connection is working! You can now start the frontend.\n');
-    console.log('Next steps:');
-    console.log('  1. cd client');
-    console.log('  2. npm run dev');
-    console.log('  3. Open http://localhost:5173 in your browser\n');
-  } else {
-    console.log('⚠️  Some issues detected. Please check:');
-    if (!results.backend) {
-      console.log('  - Start the backend server');
-    }
-    if (!results.api) {
-      console.log('  - Check backend .env configuration');
-      console.log('  - Verify MongoDB connection');
-    }
-    console.log('');
-  }
-
-  return results;
-}
-
-// Run tests
-testConnection().catch(console.error);
+// Summary
+setTimeout(() => {
+  console.log('='.repeat(60));
+  console.log('   TEST SUMMARY');
+  console.log('='.repeat(60));
+  console.log('\n✅ If all tests passed: Your system is ready!');
+  console.log('❌ If tests failed: Follow the instructions above\n');
+}, 4000);
 

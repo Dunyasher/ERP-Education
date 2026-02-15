@@ -1,25 +1,39 @@
 @echo off
 echo ========================================
-echo   Starting Backend Server
+echo Starting College Management Server
 echo ========================================
 echo.
 
-cd backend
+REM Check if MongoDB is running
+echo Checking MongoDB service...
+sc query MongoDB | find "RUNNING" >nul
+if %errorlevel% neq 0 (
+    echo [WARNING] MongoDB service is not running!
+    echo Starting MongoDB service...
+    net start MongoDB
+    timeout /t 3 /nobreak >nul
+)
 
-echo Checking dependencies...
-if not exist "node_modules" (
-    echo Installing dependencies...
-    call npm install
+REM Check if .env exists
+if not exist "backend\.env" (
+    echo [ERROR] backend\.env file not found!
+    echo Creating .env file...
+    (
+        echo PORT=5000
+        echo MONGODB_URI=mongodb://localhost:27017/education-erp
+        echo JWT_SECRET=your_super_secret_jwt_key_change_this_in_production
+        echo JWT_EXPIRE=7d
+        echo NODE_ENV=development
+    ) > backend\.env
+    echo .env file created!
 )
 
 echo.
-echo Starting server on port 5000...
-echo.
-echo IMPORTANT: Keep this window open!
+echo Starting Node.js server...
+echo Server will be available at: http://localhost:5000
 echo Press Ctrl+C to stop the server
 echo.
 
-call npm start
-
-pause
+cd backend
+node server.js
 

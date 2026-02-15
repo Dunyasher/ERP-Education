@@ -1,64 +1,70 @@
-# ⚡ QUICK START - Fix Network Error
+# Quick Start - Backend Server
 
-## 🚨 Network Error? Here's the Fix!
+## Network Error Solution
 
-### **The Problem:**
-Backend server is not running → Frontend can't connect → Network Error
+If you see a "Network Error", it means the backend server is not running.
 
-### **The Solution:**
-Start the backend server (takes 30 seconds)
+## Quick Fix
 
----
+### Option 1: Double-click the startup script
+1. Find `start-backend-server.bat` in the project root
+2. Double-click it
+3. Keep the terminal window open
 
-## 🚀 3-Step Fix
+### Option 2: Use Command Line
+1. Open PowerShell or Command Prompt
+2. Navigate to the project:
+   ```powershell
+   cd "C:\Users\Dunya Sher\Desktop\college management"
+   ```
+3. Start the server:
+   ```powershell
+   npm run server
+   ```
 
-### **Step 1:** Open PowerShell
-Press `Win + X` → Select "Windows PowerShell" or "Terminal"
-
-### **Step 2:** Run This Command
+### Option 3: Use npm script
 ```powershell
-cd "C:\Users\sir dunya sher\Desktop\furtniture\backend"; npm start
+npm run start:backend
 ```
 
-### **Step 3:** Wait for This Message
-```
-✅ Server is running on port 5000
-```
+## What to Look For
 
-**Done!** Network error is now fixed! ✅
+When the server starts successfully, you should see:
+- ✅ `MongoDB Connected successfully`
+- 🚀 `Server running on port 5000`
+- 📡 `Access at: http://localhost:5000`
 
----
+## Important Notes
 
-## ✅ Verify It's Working
+1. **Keep the terminal open** - Closing it will stop the server
+2. **Check MongoDB** - Make sure MongoDB is running:
+   ```powershell
+   net start MongoDB
+   ```
+   (Run PowerShell as Administrator if needed)
 
-Open browser: `http://localhost:5000`
+3. **Both servers needed**:
+   - Backend: Port 5000 (for API)
+   - Frontend: Port 3000 (for UI)
 
-**Should see:** "Welcome to Zaryab Auto API"
+## Test the Server
 
----
+Open in browser: http://localhost:5000/api/health
 
-## 📝 Alternative: Use Batch File
+You should see: `{"status":"OK","message":"Education ERP API is running"}`
 
-Double-click: `start-server.bat`
+## Troubleshooting
 
-This will automatically start the server for you!
+### Port 5000 already in use
+- Find and close the process using port 5000
+- Or change the port in `backend/.env`
 
----
+### MongoDB connection error
+- Make sure MongoDB service is running
+- Check `backend/.env` for correct MongoDB URI
 
-## ⚠️ Important Notes
-
-1. **Keep the terminal open** - Server runs in that window
-2. **Don't close it** - Closing stops the server
-3. **If you close it** - Network error will come back
-4. **To stop server** - Press `Ctrl+C` in the terminal
-
----
-
-## 🎯 That's It!
-
-Once you see "Server is running on port 5000", your network error is **SOLVED**! ✅
-
----
-
-**Need help?** Check `FIX_NETWORK_ERROR.md` for detailed troubleshooting.
+### Still getting network error?
+1. Check if backend server is running (look for the terminal window)
+2. Check browser console (F12) for detailed error
+3. Verify the server URL in `frontend/vite.config.js`
 
