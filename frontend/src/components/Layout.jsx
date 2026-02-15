@@ -14,7 +14,8 @@ import {
   X,
   TrendingDown,
   FileBarChart,
-  School
+  School,
+  Calendar
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -29,7 +30,6 @@ const Layout = () => {
     { name: 'Teachers', path: '/admin/teachers', icon: GraduationCap },
     { name: 'Courses', path: '/admin/courses', icon: BookOpen },
     { name: 'Classes', path: '/admin/classes', icon: School },
-    { name: 'Categories', path: '/admin/categories', icon: FileText },
     { name: 'Admission', path: '/admin/fees', icon: DollarSign },
     { name: 'Expenses', path: '/admin/expenses', icon: TrendingDown },
     { name: 'Expense Report', path: '/admin/expenses/report', icon: FileBarChart },
@@ -53,7 +53,8 @@ const Layout = () => {
 
   const accountantMenu = [
     { name: 'Dashboard', path: '/accountant/dashboard', icon: LayoutDashboard },
-    { name: 'Students', path: '/accountant/students', icon: Users },
+    { name: 'Admissions', path: '/accountant/students', icon: Users },
+    { name: 'Monthly Payments', path: '/accountant/monthly-payments', icon: Calendar },
     { name: 'Fee Management', path: '/accountant/fees', icon: DollarSign },
     { name: 'Reports', path: '/accountant/reports', icon: BarChart3 },
   ];
@@ -143,8 +144,8 @@ const Layout = () => {
       </aside>
 
       {/* Main content */}
-      <div className="lg:ml-64 pt-16 lg:pt-0">
-        <main className="p-6">
+      <div className="lg:ml-64 pt-14 xs:pt-16 lg:pt-0">
+        <main className="p-2 xs:p-3 sm:p-4 md:p-6">
           <Outlet />
         </main>
       </div>

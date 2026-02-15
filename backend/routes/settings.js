@@ -8,6 +8,7 @@ const Course = require('../models/Course');
 const Category = require('../models/Category');
 const { authenticate, authorize } = require('../middleware/auth');
 const bcrypt = require('bcryptjs');
+const { notifyEmailChanged, notifyPasswordChanged } = require('../utils/notifications');
 
 // @route   GET /api/settings/profile
 // @desc    Get current user profile
@@ -48,6 +49,7 @@ router.put('/profile', authenticate, [
     }
 
     // Check if email is being changed and if it's already taken
+    const oldEmail = user.email;
     if (email && email.trim() && email !== user.email) {
       const normalizedEmail = email.toLowerCase().trim();
       const emailExists = await User.findOne({ email: normalizedEmail });
@@ -55,6 +57,12 @@ router.put('/profile', authenticate, [
         return res.status(400).json({ message: 'Email already in use' });
       }
       user.email = normalizedEmail;
+      
+      // Notify admins about email change
+      if (oldEmail !== normalizedEmail) {
+        notifyEmailChanged(user, oldEmail, normalizedEmail, req.user.id)
+          .catch(err => console.error('Error sending email change notification:', err));
+      }
     }
 
     // Update profile - handle null/undefined profile
@@ -154,6 +162,10 @@ router.put('/password', authenticate, [
     
     await user.save();
 
+    // Notify admins about password change
+    notifyPasswordChanged(user, req.user.id, false)
+      .catch(err => console.error('Error sending password change notification:', err));
+
     res.json({ message: 'Password changed successfully' });
   } catch (error) {
     console.error('Error changing password:', error);
@@ -209,6 +221,10 @@ router.put('/password/:userId', authenticate, authorize('admin', 'super_admin'),
     user.markModified('password'); // Explicitly mark password as modified
     
     await user.save();
+
+    // Notify admins about password change by admin
+    notifyPasswordChanged(user, req.user.id, true)
+      .catch(err => console.error('Error sending password change notification:', err));
 
     res.json({ message: 'Password updated successfully' });
   } catch (error) {
@@ -320,12 +336,19 @@ router.put('/users/:userId', authenticate, authorize('admin', 'super_admin'), [
     }
 
     // Check if email is being changed and if it's already taken
+    const oldEmail = user.email;
     if (email && email !== user.email) {
       const emailExists = await User.findOne({ email });
       if (emailExists) {
         return res.status(400).json({ message: 'Email already in use' });
       }
       user.email = email;
+      
+      // Notify admins about email change
+      if (oldEmail !== email) {
+        notifyEmailChanged(user, oldEmail, email, req.user.id)
+          .catch(err => console.error('Error sending email change notification:', err));
+      }
     }
 
     if (role) user.role = role;

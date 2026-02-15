@@ -4,7 +4,26 @@ const notificationSchema = new mongoose.Schema({
   type: {
     type: String,
     required: true,
-    enum: ['student_created', 'student_deleted', 'student_modified', 'teacher_created', 'expense_created', 'fee_paid', 'other'],
+    enum: [
+      'student_created', 
+      'student_deleted', 
+      'student_modified', 
+      'teacher_created', 
+      'expense_created', 
+      'expense_updated',
+      'expense_deleted',
+      'fee_paid', 
+      'fee_updated',
+      'email_changed',
+      'password_changed',
+      'user_created',
+      'user_updated',
+      'user_deleted',
+      'financial_data_updated',
+      'income_recorded',
+      'expense_recorded',
+      'other'
+    ],
     default: 'other'
   },
   priority: {
@@ -32,7 +51,7 @@ const notificationSchema = new mongoose.Schema({
   relatedEntity: {
     entityType: {
       type: String,
-      enum: ['student', 'teacher', 'expense', 'fee', 'other']
+      enum: ['student', 'teacher', 'expense', 'fee', 'user', 'financial', 'income', 'other']
     },
     entityId: {
       type: mongoose.Schema.Types.ObjectId
@@ -46,9 +65,21 @@ const notificationSchema = new mongoose.Schema({
     deletedByEmail: String,
     createdBy: String,
     createdByEmail: String,
+    updatedBy: String,
+    updatedByEmail: String,
     oldValues: mongoose.Schema.Types.Mixed,
     newValues: mongoose.Schema.Types.Mixed,
-    reason: String
+    reason: String,
+    // Financial data
+    amount: Number,
+    category: String,
+    date: Date,
+    period: String, // daily, weekly, monthly
+    // User changes
+    userId: mongoose.Schema.Types.ObjectId,
+    userEmail: String,
+    oldEmail: String,
+    newEmail: String
   },
   isRead: {
     type: Boolean,

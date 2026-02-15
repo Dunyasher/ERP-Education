@@ -10,6 +10,7 @@ const Teachers = () => {
   const [showForm, setShowForm] = useState(false);
   const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
+  const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const [editingTeacher, setEditingTeacher] = useState(null);
   const [emailError, setEmailError] = useState('');
   const [isCheckingEmail, setIsCheckingEmail] = useState(false);
@@ -67,14 +68,50 @@ const Teachers = () => {
 
   // Fetch courses for assignment
   const { data: courses = [] } = useQuery('courses', async () => {
-    const response = await api.get('/courses');
-    return response.data;
+    try {
+      const response = await api.get('/courses');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching courses:', error);
+      // Return empty array if endpoint doesn't exist or fails
+      if (error.response?.status === 404) {
+        console.warn('Courses endpoint not found. Make sure backend server is running.');
+        return [];
+      }
+      return [];
+    }
+  }, {
+    retry: 1,
+    refetchOnWindowFocus: false
   });
 
   // Fetch staff categories
   const { data: staffCategories = [] } = useQuery('staffCategories', async () => {
-    const response = await api.get('/staff-categories');
-    return response.data;
+    try {
+      const response = await api.get('/staff-categories');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching staff categories:', error);
+      // Return empty array if endpoint doesn't exist or fails
+      if (error.response?.status === 404) {
+        console.warn('Staff categories endpoint not found. Please restart the backend server.');
+        toast.error('Staff categories endpoint not found. Please restart the backend server to load the new route.');
+        return [];
+      }
+      if (error.response?.status === 401) {
+        console.warn('Unauthorized. Please log in again.');
+        return [];
+      }
+      // Don't show error for network errors (handled by interceptor)
+      if (!error.response) {
+        return [];
+      }
+      return [];
+    }
+  }, {
+    retry: 1,
+    refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000 // Cache for 5 minutes
   });
 
   // Create/Update teacher/accountant mutation
@@ -238,6 +275,7 @@ const Teachers = () => {
     // Determine role from teacher data or default to teacher
     const userRole = teacher.userId?.role || 'teacher';
     setFormData({
+      staffCategoryId: teacher.staffCategoryId?._id || teacher.staffCategoryId || '',
       role: userRole,
       email: teacher.userId?.email || '',
       password: '',
@@ -394,10 +432,10 @@ const Teachers = () => {
               setEditingCategory(null);
               resetCategoryForm();
             }}
-            className="btn-primary flex items-center gap-2"
+            className="btn-secondary flex items-center gap-2"
           >
             <Users className="w-5 h-5" />
-            Category
+            Manage Categories
           </button>
           <button
             onClick={() => {
@@ -499,6 +537,23 @@ const Teachers = () => {
                   </div>
                 </div>
 
+                {/* Category */}
+                {teacher.staffCategoryId && (
+                  <div className="flex items-center gap-3 text-sm">
+                    <div className="w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-900/20 flex items-center justify-center">
+                      <Users className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Category</p>
+                      <p className="font-semibold text-gray-900 dark:text-white">
+                        {typeof teacher.staffCategoryId === 'object' 
+                          ? teacher.staffCategoryId.name 
+                          : 'N/A'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Email */}
                 <div className="flex items-center gap-3 text-sm">
                   <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
@@ -565,53 +620,32 @@ const Teachers = () => {
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Category and Role Selection */}
-                {!editingTeacher && (
+                {/* Category field for editing */}
+                {editingTeacher && (
                   <div className="space-y-4 border-b pb-4">
-                    <h3 className="text-lg font-semibold">Account Type</h3>
+                    <h3 className="text-lg font-semibold">Category</h3>
                     <div>
-                      <label className="block text-sm font-medium mb-1">Category *</label>
+                      <label className="block text-sm font-medium mb-1">Category</label>
                       <select
                         value={formData.staffCategoryId}
-                        onChange={(e) => setFormData({ ...formData, staffCategoryId: e.target.value })}
+                        onChange={(e) => {
+                          const categoryId = e.target.value;
+                          setFormData({ 
+                            ...formData, 
+                            staffCategoryId: categoryId
+                          });
+                        }}
                         className="input-field"
-                        required
                       >
-                        <option value="">Select category...</option>
+                        <option value="">No category</option>
                         {staffCategories
-                          .filter(cat => !formData.employment?.instituteType || cat.instituteType === formData.employment.instituteType)
+                          .filter(cat => cat.isActive !== false)
                           .map((category) => (
                             <option key={category._id} value={category._id}>
                               {category.name}
                             </option>
                           ))}
                       </select>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        Select the staff category (e.g., Teacher, Principal, Security, Driver)
-                      </p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Role *</label>
-                      <select
-                        value={formData.role}
-                        onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                        className="input-field"
-                        required
-                      >
-                        <option value="teacher">Teacher</option>
-                        <option value="accountant">Accountant</option>
-                        <option value="security">Security</option>
-                        <option value="sweeper">Sweeper</option>
-                        <option value="admin">Admin</option>
-                        <option value="super_admin">Principal/Director</option>
-                      </select>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        {formData.role === 'accountant' 
-                          ? 'Accountant can manage students, fees, and view reports'
-                          : formData.role === 'teacher'
-                          ? 'Teacher can manage courses and students'
-                          : 'Assign the system role for this staff member'}
-                      </p>
                     </div>
                   </div>
                 )}
@@ -764,18 +798,26 @@ const Teachers = () => {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium mb-1">Status</label>
+                      <label className="block text-sm font-medium mb-1">Category</label>
                       <select
-                        value={formData.employment.status}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          employment: { ...formData.employment, status: e.target.value }
-                        })}
+                        value={formData.staffCategoryId}
+                        onChange={(e) => {
+                          const categoryId = e.target.value;
+                          setFormData({ 
+                            ...formData, 
+                            staffCategoryId: categoryId
+                          });
+                        }}
                         className="input-field"
                       >
-                        <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
-                        <option value="resigned">Resigned</option>
+                        <option value="">Select a category</option>
+                        {staffCategories
+                          .filter(cat => cat.isActive !== false)
+                          .map((category) => (
+                            <option key={category._id} value={category._id}>
+                              {category.name}
+                            </option>
+                          ))}
                       </select>
                     </div>
                   </div>
@@ -858,10 +900,10 @@ const Teachers = () => {
           }}
         >
           <div 
-            className="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full shadow-xl"
+            className="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full shadow-xl max-h-[90vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-6">
+            <div className="p-6 overflow-y-auto flex-1">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
                   {editingCategory ? 'Edit Category' : 'Add New Category'}
@@ -957,45 +999,50 @@ const Teachers = () => {
                     <p>No categories created yet. Add your first category above.</p>
                   </div>
                 ) : (
-                  <div className="space-y-2">
-                    {staffCategories.map((category) => (
-                      <div
-                        key={category._id}
-                        className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                  <div className="space-y-3">
+                    <select
+                      className="input-field w-full"
+                      value={selectedCategoryId}
+                      onChange={(e) => setSelectedCategoryId(e.target.value)}
+                    >
+                      <option value="">Select a category to edit or delete</option>
+                      {staffCategories.map((category) => (
+                        <option key={category._id} value={category._id}>
+                          {category.name} ({category.instituteType})
+                        </option>
+                      ))}
+                    </select>
+                    <div className="flex gap-2 justify-end">
+                      <button
+                        onClick={() => {
+                          if (selectedCategoryId) {
+                            const selectedCategory = staffCategories.find(cat => cat._id === selectedCategoryId);
+                            if (selectedCategory) {
+                              handleEditCategory(selectedCategory);
+                              setSelectedCategoryId('');
+                            }
+                          }
+                        }}
+                        className="btn-secondary flex items-center gap-2"
+                        disabled={!selectedCategoryId}
                       >
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3">
-                            <span className="font-semibold text-gray-900 dark:text-white">
-                              {category.name}
-                            </span>
-                            <span className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded">
-                              {category.instituteType}
-                            </span>
-                          </div>
-                          {category.description && (
-                            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                              {category.description}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleEditCategory(category)}
-                            className="p-2 rounded-lg text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
-                            title="Edit"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteCategory(category._id)}
-                            className="p-2 rounded-lg text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                        <Edit className="w-4 h-4" />
+                        Edit Selected
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (selectedCategoryId) {
+                            handleDeleteCategory(selectedCategoryId);
+                            setSelectedCategoryId('');
+                          }
+                        }}
+                        className="btn-secondary flex items-center gap-2 text-red-600 hover:text-red-700"
+                        disabled={!selectedCategoryId}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Delete Selected
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>

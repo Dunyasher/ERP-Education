@@ -18,6 +18,7 @@ router.get('/', authenticate, async (req, res) => {
     
     const teachers = await Teacher.find(query)
       .populate('userId', 'email profile')
+      .populate('staffCategoryId', 'name description')
       .populate({
         path: 'employment.courses',
         select: 'name categoryId',
@@ -73,7 +74,7 @@ router.post('/', authenticate, authorize('admin', 'super_admin'), async (req, re
       return res.status(400).json({ message: 'Request body is required' });
     }
 
-    const { email, password, personalInfo, contactInfo, qualification, employment, salary } = req.body;
+    const { email, password, personalInfo, contactInfo, qualification, employment, salary, staffCategoryId } = req.body;
     
     // Validate required fields
     if (!email || !email.trim()) {
@@ -160,6 +161,7 @@ router.post('/', authenticate, authorize('admin', 'super_admin'), async (req, re
     // Prepare teacher data - clean and validate
     const teacherData = {
       userId: user._id,
+      ...(staffCategoryId && mongoose.Types.ObjectId.isValid(staffCategoryId) && { staffCategoryId }),
       personalInfo: {
         fullName: personalInfo.fullName.trim(),
         ...(dateOfBirthDate && { dateOfBirth: dateOfBirthDate }),
@@ -377,7 +379,9 @@ router.put('/:id', authenticate, async (req, res) => {
       req.params.id,
       req.body,
       { new: true, runValidators: true }
-    ).populate('userId', 'email');
+    )
+      .populate('userId', 'email')
+      .populate('staffCategoryId', 'name description');
     
     if (!teacher) {
       return res.status(404).json({ message: 'Teacher not found' });

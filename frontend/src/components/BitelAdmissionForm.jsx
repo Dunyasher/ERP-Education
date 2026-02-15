@@ -6,7 +6,7 @@ import api from '../utils/api';
 import toast from 'react-hot-toast';
 import { X, Save, Printer, User, Phone, MapPin, DollarSign, BookOpen } from 'lucide-react';
 
-const BitelAdmissionForm = ({ onClose, onSuccess, editingStudent = null }) => {
+const BitelAdmissionForm = ({ onClose, onSuccess, editingStudent = null, showOverlay = true }) => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -250,23 +250,24 @@ const BitelAdmissionForm = ({ onClose, onSuccess, editingStudent = null }) => {
         }
       `}</style>
 
-      {/* Modal Overlay - Click outside to close */}
-      <div 
-        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4 overflow-y-auto"
-        onClick={(e) => {
-          if (e.target === e.currentTarget) {
-            onClose();
-          }
-        }}
-      >
-        {/* Modal Content */}
+      {/* Conditional Overlay */}
+      {showOverlay && (
         <div 
-          ref={modalRef}
-          className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[95vh] overflow-y-auto admission-form-print"
-          onClick={(e) => e.stopPropagation()}
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4 overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              onClose();
+            }
+          }}
         >
-          {/* Header */}
-          <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-4 sm:p-6 rounded-t-xl">
+          {/* Modal Content - Dark Theme */}
+          <div 
+            ref={modalRef}
+            className={`${showOverlay ? 'bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[95vh] overflow-y-auto' : 'w-full'} admission-form-print`}
+            onClick={(e) => e.stopPropagation()}
+          >
+        {/* Header - Dark Theme */}
+        <div className="bg-gradient-to-r from-gray-800 to-gray-900 text-white p-4 sm:p-6 rounded-t-xl border-b border-gray-700">
             <div className="flex justify-between items-center">
               <h2 className="text-xl sm:text-2xl font-bold">Student Admission Form</h2>
               <button
@@ -279,39 +280,39 @@ const BitelAdmissionForm = ({ onClose, onSuccess, editingStudent = null }) => {
             </div>
             </div>
 
-          {/* Form Content */}
-          <div className="p-4 sm:p-6">
+          {/* Form Content - Dark Theme */}
+          <div className="p-4 sm:p-6 bg-gray-900 dark:bg-gray-800">
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Student Information */}
               <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                  <User className="w-5 h-5 text-indigo-600" />
+                <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                  <User className="w-5 h-5 text-blue-400" />
                   Student Information
                 </h3>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Serial Number - Auto-generated */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
                       Serial Number
                     </label>
                     <div className="flex items-center gap-2">
-                      <span className="text-indigo-600 font-bold text-lg">A</span>
+                      <span className="text-blue-400 font-bold text-lg">A</span>
                       <input
                         type="text"
                         name="serialNo"
                         value={formData.serialNo}
                         readOnly
-                        className="flex-1 border-2 border-gray-300 rounded-lg px-3 py-2.5 bg-gray-50 text-gray-700 font-semibold"
+                        className="flex-1 border-2 border-gray-600 rounded-lg px-3 py-2.5 bg-gray-800 text-gray-200 font-semibold"
                         placeholder="Auto-generated"
                       />
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">(Auto-generated)</p>
+                    <p className="text-xs text-gray-400 mt-1">(Auto-generated)</p>
                   </div>
 
                   {/* Student Name */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
                       Student Name *
                     </label>
                     <input
@@ -320,14 +321,14 @@ const BitelAdmissionForm = ({ onClose, onSuccess, editingStudent = null }) => {
                       value={formData.name}
                       onChange={handleInputChange}
                       required
-                      className="w-full border-2 border-gray-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                      className="w-full border-2 border-gray-600 rounded-lg px-3 py-2.5 bg-gray-800 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all placeholder-gray-500"
                       placeholder="Enter full name"
                     />
                   </div>
 
                   {/* Father's Name */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
                       Father's Name *
                     </label>
                     <input
@@ -336,15 +337,15 @@ const BitelAdmissionForm = ({ onClose, onSuccess, editingStudent = null }) => {
                       value={formData.fatherName}
                       onChange={handleInputChange}
                       required
-                      className="w-full border-2 border-gray-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                      className="w-full border-2 border-gray-600 rounded-lg px-3 py-2.5 bg-gray-800 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all placeholder-gray-500"
                       placeholder="Enter father's name"
                     />
                   </div>
 
                   {/* Phone Number */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
-                      <Phone className="w-4 h-4 text-indigo-600" />
+                    <label className="block text-sm font-medium text-gray-300 mb-2 flex items-center gap-1">
+                      <Phone className="w-4 h-4 text-blue-400" />
                       Phone Number *
                     </label>
                     <input
@@ -353,15 +354,15 @@ const BitelAdmissionForm = ({ onClose, onSuccess, editingStudent = null }) => {
                       value={formData.contact}
                       onChange={handleInputChange}
                       required
-                      className="w-full border-2 border-gray-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                      className="w-full border-2 border-gray-600 rounded-lg px-3 py-2.5 bg-gray-800 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all placeholder-gray-500"
                       placeholder="0333-1234567"
                     />
                   </div>
 
                   {/* Address - Full Width */}
                   <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
-                      <MapPin className="w-4 h-4 text-indigo-600" />
+                    <label className="block text-sm font-medium text-gray-300 mb-2 flex items-center gap-1">
+                      <MapPin className="w-4 h-4 text-blue-400" />
                       Address *
                     </label>
                     <textarea
@@ -370,15 +371,15 @@ const BitelAdmissionForm = ({ onClose, onSuccess, editingStudent = null }) => {
                       onChange={handleInputChange}
                       required
                       rows="3"
-                      className="w-full border-2 border-gray-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all resize-none"
+                      className="w-full border-2 border-gray-600 rounded-lg px-3 py-2.5 bg-gray-800 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all resize-none placeholder-gray-500"
                       placeholder="Street, City, State, Country"
                     />
                   </div>
 
                   {/* Course Selection - Full Width */}
                   <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
-                      <BookOpen className="w-4 h-4 text-indigo-600" />
+                    <label className="block text-sm font-medium text-gray-300 mb-2 flex items-center gap-1">
+                      <BookOpen className="w-4 h-4 text-blue-400" />
                       Course *
                     </label>
                 <select
@@ -387,7 +388,7 @@ const BitelAdmissionForm = ({ onClose, onSuccess, editingStudent = null }) => {
                   onChange={handleInputChange}
                   required
                   disabled={coursesLoading}
-                      className="w-full border-2 border-gray-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all bg-white"
+                      className="w-full border-2 border-gray-600 rounded-lg px-3 py-2.5 bg-gray-800 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                 >
                   <option value="">
                     {coursesLoading ? 'Loading courses...' : 'Select a course'}
@@ -403,16 +404,16 @@ const BitelAdmissionForm = ({ onClose, onSuccess, editingStudent = null }) => {
               </div>
 
               {/* Fee Information */}
-              <div className="space-y-4 border-t pt-6">
-                <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                  <DollarSign className="w-5 h-5 text-green-600" />
+              <div className="space-y-4 border-t border-gray-700 pt-6">
+                <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                  <DollarSign className="w-5 h-5 text-green-400" />
                   Fee Information
                 </h3>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {/* Admission Fee */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
                       Admission Fee *
                     </label>
                     <input
@@ -423,14 +424,14 @@ const BitelAdmissionForm = ({ onClose, onSuccess, editingStudent = null }) => {
                       required
                       min="0"
                       step="0.01"
-                      className="w-full border-2 border-gray-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                      className="w-full border-2 border-gray-600 rounded-lg px-3 py-2.5 bg-gray-800 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all placeholder-gray-500"
                       placeholder="0.00"
                     />
                   </div>
 
                   {/* Monthly Fee */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
                       Monthly Fee *
                     </label>
                     <input
@@ -441,14 +442,14 @@ const BitelAdmissionForm = ({ onClose, onSuccess, editingStudent = null }) => {
                       required
                       min="0"
                       step="0.01"
-                      className="w-full border-2 border-gray-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                      className="w-full border-2 border-gray-600 rounded-lg px-3 py-2.5 bg-gray-800 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all placeholder-gray-500"
                       placeholder="0.00"
                     />
                   </div>
 
                   {/* Total Fee - Auto-calculated */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
                       Total Fee
                     </label>
                     <input
@@ -456,13 +457,13 @@ const BitelAdmissionForm = ({ onClose, onSuccess, editingStudent = null }) => {
                       name="totalFee"
                       value={formData.totalFee || '0.00'}
                       readOnly
-                      className="w-full border-2 border-gray-300 rounded-lg px-3 py-2.5 bg-gray-50 font-semibold text-gray-700"
+                      className="w-full border-2 border-gray-600 rounded-lg px-3 py-2.5 bg-gray-800 font-semibold text-gray-200"
                     />
                   </div>
 
                   {/* Paid Fee */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
                       Paid Fee *
                     </label>
                     <input
@@ -474,14 +475,14 @@ const BitelAdmissionForm = ({ onClose, onSuccess, editingStudent = null }) => {
                       min="0"
                       step="0.01"
                       max={formData.totalFee || undefined}
-                      className="w-full border-2 border-gray-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                      className="w-full border-2 border-gray-600 rounded-lg px-3 py-2.5 bg-gray-800 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all placeholder-gray-500"
                       placeholder="0.00"
                     />
                   </div>
 
                   {/* Remaining Balance - Auto-calculated */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
                       Remaining Balance
                     </label>
                     <input
@@ -489,24 +490,24 @@ const BitelAdmissionForm = ({ onClose, onSuccess, editingStudent = null }) => {
                       name="remainingBalance"
                       value={formData.remainingBalance || '0.00'}
                       readOnly
-                      className={`w-full border-2 border-gray-300 rounded-lg px-3 py-2.5 bg-gray-50 font-semibold ${
+                      className={`w-full border-2 border-gray-600 rounded-lg px-3 py-2.5 bg-gray-800 font-semibold ${
                         parseFloat(formData.remainingBalance || 0) > 0 
-                          ? 'text-orange-600' 
+                          ? 'text-orange-400' 
                           : parseFloat(formData.remainingBalance || 0) < 0
-                          ? 'text-red-600'
-                          : 'text-gray-700'
+                          ? 'text-red-400'
+                          : 'text-gray-200'
                       }`}
                     />
                   </div>
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4 border-t no-print">
+              {/* Action Buttons - Dark Theme */}
+              <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4 border-t border-gray-700 no-print">
                 <button
                   type="button"
                   onClick={handlePrint}
-                  className="px-6 py-3 border-2 border-indigo-300 text-indigo-700 rounded-lg hover:bg-indigo-50 transition-all flex items-center justify-center gap-2 font-semibold"
+                  className="px-6 py-3 border-2 border-blue-400 text-blue-400 rounded-lg hover:bg-blue-400 hover:text-white transition-all flex items-center justify-center gap-2 font-semibold"
                 >
                   <Printer className="w-5 h-5" />
                   Print
@@ -514,14 +515,14 @@ const BitelAdmissionForm = ({ onClose, onSuccess, editingStudent = null }) => {
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all font-semibold"
+                  className="px-6 py-3 border-2 border-gray-600 text-gray-300 rounded-lg hover:bg-gray-700 hover:text-white transition-all font-semibold"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={createStudentMutation.isLoading || coursesLoading}
-                  className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold shadow-lg hover:shadow-xl"
+                  className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold shadow-lg hover:shadow-xl"
                 >
                   <Save className="w-5 h-5" />
                   {createStudentMutation.isLoading ? 'Saving...' : editingStudent ? 'Update' : 'Save'}
@@ -530,7 +531,8 @@ const BitelAdmissionForm = ({ onClose, onSuccess, editingStudent = null }) => {
             </form>
           </div>
         </div>
-      </div>
+        </div>
+      )}
     </>
   );
 };

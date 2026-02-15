@@ -30,8 +30,23 @@ api.interceptors.response.use(
       if (error.code === 'ECONNREFUSED' || error.message?.includes('Network Error') || error.message?.includes('ERR_NETWORK')) {
         console.error('Network Error: Backend server is not running or not accessible');
         console.error('Please make sure the backend server is running on http://localhost:5000');
-        // Don't show toast here, let the component handle it with a better message
+        // Show user-friendly error
+        if (error.config && !error.config._skipErrorToast) {
+          import('react-hot-toast').then(({ default: toast }) => {
+            toast.error('Cannot connect to server. Please make sure the backend server is running.');
+          });
+        }
       }
+    }
+    
+    // Handle 404 errors specifically
+    if (error.response?.status === 404) {
+      console.error('404 Error:', {
+        url: error.config?.url,
+        method: error.config?.method,
+        baseURL: error.config?.baseURL,
+        fullURL: `${error.config?.baseURL}${error.config?.url}`
+      });
     }
     
     // Handle auth errors

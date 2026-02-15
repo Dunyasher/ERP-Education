@@ -5,32 +5,17 @@ const Student = require('../models/Student');
 const User = require('../models/User');
 const Teacher = require('../models/Teacher');
 const Counter = require('../models/Counter');
+const { Invoice } = require('../models/Fee');
+let PaymentTransaction;
+try {
+  PaymentTransaction = require('../models/PaymentTransaction');
+} catch (err) {
+  console.warn('PaymentTransaction model not found, continuing without it');
+  PaymentTransaction = null;
+}
 const { authenticate, authorize } = require('../middleware/auth');
 const { notifyStudentCreated, notifyStudentDeleted } = require('../utils/notifications');
 const { getCurrentSerialNumber } = require('../utils/autoSerialNumber');
-
-// @route   GET /api/students/next-serial
-// @desc    Get next serial number preview (for BITEL form - format: A + number)
-// @access  Private (Admin)
-router.get('/next-serial', authenticate, authorize('admin', 'super_admin'), async (req, res) => {
-  try {
-    // Get current student count
-    const studentCount = await Student.countDocuments();
-    
-    // Calculate next number (BITEL format: A + number, starting from 1)
-    const nextNumber = studentCount + 1;
-    
-    // Format as "A" + number (e.g., "A2596")
-    const nextSerial = `A${nextNumber}`;
-    
-    res.json({ nextSerial, nextNumber });
-  } catch (error) {
-    console.error('Get next serial error:', error);
-    // Fallback: use timestamp
-    const fallbackNumber = Date.now().toString().slice(-4);
-    res.json({ nextSerial: `A${fallbackNumber}`, nextNumber: parseInt(fallbackNumber) });
-  }
-});
 
 // @route   GET /api/students
 // @desc    Get all students
@@ -60,6 +45,352 @@ router.get('/', authenticate, async (req, res) => {
   } catch (error) {
     console.error('Get students error:', error);
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// @route   GET /api/students/:id/history
+// @desc    Get student complete history including payment installments
+// @access  Private
+// IMPORTANT: This route must be defined BEFORE /:id to avoid route conflicts
+router.get('/:id/history', authenticate, async (req, res) => {
+  try {
+    console.log('=== ✅ HISTORY ROUTE HIT ===');
+    console.log('Request params:', req.params);
+    console.log('Request URL:', req.url);
+    console.log('Request path:', req.path);
+    console.log('Request method:', req.method);
+    console.log('Request originalUrl:', req.originalUrl);
+    console.log('History route hit for student ID:', req.params.id);
+    console.log('Authenticated user:', req.user?.email || 'N/A');
+    
+    // Try to find student by ObjectId first, then fallback to srNo
+    let student = null;
+    
+    if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+      // Try finding by ObjectId
+      student = await Student.findById(req.params.id)
+        .populate('userId', 'email profile')
+        .populate({
+          path: 'academicInfo.courseId',
+          select: 'name categoryId',
+          populate: {
+            path: 'categoryId',
+            select: 'name'
+          }
+        })
+        .populate('feeInfo.feeStructureId');
+    }
+    
+    // If not found by ObjectId, try finding by serial number
+    if (!student) {
+      console.log('Student not found by ObjectId, trying to find by srNo:', req.params.id);
+      student = await Student.findOne({ srNo: req.params.id })
+        .populate('userId', 'email profile')
+        .populate({
+          path: 'academicInfo.courseId',
+          select: 'name categoryId',
+          populate: {
+            path: 'categoryId',
+            select: 'name'
+          }
+        })
+        .populate('feeInfo.feeStructureId');
+    }
+    
+    // If still not found, try by admissionNo
+    if (!student) {
+      console.log('Student not found by srNo, trying to find by admissionNo:', req.params.id);
+      student = await Student.findOne({ admissionNo: req.params.id })
+        .populate('userId', 'email profile')
+        .populate({
+          path: 'academicInfo.courseId',
+          select: 'name categoryId',
+          populate: {
+            path: 'categoryId',
+            select: 'name'
+          }
+        })
+        .populate('feeInfo.feeStructureId');
+    }
+    
+    if (!student) {
+      console.error('❌ Student not found with ID, SR No, or Admission No:', req.params.id);
+      console.error('   Attempted searches:');
+      console.error('   - ObjectId:', mongoose.Types.ObjectId.isValid(req.params.id) ? 'Valid format' : 'Invalid format');
+      console.error('   - Serial Number:', req.params.id);
+      console.error('   - Admission Number:', req.params.id);
+      
+      // Try one more time with a case-insensitive search
+      try {
+        student = await Student.findOne({ 
+          $or: [
+            { srNo: { $regex: new RegExp(`^${req.params.id}$`, 'i') } },
+            { admissionNo: { $regex: new RegExp(`^${req.params.id}$`, 'i') } }
+          ]
+        })
+        .populate('userId', 'email profile')
+        .populate({
+          path: 'academicInfo.courseId',
+          select: 'name categoryId',
+          populate: {
+            path: 'categoryId',
+            select: 'name'
+          }
+        })
+        .populate('feeInfo.feeStructureId');
+        
+        if (student) {
+          console.log('✅ Student found with case-insensitive search:', student.srNo || student._id);
+        }
+      } catch (caseError) {
+        console.error('Error in case-insensitive search:', caseError);
+      }
+      
+      if (!student) {
+        return res.status(404).json({ 
+          message: 'Student not found. Please check if the student exists.',
+          student: null,
+          paymentHistory: [],
+          paymentInstallments: [],
+          monthlyBreakdown: [],
+          summary: {
+            totalFee: 0,
+            totalPaid: 0,
+            pendingFee: 0,
+            totalInvoices: 0,
+            totalTransactions: 0,
+            paidInvoices: 0,
+            partialInvoices: 0,
+            pendingInvoices: 0
+          }
+        });
+      }
+    }
+    
+    console.log('✅ Student found:', student.srNo || student._id, '| Name:', student.personalInfo?.fullName || 'N/A');
+
+    // Get all invoices for this student (use student._id, not req.params.id)
+    let invoices = [];
+    try {
+      invoices = await Invoice.find({ studentId: student._id })
+        .populate('feeStructureId')
+        .sort({ createdAt: -1 });
+    } catch (invoiceError) {
+      console.error('Error fetching invoices:', invoiceError);
+      invoices = [];
+    }
+
+    // Get all payment transactions for this student (individual installments)
+    let paymentTransactions = [];
+    if (PaymentTransaction) {
+      try {
+        paymentTransactions = await PaymentTransaction.find({ studentId: student._id })
+          .populate('invoiceId', 'invoiceNo')
+          .sort({ paymentDate: -1, createdAt: -1 });
+      } catch (txnError) {
+        console.error('Error fetching payment transactions:', txnError);
+        // Continue without transactions if there's an error
+        paymentTransactions = [];
+      }
+    }
+
+    // Calculate payment summary
+    const totalFee = student.feeInfo?.totalFee || 0;
+    const totalPaid = student.feeInfo?.paidFee || 0;
+    const pendingFee = student.feeInfo?.pendingFee || (totalFee - totalPaid);
+
+    // Prepare payment history from invoices with transaction details
+    const paymentHistory = (invoices || []).map(invoice => {
+      // Get all transactions for this invoice
+      const invoiceTransactions = (paymentTransactions || []).filter(
+        txn => {
+          const txnInvoiceId = txn.invoiceId?._id?.toString() || txn.invoiceId?.toString();
+          return txnInvoiceId === invoice._id.toString();
+        }
+      );
+
+      return {
+        invoiceNo: invoice.invoiceNo || 'N/A',
+        invoiceDate: invoice.invoiceDate || invoice.createdAt,
+        totalAmount: invoice.totalAmount || 0,
+        paidAmount: invoice.paidAmount || 0,
+        pendingAmount: invoice.pendingAmount || (invoice.totalAmount || 0) - (invoice.paidAmount || 0),
+        status: invoice.status || 'pending',
+        collectedByName: invoice.collectedByName || student.academicInfo?.admittedByName || 'N/A',
+        items: invoice.items || [],
+        discount: invoice.discount || 0,
+        notes: invoice.notes || '',
+        paymentMethod: invoice.paymentMethod || 'N/A',
+        paymentDate: invoice.paymentDate || invoice.invoiceDate || invoice.createdAt,
+        feeStructureId: invoice.feeStructureId,
+        createdAt: invoice.createdAt,
+        updatedAt: invoice.updatedAt,
+        transactions: invoiceTransactions.map(txn => ({
+          transactionNo: txn.transactionNo || 'N/A',
+          amount: txn.amount || 0,
+          paymentMethod: txn.paymentMethod || 'N/A',
+          paymentDate: txn.paymentDate || txn.createdAt,
+          collectedByName: txn.collectedByName || 'N/A',
+          notes: txn.notes || '',
+          receiptNo: txn.receiptNo || '',
+          createdAt: txn.createdAt
+        }))
+      };
+    });
+
+    // Prepare all payment installments (flattened from transactions)
+    const allPaymentInstallments = (paymentTransactions || []).map(txn => ({
+      transactionNo: txn.transactionNo || 'N/A',
+      invoiceNo: txn.invoiceId?.invoiceNo || txn.invoiceId || 'N/A',
+      amount: txn.amount || 0,
+      paymentMethod: txn.paymentMethod || 'N/A',
+      paymentDate: txn.paymentDate || txn.createdAt,
+      collectedByName: txn.collectedByName || 'N/A',
+      notes: txn.notes || '',
+      receiptNo: txn.receiptNo || '',
+      createdAt: txn.createdAt
+    }));
+
+    // Group payments by month
+    const monthlyPayments = {};
+    allPaymentInstallments.forEach(txn => {
+      const paymentDate = txn.paymentDate ? new Date(txn.paymentDate) : new Date(txn.createdAt);
+      const monthKey = `${paymentDate.getFullYear()}-${String(paymentDate.getMonth() + 1).padStart(2, '0')}`;
+      const monthName = paymentDate.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+      
+      if (!monthlyPayments[monthKey]) {
+        monthlyPayments[monthKey] = {
+          month: monthName,
+          monthKey: monthKey,
+          year: paymentDate.getFullYear(),
+          monthNumber: paymentDate.getMonth() + 1,
+          totalAmount: 0,
+          transactions: []
+        };
+      }
+      
+      monthlyPayments[monthKey].totalAmount += txn.amount || 0;
+      monthlyPayments[monthKey].transactions.push(txn);
+    });
+
+    // Convert to array and sort by date (newest first)
+    const monthlyBreakdown = Object.values(monthlyPayments).sort((a, b) => {
+      if (a.year !== b.year) return b.year - a.year;
+      return b.monthNumber - a.monthNumber;
+    });
+
+    const responseData = {
+      student,
+      paymentHistory,
+      paymentInstallments: allPaymentInstallments,
+      monthlyBreakdown: monthlyBreakdown,
+      summary: {
+        totalFee,
+        totalPaid,
+        pendingFee,
+        totalInvoices: (invoices || []).length,
+        totalTransactions: (paymentTransactions || []).length,
+        paidInvoices: (invoices || []).filter(inv => inv.status === 'paid').length,
+        partialInvoices: (invoices || []).filter(inv => inv.status === 'partial').length,
+        pendingInvoices: (invoices || []).filter(inv => inv.status === 'pending').length
+      }
+    };
+    
+    console.log('=== ✅ SENDING SUCCESSFUL RESPONSE ===');
+    console.log('Student:', student?.srNo || student?._id);
+    console.log('Student Name:', student?.personalInfo?.fullName || 'N/A');
+    console.log('Invoices:', paymentHistory.length);
+    console.log('Transactions:', allPaymentInstallments.length);
+    console.log('Monthly Breakdown:', monthlyBreakdown.length, 'months');
+    console.log('Total Fee:', totalFee, '| Paid:', totalPaid, '| Pending:', pendingFee);
+    
+    res.json(responseData);
+  } catch (error) {
+    console.error('❌ Get student history error:', error);
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    console.error('Request params:', req.params);
+    console.error('Request ID:', req.params.id);
+    
+    // Try to return at least the student if we can find it, even if other data fails
+    try {
+      let fallbackStudent = null;
+      if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+        fallbackStudent = await Student.findById(req.params.id)
+          .populate('userId', 'email profile')
+          .populate({
+            path: 'academicInfo.courseId',
+            select: 'name categoryId',
+            populate: {
+              path: 'categoryId',
+              select: 'name'
+            }
+          })
+          .populate('feeInfo.feeStructureId');
+      }
+      
+      if (!fallbackStudent) {
+        fallbackStudent = await Student.findOne({ srNo: req.params.id })
+          .populate('userId', 'email profile')
+          .populate({
+            path: 'academicInfo.courseId',
+            select: 'name categoryId',
+            populate: {
+              path: 'categoryId',
+              select: 'name'
+            }
+          })
+          .populate('feeInfo.feeStructureId');
+      }
+      
+      if (fallbackStudent) {
+        console.log('⚠️ Returning fallback student data due to error');
+        const fallbackTotalFee = fallbackStudent.feeInfo?.totalFee || 0;
+        const fallbackTotalPaid = fallbackStudent.feeInfo?.paidFee || 0;
+        const fallbackPendingFee = fallbackStudent.feeInfo?.pendingFee || (fallbackTotalFee - fallbackTotalPaid);
+        
+        return res.json({
+          student: fallbackStudent,
+          paymentHistory: [],
+          paymentInstallments: [],
+          monthlyBreakdown: [],
+          summary: {
+            totalFee: fallbackTotalFee,
+            totalPaid: fallbackTotalPaid,
+            pendingFee: fallbackPendingFee,
+            totalInvoices: 0,
+            totalTransactions: 0,
+            paidInvoices: 0,
+            partialInvoices: 0,
+            pendingInvoices: 0
+          },
+          error: error.message,
+          warning: 'Some data could not be loaded, but student information is available'
+        });
+      }
+    } catch (fallbackError) {
+      console.error('Fallback student fetch also failed:', fallbackError);
+    }
+    
+    res.status(500).json({ 
+      message: 'Server error while fetching student history', 
+      error: error.message,
+      student: null,
+      paymentHistory: [],
+      paymentInstallments: [],
+      monthlyBreakdown: [],
+      summary: {
+        totalFee: 0,
+        totalPaid: 0,
+        pendingFee: 0,
+        totalInvoices: 0,
+        totalTransactions: 0,
+        paidInvoices: 0,
+        partialInvoices: 0,
+        pendingInvoices: 0
+      }
+    });
   }
 });
 

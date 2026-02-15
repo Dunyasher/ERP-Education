@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const { FeeStructure, Invoice } = require('../models/Fee');
+const PaymentTransaction = require('../models/PaymentTransaction');
 const Student = require('../models/Student');
 const User = require('../models/User');
 const Teacher = require('../models/Teacher');
@@ -219,6 +220,19 @@ router.put('/invoices/:id/pay', authenticate, authorize('admin', 'super_admin', 
     invoice.paymentDate = paymentDate || new Date();
     await invoice.save();
     
+    // Create payment transaction record
+    const transactionData = {
+      studentId: invoice.studentId,
+      invoiceId: invoice._id,
+      amount: paidAmount,
+      paymentMethod: paymentMethod,
+      paymentDate: paymentDate || new Date(),
+      collectedBy: collectedById,
+      collectedByName: invoice.collectedByName
+    };
+    
+    const transaction = await PaymentTransaction.create(transactionData);
+    
     // Update student fee info
     const student = await Student.findById(invoice.studentId);
     if (student) {
@@ -227,7 +241,7 @@ router.put('/invoices/:id/pay', authenticate, authorize('admin', 'super_admin', 
       await student.save();
     }
     
-    res.json(invoice);
+    res.json({ invoice, transaction });
   } catch (error) {
     console.error('Record payment error:', error);
     res.status(500).json({ message: 'Server error' });

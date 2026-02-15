@@ -15,6 +15,10 @@ const teacherSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  staffCategoryId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'StaffCategory'
+  },
   personalInfo: {
     fullName: {
       type: String,

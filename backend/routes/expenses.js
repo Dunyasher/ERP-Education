@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Expense = require('../models/Expense');
 const { authenticate } = require('../middleware/auth');
+const { notifyFinancialUpdate } = require('../utils/notifications');
 
 // @route   GET /api/expenses
 // @desc    Get all expenses with filters
@@ -63,6 +64,19 @@ router.post('/', authenticate, async (req, res) => {
     const expense = await Expense.create(expenseData);
     await expense.populate('createdBy', 'email');
 
+    // Notify admins about expense creation
+    const date = new Date(expense.date);
+    const period = `Daily - ${date.toLocaleDateString()}`;
+    notifyFinancialUpdate('expense', {
+      _id: expense._id,
+      amount: expense.amount,
+      category: expense.category,
+      date: expense.date,
+      period: period,
+      description: expense.description
+    }, req.user.id)
+      .catch(err => console.error('Error sending expense notification:', err));
+
     res.status(201).json(expense);
   } catch (error) {
     console.error('Create expense error:', error);
@@ -84,6 +98,19 @@ router.put('/:id', authenticate, async (req, res) => {
     if (!expense) {
       return res.status(404).json({ message: 'Expense not found' });
     }
+
+    // Notify admins about expense update
+    const date = new Date(expense.date);
+    const period = `Daily - ${date.toLocaleDateString()}`;
+    notifyFinancialUpdate('expense', {
+      _id: expense._id,
+      amount: expense.amount,
+      category: expense.category,
+      date: expense.date,
+      period: period,
+      description: expense.description
+    }, req.user.id)
+      .catch(err => console.error('Error sending expense update notification:', err));
 
     res.json(expense);
   } catch (error) {

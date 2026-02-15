@@ -270,9 +270,222 @@ const notifyStudentModified = async (student, modifiedBy, changes) => {
   }
 };
 
+/**
+ * Create notification for email change
+ */
+const notifyEmailChanged = async (user, oldEmail, newEmail, changedBy) => {
+  try {
+    if (!user || !user._id) {
+      console.error('Invalid user object provided to notifyEmailChanged');
+      return [];
+    }
+
+    let changedByUser = null;
+    try {
+      changedByUser = await User.findById(changedBy);
+    } catch (err) {
+      console.error('Error fetching changedBy user:', err.message);
+    }
+
+    // Get all admins and directors
+    const adminsAndDirectors = await User.find({
+      role: { $in: ['admin', 'super_admin', 'director', 'owner'] }
+    }).limit(100);
+
+    if (!adminsAndDirectors || adminsAndDirectors.length === 0) {
+      return [];
+    }
+
+    const notifications = [];
+
+    for (const recipient of adminsAndDirectors) {
+      if (!recipient || !recipient._id) continue;
+      
+      try {
+        const notification = await Notification.create({
+          type: 'email_changed',
+          priority: 'high',
+          title: 'Email Address Changed',
+          message: `User ${oldEmail} email has been changed to ${newEmail} by ${changedByUser?.email || 'System'}`,
+          recipientId: recipient._id,
+          recipientRole: recipient.role,
+          relatedEntity: {
+            entityType: 'user',
+            entityId: user._id
+          },
+          metadata: {
+            userId: user._id,
+            userEmail: newEmail,
+            oldEmail: oldEmail,
+            newEmail: newEmail,
+            updatedBy: changedByUser?.email || 'System',
+            updatedByEmail: changedByUser?.email || 'N/A',
+            oldValues: { email: oldEmail },
+            newValues: { email: newEmail }
+          }
+        });
+        notifications.push(notification);
+      } catch (notifError) {
+        console.error(`Error creating notification for recipient ${recipient._id}:`, notifError.message);
+      }
+    }
+
+    return notifications;
+  } catch (error) {
+    console.error('Error creating email change notification:', error);
+    return [];
+  }
+};
+
+/**
+ * Create notification for password change
+ */
+const notifyPasswordChanged = async (user, changedBy, isAdminChange = false) => {
+  try {
+    if (!user || !user._id) {
+      console.error('Invalid user object provided to notifyPasswordChanged');
+      return [];
+    }
+
+    let changedByUser = null;
+    try {
+      changedByUser = await User.findById(changedBy);
+    } catch (err) {
+      console.error('Error fetching changedBy user:', err.message);
+    }
+
+    // Get all admins and directors
+    const adminsAndDirectors = await User.find({
+      role: { $in: ['admin', 'super_admin', 'director', 'owner'] }
+    }).limit(100);
+
+    if (!adminsAndDirectors || adminsAndDirectors.length === 0) {
+      return [];
+    }
+
+    const notifications = [];
+
+    for (const recipient of adminsAndDirectors) {
+      if (!recipient || !recipient._id) continue;
+      
+      try {
+        const notification = await Notification.create({
+          type: 'password_changed',
+          priority: isAdminChange ? 'high' : 'medium',
+          title: isAdminChange ? 'Password Changed by Admin' : 'Password Changed',
+          message: isAdminChange 
+            ? `Password for user ${user.email} has been changed by admin ${changedByUser?.email || 'System'}`
+            : `User ${user.email} has changed their password`,
+          recipientId: recipient._id,
+          recipientRole: recipient.role,
+          relatedEntity: {
+            entityType: 'user',
+            entityId: user._id
+          },
+          metadata: {
+            userId: user._id,
+            userEmail: user.email,
+            updatedBy: changedByUser?.email || 'System',
+            updatedByEmail: changedByUser?.email || 'N/A'
+          }
+        });
+        notifications.push(notification);
+      } catch (notifError) {
+        console.error(`Error creating notification for recipient ${recipient._id}:`, notifError.message);
+      }
+    }
+
+    return notifications;
+  } catch (error) {
+    console.error('Error creating password change notification:', error);
+    return [];
+  }
+};
+
+/**
+ * Create notification for financial data updates (income/expense)
+ */
+const notifyFinancialUpdate = async (type, data, createdBy) => {
+  try {
+    if (!type || !data) {
+      console.error('Invalid data provided to notifyFinancialUpdate');
+      return [];
+    }
+
+    let createdByUser = null;
+    try {
+      createdByUser = await User.findById(createdBy);
+    } catch (err) {
+      console.error('Error fetching createdBy user:', err.message);
+    }
+
+    // Get all admins and directors
+    const adminsAndDirectors = await User.find({
+      role: { $in: ['admin', 'super_admin', 'director', 'owner'] }
+    }).limit(100);
+
+    if (!adminsAndDirectors || adminsAndDirectors.length === 0) {
+      return [];
+    }
+
+    const notifications = [];
+    const amount = data.amount || 0;
+    const category = data.category || 'N/A';
+    const period = data.period || 'N/A';
+    const date = data.date ? new Date(data.date).toLocaleDateString() : 'N/A';
+
+    for (const recipient of adminsAndDirectors) {
+      if (!recipient || !recipient._id) continue;
+      
+      try {
+        const notificationType = type === 'income' ? 'income_recorded' : 'expense_recorded';
+        const title = type === 'income' 
+          ? `Income Recorded: ${amount.toLocaleString()}`
+          : `Expense Recorded: ${amount.toLocaleString()}`;
+        const message = type === 'income'
+          ? `${amount.toLocaleString()} income recorded in ${category} category (${period}) by ${createdByUser?.email || 'System'}`
+          : `${amount.toLocaleString()} expense recorded in ${category} category (${period}) by ${createdByUser?.email || 'System'}`;
+
+        const notification = await Notification.create({
+          type: notificationType,
+          priority: amount > 10000 ? 'high' : 'medium',
+          title: title,
+          message: message,
+          recipientId: recipient._id,
+          recipientRole: recipient.role,
+          relatedEntity: {
+            entityType: 'financial',
+            entityId: data._id || data.id
+          },
+          metadata: {
+            amount: amount,
+            category: category,
+            date: data.date,
+            period: period,
+            createdBy: createdByUser?.email || 'System',
+            createdByEmail: createdByUser?.email || 'N/A',
+            description: data.description || ''
+          }
+        });
+        notifications.push(notification);
+      } catch (notifError) {
+        console.error(`Error creating notification for recipient ${recipient._id}:`, notifError.message);
+      }
+    }
+
+    return notifications;
+  } catch (error) {
+    console.error('Error creating financial update notification:', error);
+    return [];
+  }
+};
+
 module.exports = {
   notifyStudentCreated,
   notifyStudentDeleted,
-  notifyStudentModified
+  notifyStudentModified,
+  notifyEmailChanged,
+  notifyPasswordChanged,
+  notifyFinancialUpdate
 };
 

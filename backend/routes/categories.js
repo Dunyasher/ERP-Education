@@ -3,19 +3,60 @@ const router = express.Router();
 const Category = require('../models/Category');
 const { authenticate, authorize } = require('../middleware/auth');
 
+// Test endpoint - must be before /:id route
+router.get('/test', (req, res) => {
+  res.json({ 
+    message: 'Categories route is working!', 
+    timestamp: new Date().toISOString(),
+    route: '/api/categories/test'
+  });
+});
+
 // @route   GET /api/categories
 // @desc    Get all categories
 // @access  Public
 router.get('/', async (req, res) => {
   try {
-    const { instituteType } = req.query;
-    const query = instituteType ? { instituteType, isActive: true } : { isActive: true };
+    const { instituteType, categoryType } = req.query;
     
+    // Build query - use simple structure to avoid MongoDB issues
+    const query = {};
+    
+    // Filter by isActive - get all active categories or those without the field
+    // Use a simpler approach: just get all, filter in memory if needed
+    // But for now, let's use MongoDB's $or
+    query.$or = [
+      { isActive: true },
+      { isActive: { $exists: false } }
+    ];
+    
+    // Add filters if provided
+    if (instituteType) {
+      query.instituteType = instituteType;
+    }
+    
+    if (categoryType) {
+      query.categoryType = categoryType;
+    }
+    
+    // Execute query
     const categories = await Category.find(query).sort({ createdAt: -1 });
-    res.json(categories);
+    
+    // Return results
+    return res.json(categories);
   } catch (error) {
     console.error('Get categories error:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    
+    if (error.name === 'CastError') {
+      return res.status(400).json({ message: 'Invalid query parameters' });
+    }
+    
+    return res.status(500).json({ 
+      message: 'Server error', 
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
   }
 });
 
@@ -40,12 +81,37 @@ router.get('/:id', async (req, res) => {
 // @access  Private (Admin)
 router.post('/', authenticate, authorize('admin', 'super_admin'), async (req, res) => {
   try {
-    const { name, instituteType, description } = req.body;
+    const { name, instituteType, categoryType, description } = req.body;
+    
+    if (!name || !instituteType) {
+      return res.status(400).json({ message: 'Name and institute type are required' });
+    }
+    
+    // Set default categoryType if not provided
+    const finalCategoryType = categoryType || 'course';
+    
+    // Check if category with same name, categoryType, and instituteType already exists (case-insensitive)
+    const existing = await Category.findOne({ 
+      name: { $regex: new RegExp(`^${name.trim()}$`, 'i') }, 
+      categoryType: finalCategoryType,
+      instituteType,
+      $or: [
+        { isActive: true },
+        { isActive: { $exists: false } }
+      ]
+    });
+    
+    if (existing) {
+      return res.status(400).json({ 
+        message: `Category "${name.trim()}" already exists for ${finalCategoryType} in ${instituteType}` 
+      });
+    }
     
     const category = await Category.create({
-      name,
+      name: name.trim(),
       instituteType,
-      description
+      categoryType: finalCategoryType,
+      description: description || ''
     });
     
     res.status(201).json(category);
@@ -54,7 +120,11 @@ router.post('/', authenticate, authorize('admin', 'super_admin'), async (req, re
     if (error.code === 11000) {
       return res.status(400).json({ message: 'Category already exists' });
     }
-    res.status(500).json({ message: 'Server error' });
+    if (error.name === 'ValidationError') {
+      const errors = Object.values(error.errors).map(err => err.message).join(', ');
+      return res.status(400).json({ message: `Validation error: ${errors}` });
+    }
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 

@@ -26,7 +26,7 @@ const FeeManagement = () => {
   const [courses, setCourses] = useState([]);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [showForm, setShowForm] = useState(false);
-  const [showAdmissionForm, setShowAdmissionForm] = useState(false);
+  const [showAdmissionForm, setShowAdmissionForm] = useState(true); // Show by default when page loads
 
   // Fetch students
   const { data: studentsData, error: studentsError } = useQuery('students', async () => {
@@ -496,20 +496,35 @@ const FeeManagement = () => {
         </div>
       )}
 
-      {/* Fee Invoices List */}
-      <FeeInvoicesList />
-
-      {/* BITEL Admission Form Modal */}
+      {/* BITEL Admission Form Modal - Dark Theme */}
       {showAdmissionForm && (
-        <BitelAdmissionForm
-          onClose={() => setShowAdmissionForm(false)}
-          onSuccess={(studentData) => {
-            // Refresh students list
-            queryClient.invalidateQueries('students');
-            // Optionally show success message or navigate
-            toast.success('Student admitted successfully!');
-          }}
-        />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90 dark:bg-opacity-95">
+          <div className="relative w-full max-w-6xl max-h-[95vh] overflow-y-auto bg-gray-900 dark:bg-gray-800 rounded-lg shadow-2xl m-4">
+            <div className="sticky top-0 bg-gray-900 dark:bg-gray-800 border-b border-gray-700 px-6 py-4 flex items-center justify-between z-10">
+              <h2 className="text-2xl font-bold text-white">Add Admission Form</h2>
+              <button
+                onClick={() => setShowAdmissionForm(false)}
+                className="text-gray-400 hover:text-white transition-colors p-2 rounded-lg hover:bg-gray-800"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            <div className="p-6">
+              <BitelAdmissionForm
+                showOverlay={false}
+                onClose={() => setShowAdmissionForm(false)}
+                onSuccess={(studentData) => {
+                  // Refresh students list
+                  queryClient.invalidateQueries('students');
+                  queryClient.invalidateQueries('invoices');
+                  // Optionally show success message or navigate
+                  toast.success('Student admitted successfully!');
+                  setShowAdmissionForm(false);
+                }}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

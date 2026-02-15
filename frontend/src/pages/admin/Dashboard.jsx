@@ -11,10 +11,7 @@ import {
   Wallet,
   ArrowUpCircle,
   ArrowDownCircle,
-  PieChart,
-  UserPlus,
-  Calendar,
-  Clock
+  PieChart
 } from 'lucide-react';
 
 const AdminDashboard = () => {
@@ -351,119 +348,6 @@ const AdminDashboard = () => {
         </div>
       </div>
 
-      {/* Admission Details Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Admission Statistics */}
-        <div className="lg:col-span-1">
-          <div className="card animate-slide-up">
-            <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
-                  <UserPlus className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                </div>
-                Admission Statistics
-              </h2>
-            </div>
-            <div className="space-y-4">
-              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-blue-700 dark:text-blue-400">
-                      This Month
-                    </p>
-                    <p className="text-2xl font-bold text-blue-900 dark:text-blue-300 mt-1">
-                      {stats?.admissionsThisMonth || 0}
-                    </p>
-                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-                      New admissions
-                    </p>
-                  </div>
-                  <Calendar className="w-8 h-8 text-blue-500" />
-                </div>
-              </div>
-              
-              <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-200 dark:border-emerald-800">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
-                      Today
-                    </p>
-                    <p className="text-2xl font-bold text-emerald-900 dark:text-emerald-300 mt-1">
-                      {stats?.admissionsToday || 0}
-                    </p>
-                    <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
-                      Admissions today
-                    </p>
-                  </div>
-                  <Clock className="w-8 h-8 text-emerald-500" />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Recent Admissions */}
-        <div className="lg:col-span-2">
-          <div className="card animate-slide-up" style={{ animationDelay: '0.1s' }}>
-            <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                <div className="p-2 bg-teal-100 dark:bg-teal-900/30 rounded-lg">
-                  <Users className="w-5 h-5 text-teal-600 dark:text-teal-400" />
-                </div>
-                Recent Admissions
-              </h2>
-              <span className="text-sm font-semibold text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-3 py-1 rounded-full">
-                Last 10 admissions
-              </span>
-            </div>
-            <div className="overflow-x-auto">
-              {stats?.recentAdmissions && stats.recentAdmissions.length > 0 ? (
-                <table className="table">
-                  <thead className="table-header">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        SR NO
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Name
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Course
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Date
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-                    {stats.recentAdmissions.map((admission, index) => (
-                      <tr key={index} className="table-row">
-                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                          {admission.srNo || 'N/A'}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                          {admission.name}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                          {admission.course}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                          {formatDate(admission.admissionDate)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                  <UserPlus className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                  <p>No recent admissions</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 };

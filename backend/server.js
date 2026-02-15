@@ -16,8 +16,13 @@ if (!fs.existsSync(uploadsDir)) {
 
 const app = express();
 
-// Middleware
-app.use(cors());
+// Middleware - CORS Configuration
+app.use(cors({
+  origin: ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000', 'http://127.0.0.1:5173'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 // Increase JSON payload limit and add timeout
 app.use(express.json({ limit: '10mb', extended: true }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
@@ -79,7 +84,12 @@ connectDB();
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
-app.use('/api/students', require('./routes/students'));
+const studentsRouter = require('./routes/students');
+app.use('/api/students', studentsRouter);
+console.log('✅ Students routes registered');
+console.log('   - GET /api/students');
+console.log('   - GET /api/students/:id/history');
+console.log('   - GET /api/students/:id');
 app.use('/api/teachers', require('./routes/teachers'));
 app.use('/api/categories', require('./routes/categories'));
 app.use('/api/courses', require('./routes/courses'));
@@ -97,10 +107,36 @@ app.use('/api/settings', require('./routes/settings'));
 app.use('/api/audit', require('./routes/audit'));
 app.use('/api/staff-requests', require('./routes/staffRequests'));
 app.use('/api/staff-categories', require('./routes/staffCategories'));
+app.use('/api/accountant', require('./routes/accountant'));
 
 // Health Check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Education ERP API is running' });
+});
+
+// Test endpoint to verify students routes are working
+app.get('/api/students/test', (req, res) => {
+  res.json({ message: 'Students routes are working!', timestamp: new Date() });
+});
+
+// 404 handler for API routes (must be after all routes)
+app.use('/api/*', (req, res) => {
+  console.error('❌ 404 - Route not found:', req.method, req.originalUrl);
+  console.error('Request path:', req.path);
+  console.error('Request baseUrl:', req.baseUrl);
+  res.status(404).json({ 
+    message: 'API endpoint not found', 
+    path: req.originalUrl,
+    method: req.method,
+    availableRoutes: [
+      'GET /api/students',
+      'GET /api/students/:id',
+      'GET /api/students/:id/history',
+      'POST /api/students',
+      'PUT /api/students/:id',
+      'DELETE /api/students/:id'
+    ]
+  });
 });
 
 // Global Error Handler Middleware (must be last)

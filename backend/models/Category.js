@@ -21,6 +21,12 @@ const categorySchema = new mongoose.Schema({
     enum: ['school', 'college', 'academy', 'short_course'],
     required: true
   },
+  categoryType: {
+    type: String,
+    enum: ['course', 'teacher', 'staff', 'student', 'expense', 'income'],
+    required: false,
+    default: 'course'
+  },
   description: {
     type: String,
     trim: true
@@ -49,6 +55,15 @@ categorySchema.pre('save', async function(next) {
     this.srNo = await generateSerialNumber('CAT');
   }
   next();
+});
+
+// Index for efficient queries
+categorySchema.index({ categoryType: 1, instituteType: 1, isActive: 1 });
+// Unique index on name + categoryType + instituteType combination (sparse to handle missing categoryType)
+categorySchema.index({ name: 1, categoryType: 1, instituteType: 1 }, { 
+  unique: true,
+  sparse: true,
+  partialFilterExpression: { isActive: true, categoryType: { $exists: true } }
 });
 
 module.exports = mongoose.model('Category', categorySchema);

@@ -230,10 +230,50 @@
   }
 }
 
-/* Mobile Responsive Improvements */
-@media (max-width: 640px) {
+/* Extra Small Devices (Smartwatches, very small phones) */
+@media (max-width: 320px) {
   .card {
-    @apply p-4;
+    @apply p-2;
+  }
+  
+  table {
+    @apply text-xs;
+    font-size: 10px;
+  }
+  
+  .btn-primary,
+  .btn-secondary {
+    @apply text-xs px-2 py-1.5;
+  }
+  
+  .input-field {
+    @apply text-xs px-2 py-1.5;
+  }
+  
+  h1 {
+    @apply text-lg;
+  }
+  
+  h2 {
+    @apply text-base;
+  }
+  
+  h3 {
+    @apply text-sm;
+  }
+  
+  /* Ensure modals fit on very small screens */
+  .modal-content,
+  [class*="max-w"] {
+    max-width: calc(100vw - 0.5rem) !important;
+    margin: 0.25rem !important;
+  }
+}
+
+/* Small Devices (Phones) */
+@media (min-width: 321px) and (max-width: 640px) {
+  .card {
+    @apply p-3;
   }
   
   table {
@@ -261,10 +301,36 @@
 @media (max-width: 768px) {
   .overflow-x-auto {
     -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
   }
   
   table {
     min-width: 600px;
+  }
+  
+  /* Horizontal scroll indicator */
+  .overflow-x-auto::after {
+    content: '→';
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #999;
+    font-size: 24px;
+    pointer-events: none;
+    opacity: 0.5;
+  }
+}
+
+/* Extra small devices - no horizontal scroll for tables */
+@media (max-width: 320px) {
+  table {
+    min-width: 100%;
+    display: block;
+  }
+  
+  .overflow-x-auto {
+    overflow-x: visible;
   }
 }
 
@@ -329,22 +395,103 @@ textarea {
   @apply mb-4 sm:mb-6;
 }
 
-/* Table responsive */
+/* Table responsive - Mobile card layout */
 @media (max-width: 768px) {
   table thead {
     @apply hidden;
   }
   
+  table tbody {
+    @apply block;
+  }
+  
   table tr {
-    @apply block mb-4 border border-gray-200 dark:border-gray-700 rounded-lg;
+    @apply block mb-3 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm;
+    background: white;
   }
   
   table td {
-    @apply block text-right px-4 py-2;
+    @apply block text-right px-3 py-2 text-xs;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  
+  table td:last-child {
+    border-bottom: none;
   }
   
   table td:before {
     content: attr(data-label);
-    @apply float-left font-semibold text-gray-700 dark:text-gray-300;
+    @apply float-left font-semibold text-gray-700 dark:text-gray-300 mr-2;
+  }
+  
+  /* Extra small devices within mobile range */
+  @media (min-width: 475px) {
+    table tr {
+      @apply mb-4;
+    }
+    
+    table td {
+      @apply px-4 text-sm;
+    }
+  }
+}
+
+/* Extra small devices - even more compact tables */
+@media (max-width: 320px) {
+  table td {
+    @apply px-2 py-1.5 text-xs;
+  }
+  
+  table tr {
+    @apply mb-2;
+  }
+}
+
+/* Large screens and above - ensure proper spacing */
+@media (min-width: 1920px) {
+  .container {
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+}
+
+/* Touch-friendly targets for mobile */
+@media (max-width: 768px) {
+  button,
+  a,
+  input[type="checkbox"],
+  input[type="radio"],
+  select {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* But allow smaller icons */
+  button svg,
+  a svg {
+    min-height: auto;
+    min-width: auto;
+  }
+}
+
+/* Smartwatch specific - ultra compact */
+@media (max-width: 280px) {
+  * {
+    font-size: 10px !important;
+  }
+  
+  .card {
+    @apply p-1;
+  }
+  
+  button {
+    @apply px-1 py-0.5 text-xs;
+    min-height: 32px;
+  }
+  
+  input,
+  select,
+  textarea {
+    @apply px-1 py-0.5 text-xs;
   }
 }

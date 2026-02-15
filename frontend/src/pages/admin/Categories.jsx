@@ -12,6 +12,7 @@ const Categories = () => {
   const [formData, setFormData] = useState({
     name: '',
     instituteType: 'college',
+    categoryType: 'course',
     description: '',
     isActive: true
   });
@@ -63,6 +64,7 @@ const Categories = () => {
     setFormData({
       name: '',
       instituteType: 'college',
+      categoryType: 'course',
       description: '',
       isActive: true
     });
@@ -73,6 +75,7 @@ const Categories = () => {
     setFormData({
       name: category.name || '',
       instituteType: category.instituteType || 'college',
+      categoryType: category.categoryType || 'course',
       description: category.description || '',
       isActive: category.isActive !== undefined ? category.isActive : true
     });
@@ -96,6 +99,7 @@ const Categories = () => {
     return (
       category.name?.toLowerCase().includes(searchLower) ||
       category.instituteType?.toLowerCase().includes(searchLower) ||
+      category.categoryType?.toLowerCase().includes(searchLower) ||
       category.srNo?.toLowerCase().includes(searchLower)
     );
   });
@@ -154,6 +158,9 @@ const Categories = () => {
                 Category Name
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Category Type
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 Institute Type
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -170,7 +177,7 @@ const Categories = () => {
           <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
             {filteredCategories.length === 0 ? (
               <tr>
-                <td colSpan="6" className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                <td colSpan="7" className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
                   <FileText className="w-12 h-12 mx-auto mb-4 text-gray-400" />
                   <p>No categories found</p>
                 </td>
@@ -183,6 +190,11 @@ const Categories = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
                     {category.name || 'N/A'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                    <span className="capitalize px-2 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded-full text-xs font-semibold">
+                      {category.categoryType || 'N/A'}
+                    </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                     <span className="capitalize">{category.instituteType?.replace('_', ' ') || 'N/A'}</span>
@@ -256,6 +268,22 @@ const Categories = () => {
                     className="input-field"
                     placeholder="e.g., Computer Science, English, Physics"
                   />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Category Type *</label>
+                  <select
+                    required
+                    value={formData.categoryType}
+                    onChange={(e) => setFormData({ ...formData, categoryType: e.target.value })}
+                    className="input-field"
+                  >
+                    <option value="course">Course</option>
+                    <option value="teacher">Teacher</option>
+                    <option value="staff">Staff</option>
+                    <option value="student">Student</option>
+                    <option value="expense">Expense</option>
+                    <option value="income">Income</option>
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">Institute Type *</label>

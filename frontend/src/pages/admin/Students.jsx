@@ -1,12 +1,33 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
+import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
-import { Plus, Edit, Trash2, Search, Users, Eye, Printer, X, Lock, EyeOff } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Users, Eye, Printer, X, Lock, EyeOff, AlertTriangle, DollarSign } from 'lucide-react';
 import StudentAdmissionPrint from '../../components/StudentAdmissionPrint';
+import AccountantAdmissionForm from '../../components/AccountantAdmissionForm';
+import ErrorCorrection from '../../components/ErrorCorrection';
+import { useAuth } from '../../contexts/AuthContext';
 
 const Students = () => {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { user } = useAuth();
+  
+  // Check if user is accountant
+  const isAccountant = user?.role === 'accountant';
+  
+  // Determine base path based on current route
+  const getBasePath = () => {
+    if (location.pathname.includes('/accountant/')) {
+      return '/accountant/students';
+    }
+    return '/admin/students';
+  };
+  
+  const [showErrorCorrection, setShowErrorCorrection] = useState(false);
+  const [studentForErrorCorrection, setStudentForErrorCorrection] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
@@ -44,7 +65,9 @@ const Students = () => {
       fatherName: '',
       fatherPhone: '',
       motherName: '',
-      motherPhone: ''
+      motherPhone: '',
+      guardianName: '',
+      guardianPhone: ''
     },
     academicInfo: {
       instituteType: 'college',
@@ -288,7 +311,9 @@ const Students = () => {
         fatherName: '',
         fatherPhone: '',
         motherName: '',
-        motherPhone: ''
+        motherPhone: '',
+        guardianName: '',
+        guardianPhone: ''
       },
       academicInfo: {
         instituteType: 'college',
@@ -406,19 +431,22 @@ const Students = () => {
     }
   };
 
-  // Filter students based on search
+  // Filter students based on search (only by name, father name, or serial number)
   const filteredStudents = students.filter(student => {
     if (!searchTerm) return true;
     const searchLower = searchTerm.toLowerCase();
     return (
       student.personalInfo?.fullName?.toLowerCase().includes(searchLower) ||
       student.srNo?.toLowerCase().includes(searchLower) ||
-      student.admissionNo?.toLowerCase().includes(searchLower) ||
-      student.userId?.email?.toLowerCase().includes(searchLower) ||
-      student.parentInfo?.fatherName?.toLowerCase().includes(searchLower) ||
-      student.academicInfo?.courseId?.name?.toLowerCase().includes(searchLower)
+      student.parentInfo?.fatherName?.toLowerCase().includes(searchLower)
     );
   });
+
+
+  const handleViewDetails = (student) => {
+    const path = `${getBasePath()}/${student._id}/details`;
+    navigate(path);
+  };
 
   if (isLoading) {
     return <div className="text-center py-12">Loading students...</div>;
@@ -429,22 +457,27 @@ const Students = () => {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            Students Management
+            {isAccountant ? 'Student Admissions' : 'Students Management'}
           </h1>
           <p className="text-gray-600 dark:text-gray-400">
-            Manage all students in the system
+            {isAccountant ? 'Add new admissions and manage student records' : 'Manage all students in the system'}
           </p>
         </div>
         <button
           onClick={() => {
-            setShowForm(true);
-            setEditingStudent(null);
-            resetForm();
+            if (isAccountant) {
+              setShowForm(true);
+              setEditingStudent(null);
+            } else {
+              setShowForm(true);
+              setEditingStudent(null);
+              resetForm();
+            }
           }}
           className="btn-primary flex items-center gap-2"
         >
           <Plus className="w-5 h-5" />
-          Add Student
+          {isAccountant ? 'Add Admission' : 'Add Student'}
         </button>
       </div>
 
@@ -454,7 +487,7 @@ const Students = () => {
           <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-5 h-5 z-10" />
           <input
             type="text"
-            placeholder="Search by name, father's name, serial number, admission number, course, or email..."
+            placeholder="Search by name, father's name, or serial number..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="input-field pl-12"
@@ -462,53 +495,29 @@ const Students = () => {
         </div>
       </div>
 
-      {/* Students Table */}
+      {/* Students Table - Simplified */}
       <div className="card overflow-x-auto animate-slide-up">
         <table className="table">
           <thead className="table-header">
             <tr>
               <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                SR NO
+                Serial Number
               </th>
               <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                STUDENT NAME
+                Student Name
               </th>
               <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                F/NAME
+                Father's Name
               </th>
               <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                COURSE
-              </th>
-              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                INVOICE NO
-              </th>
-              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                TOTAL FEE
-              </th>
-              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                TOTAL PAID FEE
-              </th>
-              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                REMAINING FEE
-              </th>
-              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                STATUS
-              </th>
-              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                DATE
-              </th>
-              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                ADMITTED BY
-              </th>
-              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                ACTIONS
+                Actions
               </th>
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
             {filteredStudents.length === 0 ? (
               <tr>
-                <td colSpan="12" className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                <td colSpan="4" className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
                   <Users className="w-12 h-12 mx-auto mb-4 text-gray-400" />
                   <p>No students found</p>
                   {searchTerm && <p className="text-sm mt-2">Try adjusting your search</p>}
@@ -516,14 +525,8 @@ const Students = () => {
               </tr>
             ) : (
               filteredStudents.map((student) => {
-                const latestInvoice = getLatestInvoice(student._id);
-                const totalFee = student.feeInfo?.totalFee || latestInvoice?.totalAmount || 0;
-                const paidFee = student.feeInfo?.paidFee || latestInvoice?.paidAmount || 0;
-                const remainingFee = student.feeInfo?.pendingFee || latestInvoice?.pendingAmount || (totalFee - paidFee);
-                const admissionDate = student.academicInfo?.admissionDate || student.createdAt;
-                
                 return (
-                  <tr key={student._id} className="table-row">
+                  <tr key={student._id} className="table-row hover:bg-gray-50 dark:hover:bg-gray-800">
                     <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                       {student.srNo || 'N/A'}
                     </td>
@@ -533,77 +536,15 @@ const Students = () => {
                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                       {student.parentInfo?.fatherName || 'N/A'}
                     </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                      {student.academicInfo?.courseId?.name || 'Not Assigned'}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                      {latestInvoice?.invoiceNo || 'N/A'}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
-                      {formatCurrency(totalFee)}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-green-600 dark:text-green-400 font-medium">
-                      {formatCurrency(paidFee)}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-red-600 dark:text-red-400 font-medium">
-                      {formatCurrency(remainingFee)}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap">
-                      <span className={
-                        student.academicInfo?.status === 'active' 
-                          ? 'badge-success'
-                          : student.academicInfo?.status === 'inactive'
-                          ? 'badge bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
-                          : 'badge-warning'
-                      }>
-                        {student.academicInfo?.status || 'N/A'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                      {formatDate(admissionDate)}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 font-medium">
-                      {student.academicInfo?.admittedByName || 'N/A'}
-                    </td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={async () => {
-                            try {
-                              const fullStudent = await api.get(`/students/${student._id}`);
-                              setPrintStudent(fullStudent.data);
-                            } catch (error) {
-                              toast.error('Failed to load student data for printing');
-                              console.error('Error fetching student:', error);
-                            }
-                          }}
-                          className="p-2 rounded-lg bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors duration-200 shadow-sm hover:shadow-md"
-                          title="Print Admission Form"
-                        >
-                          <Printer className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleOpenPasswordModal(student)}
-                          className="p-2 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition-colors duration-200 shadow-sm hover:shadow-md"
-                          title="Edit Password"
-                        >
-                          <Lock className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleEdit(student)}
-                          className="p-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors duration-200 shadow-sm hover:shadow-md"
-                          title="Edit"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(student)}
-                          className="p-2 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors duration-200 shadow-sm hover:shadow-md"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => handleViewDetails(student)}
+                        className="px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors duration-200 flex items-center gap-2"
+                        title="View Details"
+                      >
+                        <Eye className="w-4 h-4" />
+                        Details
+                      </button>
                     </td>
                   </tr>
                 );
@@ -613,8 +554,27 @@ const Students = () => {
         </table>
       </div>
 
-      {/* Add/Edit Form Modal */}
-      {showForm && (
+      {/* Accountant Admission Form Modal */}
+      {showForm && isAccountant && (
+        <AccountantAdmissionForm
+          editingStudent={editingStudent}
+          onClose={() => {
+            setShowForm(false);
+            setEditingStudent(null);
+            resetForm();
+          }}
+          onSuccess={(studentData) => {
+            queryClient.invalidateQueries('students');
+            queryClient.invalidateQueries('accountantStats');
+            setShowForm(false);
+            setEditingStudent(null);
+            resetForm();
+          }}
+        />
+      )}
+
+      {/* Admin Add/Edit Form Modal */}
+      {showForm && !isAccountant && (
         <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto animate-slide-up border border-gray-200 dark:border-gray-700">
             <div className="p-6">
@@ -766,6 +726,106 @@ const Students = () => {
                         />
                       </div>
                     )}
+                  </div>
+                </div>
+
+                {/* Parent/Guardian Information */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 pb-2 border-b border-gray-200 dark:border-gray-700">
+                    <div className="w-1 h-6 bg-gradient-to-b from-indigo-500 to-blue-500 rounded-full"></div>
+                    Parent/Guardian Information
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Father's Name
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.parentInfo.fatherName}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          parentInfo: { ...formData.parentInfo, fatherName: e.target.value }
+                        })}
+                        className="input-field"
+                        placeholder="Enter father's name"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Father's Phone
+                      </label>
+                      <input
+                        type="tel"
+                        value={formData.parentInfo.fatherPhone}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          parentInfo: { ...formData.parentInfo, fatherPhone: e.target.value }
+                        })}
+                        className="input-field"
+                        placeholder="Enter father's phone"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Mother's Name
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.parentInfo.motherName}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          parentInfo: { ...formData.parentInfo, motherName: e.target.value }
+                        })}
+                        className="input-field"
+                        placeholder="Enter mother's name"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Mother's Phone
+                      </label>
+                      <input
+                        type="tel"
+                        value={formData.parentInfo.motherPhone}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          parentInfo: { ...formData.parentInfo, motherPhone: e.target.value }
+                        })}
+                        className="input-field"
+                        placeholder="Enter mother's phone"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Guardian Name
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.parentInfo.guardianName}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          parentInfo: { ...formData.parentInfo, guardianName: e.target.value }
+                        })}
+                        className="input-field"
+                        placeholder="Enter guardian's name"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Guardian Phone
+                      </label>
+                      <input
+                        type="tel"
+                        value={formData.parentInfo.guardianPhone}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          parentInfo: { ...formData.parentInfo, guardianPhone: e.target.value }
+                        })}
+                        className="input-field"
+                        placeholder="Enter guardian's phone"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -969,6 +1029,17 @@ const Students = () => {
             />
           </div>
         </div>
+      )}
+
+      {/* Error Correction Modal */}
+      {showErrorCorrection && studentForErrorCorrection && (
+        <ErrorCorrection
+          student={studentForErrorCorrection}
+          onClose={() => {
+            setShowErrorCorrection(false);
+            setStudentForErrorCorrection(null);
+          }}
+        />
       )}
 
       {/* Edit Password Modal */}

@@ -55,9 +55,9 @@ const Classes = () => {
     return response.data;
   });
 
-  // Fetch categories for class creation
-  const { data: categories = [] } = useQuery('categories', async () => {
-    const response = await api.get('/categories');
+  // Fetch categories for class creation (only course categories)
+  const { data: categories = [] } = useQuery(['categories', 'course'], async () => {
+    const response = await api.get('/categories?categoryType=course');
     return response.data;
   });
 
