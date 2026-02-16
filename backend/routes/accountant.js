@@ -12,6 +12,15 @@ const { authenticate, authorize } = require('../middleware/auth');
 router.use(authenticate);
 router.use(authorize('accountant'));
 
+// Test route to verify accountant routes are working
+router.get('/test', (req, res) => {
+  res.json({ 
+    message: 'Accountant routes are working!', 
+    user: req.user ? { id: req.user._id, role: req.user.role } : 'no user',
+    timestamp: new Date()
+  });
+});
+
 // @route   GET /api/accountant/dashboard
 // @desc    Get accountant dashboard stats
 // @access  Private (Accountant)
@@ -145,10 +154,28 @@ router.post('/admissions/:studentId/link-fees', async (req, res) => {
 // @access  Private (Accountant)
 router.post('/monthly-payments', async (req, res) => {
   try {
-    const { studentId, month, year, amount, paymentMethod, paymentDate, notes, receiptNo, invoiceId } = req.body;
+    console.log('📥 Monthly payment request received:', {
+      method: req.method,
+      path: req.path,
+      url: req.originalUrl,
+      body: { 
+        studentId: req.body.studentId ? 'provided' : 'missing',
+        month: req.body.month,
+        year: req.body.year,
+        amount: req.body.amount,
+        accountName: req.body.accountName ? 'provided' : 'missing' 
+      },
+      user: req.user ? { id: req.user._id, role: req.user.role, email: req.user.email } : 'no user'
+    });
+    
+    const { studentId, month, year, amount, paymentMethod, paymentDate, notes, receiptNo, invoiceId, accountName } = req.body;
 
     if (!studentId || !month || !year || !amount || !paymentMethod) {
       return res.status(400).json({ message: 'Missing required fields' });
+    }
+
+    if (!accountName || !accountName.trim()) {
+      return res.status(400).json({ message: 'Account name is required' });
     }
 
     // Check if payment for this month already exists
@@ -168,6 +195,9 @@ router.post('/monthly-payments', async (req, res) => {
       return res.status(404).json({ message: 'Student not found' });
     }
 
+    // Create exact timestamp for payment
+    const paymentTimestamp = paymentDate ? new Date(paymentDate) : new Date();
+
     // Create monthly payment record
     const monthlyPaymentData = {
       studentId,
@@ -175,13 +205,14 @@ router.post('/monthly-payments', async (req, res) => {
       year: parseInt(year),
       amount: parseFloat(amount),
       paymentMethod,
-      paymentDate: paymentDate || new Date(),
+      paymentDate: paymentTimestamp,
+      accountName: accountName ? accountName.trim() : '',
       collectedBy: req.user._id,
       collectedByName: req.user.profile?.firstName && req.user.profile?.lastName 
         ? `${req.user.profile.firstName} ${req.user.profile.lastName}`.trim()
         : req.user.email,
-      notes,
-      receiptNo,
+      notes: notes || '',
+      receiptNo: receiptNo || '',
       isMonthlyFee: true,
       invoiceId: invoiceId || null
     };
@@ -230,13 +261,13 @@ router.post('/monthly-payments', async (req, res) => {
       await invoice.save();
     }
 
-    // Create payment transaction
+    // Create payment transaction (only include fields that exist in the model)
     const transactionData = {
       studentId,
       invoiceId: invoice._id,
       amount: parseFloat(amount),
       paymentMethod,
-      paymentDate: paymentDate || new Date(),
+      paymentDate: paymentTimestamp,
       collectedBy: req.user._id,
       collectedByName: monthlyPaymentData.collectedByName,
       notes,
@@ -254,6 +285,7 @@ router.post('/monthly-payments', async (req, res) => {
     student.calculatePendingFee();
     await student.save();
 
+    console.log('✅ Monthly payment recorded successfully');
     res.status(201).json({
       message: 'Monthly payment recorded successfully',
       monthlyPayment,
@@ -262,8 +294,13 @@ router.post('/monthly-payments', async (req, res) => {
       student
     });
   } catch (error) {
-    console.error('Record monthly payment error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('❌ Record monthly payment error:', error);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 

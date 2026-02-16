@@ -30,14 +30,6 @@ const AccountantDashboard = () => {
       onClick: () => navigate('/accountant/students')
     },
     {
-      title: 'Fee Management',
-      description: 'Record fees and view payment history',
-      icon: DollarSign,
-      color: 'from-green-500 to-green-600',
-      hoverColor: 'hover:from-green-600 hover:to-green-700',
-      onClick: () => navigate('/accountant/fees')
-    },
-    {
       title: 'Fee Reports',
       description: 'View complete fee history and reports',
       icon: FileText,

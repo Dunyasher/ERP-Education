@@ -55,7 +55,6 @@ const Layout = () => {
     { name: 'Dashboard', path: '/accountant/dashboard', icon: LayoutDashboard },
     { name: 'Admissions', path: '/accountant/students', icon: Users },
     { name: 'Monthly Payments', path: '/accountant/monthly-payments', icon: Calendar },
-    { name: 'Fee Management', path: '/accountant/fees', icon: DollarSign },
     { name: 'Reports', path: '/accountant/reports', icon: BarChart3 },
   ];
 

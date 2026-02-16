@@ -1,7 +1,8 @@
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from 'react-query';
 import api from '../../utils/api';
-import { ArrowLeft, DollarSign, CheckCircle, AlertCircle, Calendar, Clock } from 'lucide-react';
+import { ArrowLeft, DollarSign, CheckCircle, AlertCircle, Calendar, Clock, Printer } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 
 const StudentFeeHistory = () => {
   const { id } = useParams();
@@ -152,13 +153,129 @@ const StudentFeeHistory = () => {
     return dateA - dateB;
   });
 
+  // Print styles - Enhanced to show ALL data
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      @media print {
+        @page {
+          margin: 0.5cm;
+          size: A4;
+        }
+        * {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+        body {
+          background: white !important;
+          font-size: 12px !important;
+        }
+        .print\\:hidden {
+          display: none !important;
+        }
+        .print-content {
+          background: white !important;
+          color: black !important;
+          padding: 0 !important;
+        }
+        .print-content * {
+          color: black !important;
+        }
+        /* Ensure all backgrounds are white for print */
+        .bg-gray-50, .bg-white, .bg-gray-800, .bg-blue-50, .bg-green-50, .bg-red-50,
+        .bg-orange-50, .bg-purple-50, .bg-indigo-50,
+        .dark\\:bg-gray-900, .dark\\:bg-gray-800, .dark\\:bg-gray-700,
+        .dark\\:bg-blue-900\\/20, .dark\\:bg-green-900\\/20, .dark\\:bg-red-900\\/20 {
+          background: white !important;
+        }
+        /* Text colors for print */
+        .text-gray-900, .text-gray-800, .text-gray-700, .text-gray-600, .text-gray-500,
+        .text-blue-600, .text-green-600, .text-red-600, .text-orange-600, .text-purple-600,
+        .dark\\:text-white, .dark\\:text-gray-300, .dark\\:text-gray-400,
+        .dark\\:text-blue-400, .dark\\:text-green-400, .dark\\:text-red-400 {
+          color: black !important;
+        }
+        /* Borders for print */
+        .border-gray-200, .border-gray-700, .border-blue-200, .border-green-200, .border-red-200,
+        .dark\\:border-gray-700, .dark\\:border-blue-800, .dark\\:border-green-800, .dark\\:border-red-800 {
+          border-color: #000 !important;
+          border-width: 1px !important;
+        }
+        /* Tables */
+        table {
+          page-break-inside: auto;
+          border-collapse: collapse !important;
+          width: 100% !important;
+        }
+        thead {
+          display: table-header-group !important;
+          background: #f3f4f6 !important;
+        }
+        thead th {
+          background: #f3f4f6 !important;
+          color: black !important;
+          border: 1px solid #000 !important;
+          padding: 8px !important;
+        }
+        tbody tr {
+          page-break-inside: avoid;
+          page-break-after: auto;
+          border-bottom: 1px solid #000 !important;
+        }
+        tbody td {
+          border: 1px solid #ccc !important;
+          padding: 6px !important;
+        }
+        tfoot {
+          display: table-footer-group !important;
+          background: #f3f4f6 !important;
+        }
+        /* Remove rounded corners and shadows */
+        .rounded-lg, .rounded-xl, .rounded-full {
+          border-radius: 0 !important;
+        }
+        .shadow-sm, .shadow-lg, .shadow-xl, .shadow-2xl {
+          box-shadow: none !important;
+        }
+        /* Cards and sections */
+        .bg-white, .bg-gray-800 {
+          border: 1px solid #000 !important;
+          margin-bottom: 10px !important;
+          page-break-inside: avoid;
+        }
+        /* Ensure all sections print */
+        h1, h2, h3 {
+          page-break-after: avoid;
+          color: black !important;
+        }
+        /* Grid layouts for print */
+        .grid {
+          display: grid !important;
+        }
+        /* Spacing adjustments */
+        .mb-6, .mb-4, .mb-8 {
+          margin-bottom: 15px !important;
+        }
+        .p-6, .p-4, .p-8 {
+          padding: 10px !important;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+    return () => {
+      if (document.head.contains(style)) {
+        document.head.removeChild(style);
+      }
+    };
+  }, []);
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 sm:p-6 print-content">
       {/* Header */}
       <div className="mb-6 flex items-center gap-4">
         <button
           onClick={() => navigate(getBackPath())}
-          className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors print:hidden"
           title="Back to Students"
         >
           <ArrowLeft className="w-5 h-5" />
@@ -189,10 +306,18 @@ const StudentFeeHistory = () => {
             </div>
           </div>
         </div>
+        <button
+          onClick={() => window.print()}
+          className="px-4 sm:px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl hover:from-purple-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl font-medium flex items-center justify-center gap-2 print:hidden text-sm sm:text-base w-full sm:w-auto"
+        >
+          <Printer className="w-4 h-4 sm:w-5 sm:h-5" />
+          <span className="hidden sm:inline">Print Fee History</span>
+          <span className="sm:hidden">Print</span>
+        </button>
       </div>
 
       {/* Fee Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
         <div className="bg-blue-50 dark:bg-blue-900/20 p-6 rounded-lg border border-blue-200 dark:border-blue-800">
           <div className="flex items-center gap-3 mb-2">
             <DollarSign className="w-6 h-6 text-blue-600 dark:text-blue-400" />
@@ -504,7 +629,18 @@ const StudentFeeHistory = () => {
                           </span>
                           {txn.collectedByName && (
                             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                              By: {txn.collectedByName}
+                              Collected By: {txn.collectedByName}
+                            </p>
+                          )}
+                          {txn.verificationStatus && (
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              Verified: {txn.verificationStatus === 'verified_by_admin' ? 'Admin' : 
+                                         txn.verificationStatus === 'verified_by_accountant' ? 'Accountant' : 'Pending'}
+                            </p>
+                          )}
+                          {txn.verifiedAt && (
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              Verified At: {formatDateTime(txn.verifiedAt)}
                             </p>
                           )}
                         </div>
@@ -563,9 +699,19 @@ const StudentFeeHistory = () => {
                             </p>
                           </div>
                         </div>
-                        <div className="flex gap-4 text-sm text-gray-600 dark:text-gray-400">
+                        <div className="flex flex-wrap gap-4 text-sm text-gray-600 dark:text-gray-400">
                           <span>Method: {installment.paymentMethod?.replace('_', ' ').toUpperCase() || 'N/A'}</span>
                           <span>Collected by: {installment.collectedByName || 'N/A'}</span>
+                          {installment.verificationStatus && (
+                            <span>Verified: {installment.verificationStatus === 'verified_by_admin' ? 'Admin' : 
+                                             installment.verificationStatus === 'verified_by_accountant' ? 'Accountant' : 'Pending'}</span>
+                          )}
+                          {installment.verifiedAt && (
+                            <span>Verified At: {formatDateTime(installment.verifiedAt)}</span>
+                          )}
+                          {installment.paymentTimestamp && (
+                            <span>Payment Time: {formatDateTime(installment.paymentTimestamp)}</span>
+                          )}
                           {installment.notes && <span>Note: {installment.notes}</span>}
                         </div>
                       </div>
@@ -594,8 +740,10 @@ const StudentFeeHistory = () => {
                   <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">Invoice No</th>
                   <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">Amount Paid</th>
                   <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">Payment Method</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">Payment Date</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">Payment Date & Time</th>
                   <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">Collected By</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">Verified By</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">Verified At</th>
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
@@ -619,6 +767,16 @@ const StudentFeeHistory = () => {
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
                       {installment.collectedByName || 'N/A'}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
+                      {installment.verificationStatus === 'verified_by_admin' ? 'Admin' : 
+                       installment.verificationStatus === 'verified_by_accountant' ? 'Accountant' : 
+                       installment.verificationStatus || 'Pending'}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                      {installment.verifiedAt ? formatDateTime(installment.verifiedAt) : 
+                       installment.paymentTimestamp ? formatDateTime(installment.paymentTimestamp) : 
+                       formatDateTime(installment.paymentDate || installment.createdAt)}
                     </td>
                   </tr>
                 ))}

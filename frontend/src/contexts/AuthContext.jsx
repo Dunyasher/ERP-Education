@@ -36,11 +36,18 @@ export const AuthProvider = ({ children }) => {
       } catch (error) {
         // Handle all errors gracefully
         if (error.name === 'AbortError' || error.code === 'ECONNREFUSED' || !error.response) {
-          // Backend not running or network error - clear token and continue
-          console.warn('Backend server not accessible, clearing auth token');
+          // Backend not running or network error - don't show error, just clear token silently
+          console.warn('⚠️ Backend server not accessible during auth check');
+          console.warn('   This is normal if backend is starting up');
+          // Don't clear token immediately - user might just need to refresh
+        } else if (error.response?.status === 401) {
+          // Invalid token - clear it
+          localStorage.removeItem('token');
         }
-        localStorage.removeItem('token');
-        setUser(null);
+        // Don't set user to null on network errors - let user try to use the app
+        if (error.response?.status === 401) {
+          setUser(null);
+        }
       } finally {
         setLoading(false);
       }

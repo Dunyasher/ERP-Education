@@ -1,8 +1,9 @@
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from 'react-query';
 import api from '../../utils/api';
-import { ArrowLeft, Users, DollarSign, Edit, X, User, Phone, Mail, Calendar, GraduationCap, BookOpen, MapPin, CreditCard, FileText, CheckCircle, Clock, AlertCircle, UserCircle, PhoneCall } from 'lucide-react';
+import { ArrowLeft, Users, DollarSign, Edit, X, User, Phone, Mail, Calendar, GraduationCap, BookOpen, MapPin, CreditCard, FileText, CheckCircle, Clock, AlertCircle, UserCircle, PhoneCall, Printer } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useEffect } from 'react';
 
 const StudentDetails = () => {
   const { id } = useParams();
@@ -54,6 +55,184 @@ const StudentDetails = () => {
       enabled: !!id,
     }
   );
+
+  // Print styles - Optimized to fit all data on one page
+  // IMPORTANT: useEffect must be called before any early returns to follow Rules of Hooks
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      @media print {
+        @page {
+          margin: 0.3cm;
+          size: A4;
+        }
+        * {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+        body {
+          background: white !important;
+          font-size: 9px !important;
+          line-height: 1.2 !important;
+        }
+        .print\\:hidden {
+          display: none !important;
+        }
+        /* Remove all padding and margins */
+        .min-h-screen {
+          min-height: auto !important;
+          padding: 0 !important;
+        }
+        .p-4, .p-6, .p-8, .p-3 {
+          padding: 4px !important;
+        }
+        .mb-6, .mb-4, .mb-8, .mb-2 {
+          margin-bottom: 4px !important;
+        }
+        .mt-4, .mt-2, .mt-6, .mt-8 {
+          margin-top: 4px !important;
+        }
+        .gap-4, .gap-6, .gap-3, .gap-2 {
+          gap: 4px !important;
+        }
+        .space-y-4 > * + * {
+          margin-top: 4px !important;
+        }
+        /* Ensure all backgrounds are white for print */
+        .bg-gray-50, .bg-white, .bg-gray-800, .bg-blue-50, .bg-green-50, .bg-red-50,
+        .bg-orange-50, .bg-purple-50, .bg-indigo-50, .bg-yellow-50,
+        .bg-gradient-to-br, .bg-gradient-to-r,
+        .dark\\:bg-gray-900, .dark\\:bg-gray-800, .dark\\:bg-gray-700 {
+          background: white !important;
+        }
+        /* Text colors for print - smaller sizes */
+        .text-gray-900, .text-gray-800, .text-gray-700, .text-gray-600, .text-gray-500,
+        .text-blue-600, .text-green-600, .text-red-600, .text-orange-600, .text-purple-600,
+        .dark\\:text-white, .dark\\:text-gray-300, .dark\\:text-gray-400 {
+          color: black !important;
+        }
+        .text-2xl, .text-3xl, .text-4xl {
+          font-size: 14px !important;
+        }
+        .text-xl {
+          font-size: 12px !important;
+        }
+        .text-lg {
+          font-size: 11px !important;
+        }
+        .text-sm {
+          font-size: 9px !important;
+        }
+        .text-xs {
+          font-size: 8px !important;
+        }
+        /* Headers */
+        h1 {
+          font-size: 16px !important;
+          margin-bottom: 4px !important;
+        }
+        h2 {
+          font-size: 12px !important;
+          margin-bottom: 4px !important;
+        }
+        h3 {
+          font-size: 11px !important;
+          margin-bottom: 3px !important;
+        }
+        /* Borders for print */
+        .border-gray-200, .border-gray-700, .border-blue-200, .border-green-200, .border-red-200 {
+          border-color: #000 !important;
+          border-width: 0.5px !important;
+        }
+        /* Tables - compact */
+        table {
+          page-break-inside: auto;
+          border-collapse: collapse !important;
+          width: 100% !important;
+          font-size: 8px !important;
+        }
+        thead {
+          display: table-header-group !important;
+          background: #f3f4f6 !important;
+        }
+        thead th {
+          background: #f3f4f6 !important;
+          color: black !important;
+          border: 0.5px solid #000 !important;
+          padding: 3px 4px !important;
+          font-size: 8px !important;
+        }
+        tbody tr {
+          page-break-inside: avoid;
+          page-break-after: auto;
+          border-bottom: 0.5px solid #000 !important;
+        }
+        tbody td {
+          border: 0.5px solid #ccc !important;
+          padding: 3px 4px !important;
+          font-size: 8px !important;
+        }
+        /* Remove rounded corners and shadows */
+        .rounded-lg, .rounded-xl, .rounded-full, .rounded-2xl {
+          border-radius: 0 !important;
+        }
+        .shadow-sm, .shadow-lg, .shadow-xl, .shadow-2xl {
+          box-shadow: none !important;
+        }
+        /* Cards and sections - compact */
+        .bg-white, .bg-gray-800 {
+          border: 0.5px solid #000 !important;
+          margin-bottom: 4px !important;
+          padding: 4px !important;
+          page-break-inside: avoid;
+        }
+        /* Grid layouts for print - tighter */
+        .grid {
+          display: grid !important;
+          gap: 4px !important;
+        }
+        /* Icons - hide or make smaller */
+        svg {
+          width: 10px !important;
+          height: 10px !important;
+        }
+        /* Profile image area */
+        .w-24, .w-32, .h-24, .h-32 {
+          width: 50px !important;
+          height: 50px !important;
+        }
+        img {
+          max-width: 100% !important;
+          height: auto !important;
+        }
+        /* Flex containers */
+        .flex {
+          display: flex !important;
+        }
+        .flex-col {
+          flex-direction: column !important;
+        }
+        /* Remove decorative elements */
+        .absolute {
+          display: none !important;
+        }
+        /* Compact fee cards */
+        .group {
+          padding: 4px !important;
+        }
+        /* Ensure everything fits */
+        .max-w-7xl {
+          max-width: 100% !important;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+    return () => {
+      if (document.head.contains(style)) {
+        document.head.removeChild(style);
+      }
+    };
+  }, []);
 
   // Helper function to get latest invoice
   const getLatestInvoice = () => {
@@ -136,7 +315,7 @@ const StudentDetails = () => {
       }
     }
   }
-  
+
   const totalFee = studentDetail?.feeInfo?.totalFee || latestInvoice?.totalAmount || 0;
   const paidFee = studentDetail?.feeInfo?.paidFee || latestInvoice?.paidAmount || 0;
   const pendingFee = studentDetail?.feeInfo?.pendingFee || latestInvoice?.pendingAmount || (totalFee - paidFee);
@@ -174,8 +353,29 @@ const StudentDetails = () => {
         {/* Student Profile Card */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 sm:p-8 mb-6 border border-gray-100 dark:border-gray-700">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
-            <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg">
-              <User className="w-12 h-12 sm:w-16 sm:h-16 text-white" />
+            <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg overflow-hidden relative">
+              {studentDetail.personalInfo?.photo ? (
+                <img 
+                  src={
+                    studentDetail.personalInfo.photo.startsWith('http') || studentDetail.personalInfo.photo.startsWith('data:')
+                      ? studentDetail.personalInfo.photo 
+                      : studentDetail.personalInfo.photo.startsWith('/uploads')
+                      ? studentDetail.personalInfo.photo
+                      : `/uploads/${studentDetail.personalInfo.photo}`
+                  } 
+                  alt={studentDetail.personalInfo?.fullName || 'Student Photo'}
+                  className="w-full h-full object-cover rounded-full"
+                  onError={(e) => {
+                    // Hide image and show icon if image fails to load
+                    e.target.style.display = 'none';
+                    const iconElement = e.target.parentElement.querySelector('svg');
+                    if (iconElement) {
+                      iconElement.style.display = 'flex';
+                    }
+                  }}
+                />
+              ) : null}
+              <User className={`w-12 h-12 sm:w-16 sm:h-16 text-white ${studentDetail.personalInfo?.photo ? 'absolute' : ''}`} style={{ display: studentDetail.personalInfo?.photo ? 'none' : 'flex' }} />
             </div>
             <div className="flex-1">
               <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2">
@@ -281,19 +481,6 @@ const StudentDetails = () => {
                 </div>
                 <p className="text-3xl font-bold text-orange-600 dark:text-orange-400">
                   {formatCurrency(pendingFee)}
-                </p>
-              </div>
-            </div>
-
-            <div className="group relative overflow-hidden bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/20 rounded-xl p-6 border-2 border-red-200 dark:border-red-800 hover:shadow-lg transition-all duration-300 hover:scale-105">
-              <div className="absolute top-0 right-0 w-20 h-20 bg-red-300/20 rounded-full -mr-10 -mt-10"></div>
-              <div className="relative">
-                <div className="flex items-center gap-2 mb-2">
-                  <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
-                  <p className="text-sm font-medium text-red-700 dark:text-red-300">Remaining Fee</p>
-                </div>
-                <p className="text-3xl font-bold text-red-600 dark:text-red-400">
-                  {formatCurrency(remainingFee)}
                 </p>
               </div>
             </div>
@@ -571,20 +758,19 @@ const StudentDetails = () => {
         {/* Action Buttons - Enhanced */}
         <div className="flex flex-col sm:flex-row justify-end gap-3">
           <button
-            onClick={() => {
-              navigate(`${getBackPath()}/${studentDetail._id}/fee-history`);
-            }}
-            className="px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl hover:from-purple-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl font-medium flex items-center justify-center gap-2"
+            onClick={() => window.print()}
+            className="px-4 sm:px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl hover:from-purple-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl font-medium flex items-center justify-center gap-2 text-sm sm:text-base w-full sm:w-auto print:hidden"
           >
-            <DollarSign className="w-5 h-5" />
-            View Fee History
+            <Printer className="w-4 h-4 sm:w-5 sm:h-5" />
+            <span className="hidden sm:inline">Print Student Details</span>
+            <span className="sm:hidden">Print</span>
           </button>
           {!isAccountant && (
             <button
               onClick={() => {
                 navigate(getBackPath());
               }}
-              className="px-6 py-3 border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all font-medium"
+              className="px-6 py-3 border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all font-medium print:hidden"
             >
               Back to Students
             </button>

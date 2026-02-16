@@ -48,6 +48,42 @@ router.get('/', authenticate, async (req, res) => {
   }
 });
 
+// @route   GET /api/students/next-serial
+// @desc    Get next serial number for student admission
+// @access  Private
+// IMPORTANT: This route must be defined BEFORE /:id to avoid route conflicts
+router.get('/next-serial', authenticate, async (req, res) => {
+  try {
+    // Get the next serial number using the Counter model
+    const counter = await Counter.findOne({ prefix: 'STU' });
+    
+    let nextNumber = 1;
+    if (counter) {
+      nextNumber = counter.count + 1;
+    } else {
+      // If no counter exists, create one starting at 1
+      await Counter.create({ prefix: 'STU', count: 0 });
+    }
+    
+    // Format: STU-0001
+    const nextSerial = `STU-${String(nextNumber).padStart(4, '0')}`;
+    
+    res.json({
+      nextSerial: nextSerial,
+      nextNumber: nextNumber,
+      prefix: 'STU'
+    });
+  } catch (error) {
+    console.error('Error fetching next serial:', error);
+    // Return a fallback value
+    res.json({
+      nextSerial: 'STU-0001',
+      nextNumber: 1,
+      prefix: 'STU'
+    });
+  }
+});
+
 // @route   GET /api/students/:id/history
 // @desc    Get student complete history including payment installments
 // @access  Private

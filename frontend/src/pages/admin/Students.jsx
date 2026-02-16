@@ -48,7 +48,8 @@ const Students = () => {
     personalInfo: {
       fullName: '',
       dateOfBirth: '',
-      gender: 'male'
+      gender: 'male',
+      photo: ''
     },
     contactInfo: {
       phone: '',
@@ -294,7 +295,8 @@ const Students = () => {
       personalInfo: {
         fullName: '',
         dateOfBirth: '',
-        gender: 'male'
+        gender: 'male',
+        photo: ''
       },
       contactInfo: {
         phone: '',
@@ -649,6 +651,59 @@ const Students = () => {
                         <option value="female">Female</option>
                         <option value="other">Other</option>
                       </select>
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Student Photo
+                      </label>
+                      <div className="flex items-center gap-4">
+                        <div className="flex-1">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => {
+                              const file = e.target.files[0];
+                              if (file) {
+                                // Check file size (max 5MB)
+                                if (file.size > 5 * 1024 * 1024) {
+                                  toast.error('Image size should be less than 5MB');
+                                  return;
+                                }
+                                // Check file type
+                                if (!file.type.startsWith('image/')) {
+                                  toast.error('Please select a valid image file');
+                                  return;
+                                }
+                                // Convert to base64
+                                const reader = new FileReader();
+                                reader.onloadend = () => {
+                                  setFormData({
+                                    ...formData,
+                                    personalInfo: { ...formData.personalInfo, photo: reader.result }
+                                  });
+                                };
+                                reader.onerror = () => {
+                                  toast.error('Error reading image file');
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                            className="input-field"
+                          />
+                        </div>
+                        {formData.personalInfo.photo && (
+                          <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-gray-300 dark:border-gray-600 flex-shrink-0">
+                            <img 
+                              src={formData.personalInfo.photo} 
+                              alt="Preview" 
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Upload a photo (JPG, PNG, max 5MB)
+                      </p>
                     </div>
                   </div>
                 </div>

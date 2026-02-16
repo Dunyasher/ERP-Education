@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { useMutation, useQueryClient } from 'react-query';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
-import { X, Save, Calendar, DollarSign, CreditCard, User } from 'lucide-react';
+import { X, Save, Calendar, DollarSign, CreditCard, User, Building2 } from 'lucide-react';
 
 const MonthlyPaymentRecording = ({ student, onClose, showOverlay = true }) => {
   const queryClient = useQueryClient();
@@ -13,6 +13,7 @@ const MonthlyPaymentRecording = ({ student, onClose, showOverlay = true }) => {
     amount: student?.feeInfo?.monthlyFee || '',
     paymentMethod: 'cash',
     paymentDate: new Date().toISOString().split('T')[0],
+    accountName: '',
     notes: '',
     receiptNo: ''
   });
@@ -69,6 +70,11 @@ const MonthlyPaymentRecording = ({ student, onClose, showOverlay = true }) => {
     
     if (!formData.amount || parseFloat(formData.amount) <= 0) {
       toast.error('Please enter a valid amount');
+      return;
+    }
+
+    if (!formData.accountName || !formData.accountName.trim()) {
+      toast.error('Please enter the account name');
       return;
     }
 
@@ -229,6 +235,26 @@ const MonthlyPaymentRecording = ({ student, onClose, showOverlay = true }) => {
                   required
                   className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-2 xs:px-3 py-1.5 xs:py-2.5 text-sm xs:text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500"
                 />
+              </div>
+
+              {/* Account Name */}
+              <div>
+                <label className="block text-xs xs:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 xs:mb-2 flex items-center gap-1 xs:gap-2">
+                  <Building2 className="w-3 h-3 xs:w-4 xs:h-4" />
+                  <span>Account Name *</span>
+                </label>
+                <input
+                  type="text"
+                  name="accountName"
+                  value={formData.accountName}
+                  onChange={handleInputChange}
+                  required
+                  className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-2 xs:px-3 py-1.5 xs:py-2.5 text-sm xs:text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                  placeholder="Enter account name (e.g., Main Account, Bank Account)"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Specify which account this payment was made to
+                </p>
               </div>
 
               {/* Receipt Number */}

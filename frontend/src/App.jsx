@@ -53,7 +53,6 @@ function AppRoutes() {
         <Route path="/accountant/students/:id/details" element={<ProtectedRoute allowedRoles={['accountant']}><StudentDetails /></ProtectedRoute>} />
         <Route path="/accountant/students/:id/fee-history" element={<ProtectedRoute allowedRoles={['accountant']}><StudentFeeHistory /></ProtectedRoute>} />
         <Route path="/accountant/monthly-payments" element={<ProtectedRoute allowedRoles={['accountant']}><MonthlyPayments /></ProtectedRoute>} />
-        <Route path="/accountant/fees" element={<ProtectedRoute allowedRoles={['accountant']}><FeeManagement /></ProtectedRoute>} />
         <Route path="/accountant/reports" element={<ProtectedRoute allowedRoles={['accountant']}><Reports /></ProtectedRoute>} />
       </Route>
       

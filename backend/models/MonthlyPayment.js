@@ -41,6 +41,11 @@ const monthlyPaymentSchema = new mongoose.Schema({
     default: Date.now,
     required: true
   },
+  accountName: {
+    type: String,
+    required: false,
+    trim: true
+  },
   collectedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

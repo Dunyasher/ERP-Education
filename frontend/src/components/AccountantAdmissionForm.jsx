@@ -14,9 +14,13 @@ const AccountantAdmissionForm = ({ onClose, onSuccess, editingStudent = null, sh
   const [formData, setFormData] = useState({
     serialNo: '',
     name: '',
-    fatherName: '',
+    dateOfBirth: '',
+    gender: 'male',
+    email: '',
     contact: '',
     address: '',
+    fatherName: '',
+    fatherPhone: '',
     instituteType: 'academy',
     selectedCourse: '',
     admissionFee: '',
@@ -71,13 +75,20 @@ const AccountantAdmissionForm = ({ onClose, onSuccess, editingStudent = null, sh
   // Load student data if editing
   useEffect(() => {
     if (editingStudent) {
+      const dob = editingStudent.personalInfo?.dateOfBirth 
+        ? new Date(editingStudent.personalInfo.dateOfBirth).toISOString().split('T')[0]
+        : '';
       setFormData({
         serialNo: editingStudent.srNo?.replace('STU-', '') || '',
         name: editingStudent.personalInfo?.fullName || '',
-        fatherName: editingStudent.parentInfo?.fatherName || '',
+        dateOfBirth: dob,
+        gender: editingStudent.personalInfo?.gender || 'male',
+        email: editingStudent.userId?.email || '',
         contact: editingStudent.contactInfo?.phone || '',
         address: editingStudent.contactInfo?.address ? 
           `${editingStudent.contactInfo.address.street || ''}, ${editingStudent.contactInfo.address.city || ''}, ${editingStudent.contactInfo.address.state || ''}`.trim() : '',
+        fatherName: editingStudent.parentInfo?.fatherName || '',
+        fatherPhone: editingStudent.parentInfo?.fatherPhone || '',
         instituteType: editingStudent.academicInfo?.instituteType || 'academy',
         selectedCourse: editingStudent.academicInfo?.courseId?.name || editingStudent.academicInfo?.courseId || '',
         admissionFee: editingStudent.feeInfo?.admissionFee || '',
@@ -201,15 +212,16 @@ const AccountantAdmissionForm = ({ onClose, onSuccess, editingStudent = null, sh
 
     // Prepare student data
     const studentData = {
-      email: editingStudent?.userId?.email || `${formData.name.toLowerCase().replace(/\s+/g, '.')}@bitel.edu`,
+      email: formData.email || editingStudent?.userId?.email || `${formData.name.toLowerCase().replace(/\s+/g, '.')}@bitel.edu`,
       password: editingStudent ? undefined : 'password123',
       personalInfo: {
         fullName: formData.name,
-        dateOfBirth: new Date().toISOString().split('T')[0],
-        gender: 'male'
+        dateOfBirth: formData.dateOfBirth || new Date().toISOString().split('T')[0],
+        gender: formData.gender || 'male'
       },
       contactInfo: {
         phone: formData.contact,
+        email: formData.email || editingStudent?.userId?.email,
         address: formData.address ? {
           street: formData.address.split(',')[0]?.trim() || '',
           city: formData.address.split(',')[1]?.trim() || '',
@@ -218,7 +230,8 @@ const AccountantAdmissionForm = ({ onClose, onSuccess, editingStudent = null, sh
         } : {}
       },
       parentInfo: {
-        fatherName: formData.fatherName
+        fatherName: formData.fatherName,
+        fatherPhone: formData.fatherPhone || ''
       },
       academicInfo: {
         instituteType: formData.instituteType,
@@ -405,6 +418,54 @@ const AccountantAdmissionForm = ({ onClose, onSuccess, editingStudent = null, sh
                       />
                     </div>
 
+                    {/* Date of Birth */}
+                    <div>
+                      <label className="block text-xs xs:text-sm font-medium text-gray-700 mb-1 xs:mb-2 form-label">
+                        Date of Birth *
+                      </label>
+                      <input
+                        type="date"
+                        name="dateOfBirth"
+                        value={formData.dateOfBirth}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full border-2 border-gray-300 rounded-lg px-2 xs:px-3 py-1.5 xs:py-2.5 text-gray-900 text-sm xs:text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all form-input"
+                      />
+                    </div>
+
+                    {/* Gender */}
+                    <div>
+                      <label className="block text-xs xs:text-sm font-medium text-gray-700 mb-1 xs:mb-2 form-label">
+                        Gender *
+                      </label>
+                      <select
+                        name="gender"
+                        value={formData.gender}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full border-2 border-gray-300 rounded-lg px-2 xs:px-3 py-1.5 xs:py-2.5 text-gray-900 text-sm xs:text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all form-input"
+                      >
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+
+                    {/* Email */}
+                    <div>
+                      <label className="block text-xs xs:text-sm font-medium text-gray-700 mb-1 xs:mb-2 form-label">
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        name="email"
+                        value={formData.email}
+                        onChange={handleInputChange}
+                        className="w-full border-2 border-gray-300 rounded-lg px-2 xs:px-3 py-1.5 xs:py-2.5 text-gray-900 text-sm xs:text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all form-input"
+                        placeholder="student@example.com"
+                      />
+                    </div>
+
                     {/* Father Name */}
                     <div>
                       <label className="block text-xs xs:text-sm font-medium text-gray-700 mb-1 xs:mb-2 form-label">
@@ -420,6 +481,22 @@ const AccountantAdmissionForm = ({ onClose, onSuccess, editingStudent = null, sh
                         placeholder="Enter father's name"
                       />
                     </div>
+
+                    {/* Father Phone */}
+                    <div>
+                      <label className="block text-xs xs:text-sm font-medium text-gray-700 mb-1 xs:mb-2 form-label">
+                        Father Phone
+                      </label>
+                      <input
+                        type="tel"
+                        name="fatherPhone"
+                        value={formData.fatherPhone}
+                        onChange={handleInputChange}
+                        className="w-full border-2 border-gray-300 rounded-lg px-2 xs:px-3 py-1.5 xs:py-2.5 text-gray-900 text-sm xs:text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all form-input"
+                        placeholder="0333-1234567"
+                      />
+                    </div>
+
 
                     {/* Phone Number */}
                     <div>
@@ -582,20 +659,6 @@ const AccountantAdmissionForm = ({ onClose, onSuccess, editingStudent = null, sh
                         max={formData.totalFee || undefined}
                         className="w-full border-2 border-gray-300 rounded-lg px-2 xs:px-3 py-1.5 xs:py-2.5 text-gray-900 text-sm xs:text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all form-input"
                         placeholder="0.00"
-                      />
-                    </div>
-
-                    {/* Unpaid Fee - Auto-calculated */}
-                    <div>
-                      <label className="block text-xs xs:text-sm font-medium text-gray-700 mb-1 xs:mb-2 form-label">
-                        Unpaid Fee
-                      </label>
-                      <input
-                        type="text"
-                        name="unpaidFee"
-                        value={formData.remainingBalance || '0.00'}
-                        readOnly
-                        className="w-full border-2 border-gray-300 rounded-lg px-2 xs:px-3 py-1.5 xs:py-2.5 bg-gray-50 text-gray-700 font-semibold text-sm xs:text-base form-input"
                       />
                     </div>
 

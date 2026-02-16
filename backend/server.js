@@ -18,10 +18,18 @@ const app = express();
 
 // Middleware - CORS Configuration
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000', 'http://127.0.0.1:5173'],
+  origin: [
+    'http://localhost:3000', 
+    'http://localhost:5173', 
+    'http://127.0.0.1:3000', 
+    'http://127.0.0.1:5173',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000'
+  ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range']
 }));
 // Increase JSON payload limit and add timeout
 app.use(express.json({ limit: '10mb', extended: true }));
@@ -108,6 +116,9 @@ app.use('/api/audit', require('./routes/audit'));
 app.use('/api/staff-requests', require('./routes/staffRequests'));
 app.use('/api/staff-categories', require('./routes/staffCategories'));
 app.use('/api/accountant', require('./routes/accountant'));
+console.log('✅ Accountant routes registered');
+console.log('   - POST /api/accountant/monthly-payments');
+console.log('   - GET /api/accountant/monthly-payments');
 
 // Health Check
 app.get('/api/health', (req, res) => {
