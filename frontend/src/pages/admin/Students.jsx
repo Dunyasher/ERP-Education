@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
-import { Plus, Edit, Trash2, Search, Users, Eye, Printer, X, Lock, EyeOff, AlertTriangle, DollarSign } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Users, Eye, Printer, X, Lock, EyeOff, AlertTriangle, DollarSign, FileText } from 'lucide-react';
 import StudentAdmissionPrint from '../../components/StudentAdmissionPrint';
 import AccountantAdmissionForm from '../../components/AccountantAdmissionForm';
 import ErrorCorrection from '../../components/ErrorCorrection';
@@ -77,8 +77,11 @@ const Students = () => {
       status: 'active'
     },
     feeInfo: {
+      admissionFee: 0,
       totalFee: 0,
-      paidFee: 0
+      paidFee: 0,
+      pendingFee: 0,
+      remainingFee: 0
     }
   });
 
@@ -131,6 +134,19 @@ const Students = () => {
     if (!date) return 'N/A';
     const d = new Date(date);
     return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  };
+
+  // Calculate age from date of birth
+  const calculateAge = (dateOfBirth) => {
+    if (!dateOfBirth) return '';
+    const today = new Date();
+    const birthDate = new Date(dateOfBirth);
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
   };
 
   // Fetch categories for dropdown
@@ -324,8 +340,11 @@ const Students = () => {
         status: 'active'
       },
       feeInfo: {
+        admissionFee: 0,
         totalFee: 0,
-        paidFee: 0
+        paidFee: 0,
+        pendingFee: 0,
+        remainingFee: 0
       }
     });
   };
@@ -349,7 +368,13 @@ const Students = () => {
         ...student.academicInfo,
         courseId: studentCourseId || ''
       },
-      feeInfo: student.feeInfo || {}
+      feeInfo: {
+        admissionFee: student.feeInfo?.admissionFee || 0,
+        totalFee: student.feeInfo?.totalFee || 0,
+        paidFee: student.feeInfo?.paidFee || 0,
+        pendingFee: (student.feeInfo?.totalFee || 0) - (student.feeInfo?.paidFee || 0),
+        remainingFee: (student.feeInfo?.totalFee || 0) + (student.feeInfo?.admissionFee || 0) - (student.feeInfo?.paidFee || 0)
+      }
     });
     setShowForm(true);
   };
@@ -584,19 +609,113 @@ const Students = () => {
                 <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                   {editingStudent ? 'Edit Student' : 'Add New Student'}
                 </h2>
-                <button
-                  onClick={() => {
-                    setShowForm(false);
-                    setEditingStudent(null);
-                    resetForm();
-                  }}
-                  className="p-2 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+                <div className="flex items-center gap-3">
+                  {!editingStudent && (
+                    <button
+                      onClick={() => {
+                        try {
+                          // Fill sample data
+                          const availableCourses = courses || [];
+                          const firstCourse = availableCourses.length > 0 ? availableCourses[0] : null;
+                          const courseId = firstCourse?._id || '';
+                          const courseCategoryId = firstCourse?.categoryId?._id || firstCourse?.categoryId || '';
+                          
+                          const sampleData = {
+                            email: `student${Date.now()}@example.com`,
+                            password: 'password123',
+                            personalInfo: {
+                              fullName: 'John Doe',
+                              dateOfBirth: '2010-01-15',
+                              gender: 'male',
+                              photo: ''
+                            },
+                            contactInfo: {
+                              phone: '+1234567890',
+                              email: `student${Date.now()}@example.com`,
+                              address: {
+                                street: '123 Main Street',
+                                city: 'New York',
+                                state: 'NY',
+                                zipCode: '10001',
+                                country: 'USA'
+                              }
+                            },
+                            parentInfo: {
+                              fatherName: 'Robert Doe',
+                              fatherPhone: '+1234567891',
+                              motherName: 'Jane Doe',
+                              motherPhone: '+1234567892',
+                              guardianName: '',
+                              guardianPhone: ''
+                            },
+                            academicInfo: {
+                              instituteType: 'college',
+                              courseId: courseId,
+                              session: new Date().getFullYear().toString(),
+                              status: 'active'
+                            },
+                            feeInfo: {
+                              admissionFee: 500,
+                              totalFee: 10000,
+                              paidFee: 2000,
+                              pendingFee: 8000,
+                              remainingFee: 8500
+                            }
+                          };
+                          
+                          setFormData(sampleData);
+                          if (courseCategoryId) {
+                            setSelectedCategoryId(courseCategoryId);
+                          }
+                          toast.success('Sample data filled! You can modify the values as needed.');
+                        } catch (error) {
+                          console.error('Error filling sample data:', error);
+                          toast.error('Error filling sample data. Please try again.');
+                        }
+                      }}
+                      type="button"
+                      className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors duration-200"
+                      title="Fill form with sample data"
+                    >
+                      <FileText className="w-4 h-4" />
+                      Fill Sample
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      setShowForm(false);
+                      setEditingStudent(null);
+                      resetForm();
+                    }}
+                    className="p-2 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Student Serial Number - Auto-generated */}
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-blue-700 dark:text-blue-300 mb-1">
+                        Student Serial Number
+                      </label>
+                      <input
+                        type="text"
+                        value={editingStudent?.srNo || 'Auto-generated on save'}
+                        className="input-field bg-white dark:bg-gray-700 border-blue-300 dark:border-blue-600"
+                        readOnly
+                        disabled
+                      />
+                      <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                        {editingStudent ? 'This serial number is assigned to this student' : 'Will be automatically generated when you save'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Personal Information */}
                 <div className="space-y-4">
                   <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 pb-2 border-b border-gray-200 dark:border-gray-700">
@@ -606,7 +725,7 @@ const Students = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Full Name *
+                        Student Name *
                       </label>
                       <input
                         type="text"
@@ -617,6 +736,7 @@ const Students = () => {
                           personalInfo: { ...formData.personalInfo, fullName: e.target.value }
                         })}
                         className="input-field"
+                        placeholder="Enter student's full name"
                       />
                     </div>
                     <div>
@@ -632,6 +752,18 @@ const Students = () => {
                           personalInfo: { ...formData.personalInfo, dateOfBirth: e.target.value }
                         })}
                         className="input-field"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Age
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.personalInfo.dateOfBirth ? calculateAge(formData.personalInfo.dateOfBirth) + ' years' : ''}
+                        className="input-field bg-gray-50 dark:bg-gray-700"
+                        readOnly
+                        placeholder="Auto-calculated from date of birth"
                       />
                     </div>
                     <div>
@@ -755,17 +887,80 @@ const Students = () => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Phone
+                        Student Contact *
                       </label>
                       <input
                         type="tel"
+                        required
                         value={formData.contactInfo.phone}
                         onChange={(e) => setFormData({
                           ...formData,
                           contactInfo: { ...formData.contactInfo, phone: e.target.value }
                         })}
                         className="input-field"
+                        placeholder="Enter student's phone number"
                       />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Student Location/Address *
+                      </label>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <input
+                          type="text"
+                          required
+                          value={formData.contactInfo.address.street}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            contactInfo: { 
+                              ...formData.contactInfo, 
+                              address: { ...formData.contactInfo.address, street: e.target.value }
+                            }
+                          })}
+                          className="input-field"
+                          placeholder="Street Address"
+                        />
+                        <input
+                          type="text"
+                          required
+                          value={formData.contactInfo.address.city}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            contactInfo: { 
+                              ...formData.contactInfo, 
+                              address: { ...formData.contactInfo.address, city: e.target.value }
+                            }
+                          })}
+                          className="input-field"
+                          placeholder="City"
+                        />
+                        <input
+                          type="text"
+                          value={formData.contactInfo.address.state}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            contactInfo: { 
+                              ...formData.contactInfo, 
+                              address: { ...formData.contactInfo.address, state: e.target.value }
+                            }
+                          })}
+                          className="input-field"
+                          placeholder="State/Province"
+                        />
+                        <input
+                          type="text"
+                          value={formData.contactInfo.address.zipCode}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            contactInfo: { 
+                              ...formData.contactInfo, 
+                              address: { ...formData.contactInfo.address, zipCode: e.target.value }
+                            }
+                          })}
+                          className="input-field"
+                          placeholder="Zip/Postal Code"
+                        />
+                      </div>
                     </div>
                     {!editingStudent && (
                       <div>
@@ -793,10 +988,11 @@ const Students = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Father's Name
+                        Father's Name *
                       </label>
                       <input
                         type="text"
+                        required
                         value={formData.parentInfo.fatherName}
                         onChange={(e) => setFormData({
                           ...formData,
@@ -808,17 +1004,18 @@ const Students = () => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Father's Phone
+                        Father's Contact *
                       </label>
                       <input
                         type="tel"
+                        required
                         value={formData.parentInfo.fatherPhone}
                         onChange={(e) => setFormData({
                           ...formData,
                           parentInfo: { ...formData.parentInfo, fatherPhone: e.target.value }
                         })}
                         className="input-field"
-                        placeholder="Enter father's phone"
+                        placeholder="Enter father's phone number"
                       />
                     </div>
                     <div>
@@ -1018,16 +1215,60 @@ const Students = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Admission Fee
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={formData.feeInfo.admissionFee}
+                        onChange={(e) => {
+                          const admissionFee = parseFloat(e.target.value) || 0;
+                          const totalFee = formData.feeInfo.totalFee;
+                          const paidFee = formData.feeInfo.paidFee;
+                          const pendingFee = totalFee - paidFee;
+                          const remainingFee = totalFee + admissionFee - paidFee;
+                          setFormData({
+                            ...formData,
+                            feeInfo: { 
+                              ...formData.feeInfo, 
+                              admissionFee,
+                              pendingFee,
+                              remainingFee
+                            }
+                          });
+                        }}
+                        className="input-field"
+                        placeholder="0.00"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                         Total Fee
                       </label>
                       <input
                         type="number"
+                        min="0"
+                        step="0.01"
                         value={formData.feeInfo.totalFee}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          feeInfo: { ...formData.feeInfo, totalFee: parseFloat(e.target.value) || 0 }
-                        })}
+                        onChange={(e) => {
+                          const totalFee = parseFloat(e.target.value) || 0;
+                          const paidFee = formData.feeInfo.paidFee;
+                          const admissionFee = formData.feeInfo.admissionFee;
+                          const pendingFee = totalFee - paidFee;
+                          const remainingFee = totalFee + admissionFee - paidFee;
+                          setFormData({
+                            ...formData,
+                            feeInfo: { 
+                              ...formData.feeInfo, 
+                              totalFee,
+                              pendingFee,
+                              remainingFee
+                            }
+                          });
+                        }}
                         className="input-field"
+                        placeholder="0.00"
                       />
                     </div>
                     <div>
@@ -1036,13 +1277,58 @@ const Students = () => {
                       </label>
                       <input
                         type="number"
+                        min="0"
+                        step="0.01"
                         value={formData.feeInfo.paidFee}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          feeInfo: { ...formData.feeInfo, paidFee: parseFloat(e.target.value) || 0 }
-                        })}
+                        onChange={(e) => {
+                          const paidFee = parseFloat(e.target.value) || 0;
+                          const totalFee = formData.feeInfo.totalFee;
+                          const admissionFee = formData.feeInfo.admissionFee;
+                          const pendingFee = totalFee - paidFee;
+                          const remainingFee = totalFee + admissionFee - paidFee;
+                          setFormData({
+                            ...formData,
+                            feeInfo: { 
+                              ...formData.feeInfo, 
+                              paidFee,
+                              pendingFee,
+                              remainingFee
+                            }
+                          });
+                        }}
                         className="input-field"
+                        placeholder="0.00"
                       />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Pending Fee
+                      </label>
+                      <input
+                        type="text"
+                        value={`${(formData.feeInfo.pendingFee || 0).toFixed(2)}`}
+                        className="input-field bg-gray-50 dark:bg-gray-700"
+                        readOnly
+                        placeholder="Auto-calculated"
+                      />
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Total Fee - Paid Fee
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Remaining Fee
+                      </label>
+                      <input
+                        type="text"
+                        value={`${(formData.feeInfo.remainingFee || 0).toFixed(2)}`}
+                        className="input-field bg-gray-50 dark:bg-gray-700"
+                        readOnly
+                        placeholder="Auto-calculated"
+                      />
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Total Fee + Admission Fee - Paid Fee
+                      </p>
                     </div>
                   </div>
                 </div>

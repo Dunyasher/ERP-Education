@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useQuery } from 'react-query';
 import api from '../../utils/api';
 import { 
@@ -11,14 +12,30 @@ import {
   Wallet,
   ArrowUpCircle,
   ArrowDownCircle,
-  PieChart
+  PieChart,
+  Calendar,
+  CreditCard,
+  ShoppingBag,
+  TrendingDown,
+  BarChart3,
+  Search
 } from 'lucide-react';
 
 const AdminDashboard = () => {
+  const [searchQuery, setSearchQuery] = useState('');
+  
   const { data: stats, isLoading } = useQuery('adminStats', async () => {
     const response = await api.get('/dashboard/admin');
     return response.data;
   });
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      // Navigate to students page with search query
+      window.location.href = `/admin/students?search=${encodeURIComponent(searchQuery.trim())}`;
+    }
+  };
 
   if (isLoading) {
     return <div className="text-center py-12">Loading...</div>;
@@ -41,62 +58,98 @@ const AdminDashboard = () => {
 
   const statCards = [
     {
-      title: 'Total Students',
-      value: stats?.totalStudents || 0,
-      icon: Users,
-      color: 'bg-blue-500',
-      subtitle: `${stats?.activeStudents || 0} active`
-    },
-    {
-      title: 'Total Fee Amount',
-      value: formatCurrency(stats?.totalFeeAmount || 0),
-      icon: Wallet,
-      color: 'bg-purple-500',
-      subtitle: 'All students combined'
-    },
-    {
-      title: 'Amount Collected',
-      value: formatCurrency(stats?.amountCollected || 0),
-      icon: DollarSign,
-      color: 'bg-green-500',
-      subtitle: formatCurrency((stats?.totalFeeAmount || 0) - (stats?.amountCollected || 0)) + ' pending'
-    },
-    {
-      title: 'Monthly Income',
-      value: formatCurrency(stats?.monthlyIncome || 0),
-      icon: ArrowUpCircle,
-      color: 'bg-emerald-500',
-      subtitle: 'This month'
-    },
-    {
-      title: 'Monthly Expenses',
-      value: formatCurrency(stats?.monthlyExpenses || 0),
-      icon: ArrowDownCircle,
+      title: 'Dues - Amount',
+      value: stats?.duesCount || 0,
+      amount: formatCurrency(stats?.duesAmount || 0),
+      icon: CreditCard,
       color: 'bg-red-500',
+      subtitle: `Amount: ${formatCurrency(stats?.duesAmount || 0)}`
+    },
+    {
+      title: 'Total Income This Year',
+      value: formatCurrency(stats?.totalIncomeThisYear || 0),
+      icon: DollarSign,
+      color: 'bg-cyan-500',
+      subtitle: 'This year'
+    },
+    {
+      title: 'Income This Month',
+      value: formatCurrency(stats?.monthlyIncome || 0),
+      icon: BarChart3,
+      color: 'bg-green-500',
       subtitle: 'This month'
     },
     {
-      title: 'Net Balance',
-      value: formatCurrency(stats?.netBalance || 0),
-      icon: TrendingUp,
-      color: stats?.netBalance >= 0 ? 'bg-indigo-500' : 'bg-orange-500',
+      title: 'Income Today',
+      value: formatCurrency(stats?.todayIncome || 0),
+      icon: PieChart,
+      color: 'bg-blue-500',
+      subtitle: 'Today'
+    },
+    {
+      title: 'Profit This Month',
+      value: formatCurrency(stats?.profitThisMonth || 0),
+      icon: BarChart3,
+      color: stats?.profitThisMonth >= 0 ? 'bg-green-500' : 'bg-red-500',
       subtitle: 'Income - Expenses'
+    },
+    {
+      title: 'Total Expense This Year',
+      value: formatCurrency(stats?.totalExpenseThisYear || 0),
+      icon: TrendingUp,
+      color: 'bg-red-500',
+      subtitle: 'This year'
+    },
+    {
+      title: 'Expense This Month',
+      value: formatCurrency(stats?.monthlyExpenses || 0),
+      icon: AlertCircle,
+      color: 'bg-orange-500',
+      subtitle: 'This month'
+    },
+    {
+      title: 'Expense Today',
+      value: formatCurrency(stats?.todayExpenses || 0),
+      icon: ShoppingBag,
+      color: 'bg-cyan-500',
+      subtitle: 'Today'
     },
   ];
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-          Admin Dashboard
-        </h1>
-        <p className="text-gray-600 dark:text-gray-400">
-          Comprehensive overview of students, departments, and finances
-        </p>
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+            Admin Dashboard
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400">
+            Comprehensive overview of students, departments, and finances
+          </p>
+        </div>
+        <form onSubmit={handleSearch} className="flex items-center gap-2">
+          <div className="relative">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search students, classes..."
+              className="w-64 px-4 py-2 pl-10 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+            />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          </div>
+          <button
+            type="submit"
+            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+          >
+            <Search size={18} />
+            Search
+          </button>
+        </form>
       </div>
 
-      {/* Main Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* Main Statistics Cards - 2x4 Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {statCards.map((stat, index) => {
           const Icon = stat.icon;
           return (
@@ -109,6 +162,11 @@ const AdminDashboard = () => {
                   <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">
                     {stat.value}
                   </p>
+                  {stat.amount && (
+                    <p className="text-lg font-semibold text-gray-700 dark:text-gray-300 mt-1">
+                      {stat.amount}
+                    </p>
+                  )}
                   <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                     {stat.subtitle}
                   </p>

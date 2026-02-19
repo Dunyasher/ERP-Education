@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from 'react-query';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import ErrorBoundary from './components/ErrorBoundary';
+import { ThemeProvider } from './contexts/ThemeContext';
 import './index.css';
 import { Toaster } from 'react-hot-toast';
 
@@ -27,12 +28,19 @@ if (!rootElement) {
     ReactDOM.createRoot(rootElement).render(
       <React.StrictMode>
         <ErrorBoundary>
-          <QueryClientProvider client={queryClient}>
-            <BrowserRouter>
-              <App />
-              <Toaster position="top-right" />
-            </BrowserRouter>
-          </QueryClientProvider>
+          <ThemeProvider>
+            <QueryClientProvider client={queryClient}>
+              <BrowserRouter>
+                <App />
+                <Toaster 
+                  position="top-right" 
+                  toastOptions={{
+                    className: 'dark:bg-gray-800 dark:text-white',
+                  }}
+                />
+              </BrowserRouter>
+            </QueryClientProvider>
+          </ThemeProvider>
         </ErrorBoundary>
       </React.StrictMode>
     );

@@ -2,8 +2,12 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './pages/Login';
 import AdminDashboard from './pages/admin/Dashboard';
+import SuperAdminDashboard from './pages/superAdmin/Dashboard';
 import TeacherDashboard from './pages/teacher/Dashboard';
 import AccountantDashboard from './pages/accountant/Dashboard';
+import StudentDashboard from './pages/student/Dashboard';
+import StudentAttendance from './pages/student/Attendance';
+import StudentFees from './pages/student/Fees';
 import MonthlyPayments from './pages/accountant/MonthlyPayments';
 import FeeManagement from './pages/admin/FeeManagement';
 import ExpenseManagement from './pages/admin/ExpenseManagement';
@@ -15,6 +19,17 @@ import Teachers from './pages/admin/Teachers';
 import Courses from './pages/admin/Courses';
 import Reports from './pages/admin/Reports';
 import Classes from './pages/admin/Classes';
+import ManualAttendance from './pages/admin/ManualAttendance';
+import StaffAttendance from './pages/admin/StaffAttendance';
+import AttendanceReports from './pages/admin/AttendanceReports';
+import CardScanner from './pages/admin/CardScanner';
+import FaceScan from './pages/admin/FaceScan';
+import FingerprintScan from './pages/admin/FingerprintScan';
+import OnlineClasses from './pages/admin/OnlineClasses';
+import IDCardMenu from './pages/admin/IDCardMenu';
+import PrintIDCards from './pages/admin/PrintIDCards';
+import PrintStaffCards from './pages/admin/PrintStaffCards';
+import IDCardSettings from './pages/admin/IDCardSettings';
 import Settings from './pages/admin/Settings';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -32,9 +47,10 @@ function AppRoutes() {
 
   return (
     <Routes>
-      <Route path="/login" element={!user ? <Login /> : <Navigate to={user.role === 'student' ? '/login' : `/${user.role}/dashboard`} />} />
+      <Route path="/login" element={!user ? <Login /> : <Navigate to={`/${user.role}/dashboard`} />} />
       
       <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+        <Route path="/super_admin/dashboard" element={<ProtectedRoute allowedRoles={['super_admin']}><SuperAdminDashboard /></ProtectedRoute>} />
         <Route path="/admin/dashboard" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><AdminDashboard /></ProtectedRoute>} />
         <Route path="/admin/students" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><Students /></ProtectedRoute>} />
         <Route path="/admin/students/:id/details" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><StudentDetails /></ProtectedRoute>} />
@@ -42,6 +58,17 @@ function AppRoutes() {
         <Route path="/admin/teachers" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Teachers /></ProtectedRoute>} />
         <Route path="/admin/courses" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Courses /></ProtectedRoute>} />
         <Route path="/admin/classes" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Classes /></ProtectedRoute>} />
+        <Route path="/admin/attendance/manual" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'teacher']}><ManualAttendance /></ProtectedRoute>} />
+        <Route path="/admin/attendance/staff" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'teacher']}><StaffAttendance /></ProtectedRoute>} />
+        <Route path="/admin/attendance/reports" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'teacher']}><AttendanceReports /></ProtectedRoute>} />
+        <Route path="/admin/card-scanner" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'teacher']}><CardScanner /></ProtectedRoute>} />
+        <Route path="/admin/attendance/face-scan" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'teacher']}><FaceScan /></ProtectedRoute>} />
+        <Route path="/admin/attendance/fingerprint-scan" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'teacher']}><FingerprintScan /></ProtectedRoute>} />
+        <Route path="/admin/online-classes" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'teacher']}><OnlineClasses /></ProtectedRoute>} />
+        <Route path="/admin/id-card-menu" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><IDCardMenu /></ProtectedRoute>} />
+        <Route path="/admin/print-id-cards" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><PrintIDCards /></ProtectedRoute>} />
+        <Route path="/admin/print-staff-cards" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><PrintStaffCards /></ProtectedRoute>} />
+        <Route path="/admin/id-card-settings" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><IDCardSettings /></ProtectedRoute>} />
         <Route path="/admin/fees" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><FeeManagement /></ProtectedRoute>} />
         <Route path="/admin/expenses" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><ExpenseManagement /></ProtectedRoute>} />
         <Route path="/admin/expenses/report" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><DailyExpenseReport /></ProtectedRoute>} />
@@ -54,9 +81,12 @@ function AppRoutes() {
         <Route path="/accountant/students/:id/fee-history" element={<ProtectedRoute allowedRoles={['accountant']}><StudentFeeHistory /></ProtectedRoute>} />
         <Route path="/accountant/monthly-payments" element={<ProtectedRoute allowedRoles={['accountant']}><MonthlyPayments /></ProtectedRoute>} />
         <Route path="/accountant/reports" element={<ProtectedRoute allowedRoles={['accountant']}><Reports /></ProtectedRoute>} />
+        <Route path="/student/dashboard" element={<ProtectedRoute allowedRoles={['student']}><StudentDashboard /></ProtectedRoute>} />
+        <Route path="/student/attendance" element={<ProtectedRoute allowedRoles={['student']}><StudentAttendance /></ProtectedRoute>} />
+        <Route path="/student/fees" element={<ProtectedRoute allowedRoles={['student']}><StudentFees /></ProtectedRoute>} />
       </Route>
       
-      <Route path="/" element={<Navigate to={user ? (user.role === 'student' ? '/login' : `/${user.role}/dashboard`) : '/login'} />} />
+      <Route path="/" element={<Navigate to={user ? `/${user.role}/dashboard` : '/login'} />} />
     </Routes>
   );
 }

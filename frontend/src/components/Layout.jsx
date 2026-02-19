@@ -15,24 +15,81 @@ import {
   TrendingDown,
   FileBarChart,
   School,
-  Calendar
+  Calendar,
+  Sun,
+  Moon,
+  UserPlus,
+  UserCheck,
+  CreditCard,
+  MessageSquare,
+  Monitor,
+  Clock,
+  ChevronRight,
+  ChevronDown,
+  Bell,
+  Fingerprint,
+  Camera,
+  Scan,
+  Circle
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useTheme } from '../contexts/ThemeContext';
 
 const Layout = () => {
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [openSubmenus, setOpenSubmenus] = useState({});
+
+  // Define submenus
+  const submenus = {
+    'ID Card Printing': [
+      { name: 'Print Student Cards', path: '/admin/print-id-cards', icon: Users },
+      { name: 'Print Staff Cards', path: '/admin/print-staff-cards', icon: GraduationCap },
+      { name: 'ID Card Settings', path: '/admin/id-card-settings', icon: Settings },
+    ],
+    'Admission Management': [
+      { name: 'New Admission', path: '/admin/fees', icon: UserPlus },
+      { name: 'Admission List', path: '/admin/admissions', icon: FileText },
+      { name: 'Admission Reports', path: '/admin/admissions/reports', icon: BarChart3 },
+    ],
+    'Student Management': [
+      { name: 'All Students', path: '/admin/students', icon: Users },
+      { name: 'Add Student', path: '/admin/students/add', icon: UserPlus },
+      { name: 'Student Reports', path: '/admin/students/reports', icon: BarChart3 },
+    ],
+    'Classes': [
+      { name: 'All Classes', path: '/admin/classes', icon: School },
+      { name: 'Add Class', path: '/admin/classes/add', icon: UserPlus },
+    ],
+    'Manage Attendance': [
+      { name: 'Students Attendance', path: '/admin/attendance/manual', icon: Circle },
+      { name: 'Staff Attendance', path: '/admin/attendance/staff', icon: Circle },
+    ],
+  };
 
   const adminMenu = [
-    { name: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
-    { name: 'Students', path: '/admin/students', icon: Users },
-    { name: 'Teachers', path: '/admin/teachers', icon: GraduationCap },
-    { name: 'Courses', path: '/admin/courses', icon: BookOpen },
-    { name: 'Classes', path: '/admin/classes', icon: School },
-    { name: 'Admission', path: '/admin/fees', icon: DollarSign },
-    { name: 'Expenses', path: '/admin/expenses', icon: TrendingDown },
-    { name: 'Expense Report', path: '/admin/expenses/report', icon: FileBarChart },
+    { name: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard, hasSubmenu: false },
+    { name: 'Admission Management', path: '/admin/fees', icon: UserPlus, hasSubmenu: true },
+    { name: 'Student Management', path: '/admin/students', icon: Users, hasSubmenu: true },
+    { name: 'Staff Management', path: '/admin/teachers', icon: GraduationCap, hasSubmenu: false },
+    { name: 'ID Card Printing', path: '/admin/id-card-menu', icon: CreditCard, hasSubmenu: true },
+    { name: 'Accountants', path: '/admin/accountants', icon: Users, hasSubmenu: false },
+    { name: 'Public Messages', path: '/admin/messages', icon: MessageSquare, hasSubmenu: false, badge: 3 },
+    { name: 'Classes', path: '/admin/classes', icon: School, hasSubmenu: true },
+    { name: 'Subjects', path: '/admin/courses', icon: BookOpen, hasSubmenu: false },
+    { name: 'Manage Attendance', path: '/admin/attendance/manual', icon: BarChart3, hasSubmenu: true },
+    { name: 'Online Classes', path: '/admin/online-classes', icon: Monitor, hasSubmenu: false },
+    { name: 'Timetable Management', path: '/admin/timetable', icon: Clock, hasSubmenu: false },
+  ];
+
+  const superAdminMenu = [
+    { name: 'Dashboard', path: '/super_admin/dashboard', icon: LayoutDashboard },
+    { name: 'Colleges', path: '/admin/settings', icon: School },
+    { name: 'All Students', path: '/admin/students', icon: Users },
+    { name: 'All Teachers', path: '/admin/teachers', icon: GraduationCap },
+    { name: 'All Courses', path: '/admin/courses', icon: BookOpen },
     { name: 'Reports', path: '/admin/reports', icon: BarChart3 },
     { name: 'Settings', path: '/admin/settings', icon: Settings },
   ];
@@ -58,7 +115,9 @@ const Layout = () => {
     { name: 'Reports', path: '/accountant/reports', icon: BarChart3 },
   ];
 
-  const menu = user?.role === 'admin' || user?.role === 'super_admin' 
+  const menu = user?.role === 'super_admin'
+    ? superAdminMenu
+    : user?.role === 'admin' 
     ? adminMenu 
     : user?.role === 'teacher' 
     ? teacherMenu 
@@ -66,14 +125,34 @@ const Layout = () => {
     ? accountantMenu
     : studentMenu;
 
+  const toggleSubmenu = (menuName) => {
+    setOpenSubmenus(prev => ({
+      ...prev,
+      [menuName]: !prev[menuName]
+    }));
+  };
+
+  // Auto-open submenu if current path matches a submenu item
+  useEffect(() => {
+    const currentPath = location.pathname;
+    Object.keys(submenus).forEach(menuName => {
+      const hasActiveSubmenu = submenus[menuName].some(subItem => 
+        currentPath === subItem.path || currentPath.startsWith(subItem.path + '/')
+      );
+      if (hasActiveSubmenu && !openSubmenus[menuName]) {
+        setOpenSubmenus(prev => ({ ...prev, [menuName]: true }));
+      }
+    });
+  }, [location.pathname]);
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Mobile sidebar toggle */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white dark:bg-gray-800 shadow-md p-4 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-primary-600">Education ERP</h1>
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-blue-900 shadow-md p-4 flex items-center justify-between">
+        <h1 className="text-xl font-bold text-white">Education ERP</h1>
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+          className="p-2 hover:bg-blue-800 text-white"
         >
           {sidebarOpen ? <X size={24} /> : <Menu size={24} />}
         </button>
@@ -81,15 +160,17 @@ const Layout = () => {
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 z-40 h-screen w-64 bg-white dark:bg-gray-800 shadow-lg transform transition-transform duration-300 ease-in-out lg:translate-x-0 ${
+        className={`fixed top-0 left-0 z-40 h-screen w-72 bg-blue-900 shadow-xl transform transition-transform duration-300 ease-in-out lg:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         <div className="h-full flex flex-col">
-          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-            <h1 className="text-2xl font-bold text-primary-600">Education ERP</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              {user?.role === 'admin' || user?.role === 'super_admin' 
+          <div className="p-6 border-b border-blue-800">
+            <h1 className="text-2xl font-bold text-white">Education ERP</h1>
+            <p className="text-sm text-blue-200 mt-1">
+              {user?.role === 'super_admin'
+                ? 'Super Admin Panel'
+                : user?.role === 'admin' 
                 ? 'Admin Panel' 
                 : user?.role === 'teacher' 
                 ? 'Teacher Portal'
@@ -100,50 +181,134 @@ const Layout = () => {
           </div>
 
           <nav className="flex-1 p-4 overflow-y-auto">
-            <ul className="space-y-2">
+            <ul className="space-y-0.5">
               {menu.map((item) => {
                 const Icon = item.icon;
-                const isActive = location.pathname === item.path;
+                const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
+                const isSubmenuOpen = openSubmenus[item.name];
+                const submenuItems = submenus[item.name] || [];
+                const hasActiveSubmenu = submenuItems.some(subItem => 
+                  location.pathname === subItem.path || location.pathname.startsWith(subItem.path + '/')
+                );
+
                 return (
                   <li key={item.path}>
-                    <Link
-                      to={item.path}
-                      onClick={() => setSidebarOpen(false)}
-                      className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
-                        isActive
-                          ? 'bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300'
-                          : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                      }`}
-                    >
-                      <Icon size={20} />
-                      <span>{item.name}</span>
-                    </Link>
+                    {item.hasSubmenu ? (
+                      <>
+                        <button
+                          onClick={() => toggleSubmenu(item.name)}
+                          className={`w-full flex items-center justify-between px-4 py-3 transition-colors ${
+                            isActive || hasActiveSubmenu
+                              ? 'bg-blue-800 text-white'
+                              : 'text-white hover:bg-blue-800/50'
+                          }`}
+                        >
+                          <div className="flex items-center space-x-3">
+                            <Icon size={20} className="flex-shrink-0 text-white" />
+                            <span className="font-medium text-sm text-white">{item.name}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {item.badge && (
+                              <span className="bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0">
+                                {item.badge}
+                              </span>
+                            )}
+                            <ChevronRight 
+                              size={16} 
+                              className="flex-shrink-0 text-white" 
+                            />
+                          </div>
+                        </button>
+                        {isSubmenuOpen && submenuItems.length > 0 && (
+                          <ul className="ml-4 mt-1 space-y-0.5">
+                            {submenuItems.map((subItem) => {
+                              const SubIcon = subItem.icon;
+                              const isSubActive = location.pathname === subItem.path || location.pathname.startsWith(subItem.path + '/');
+                              return (
+                                <li key={subItem.path}>
+                                  <Link
+                                    to={subItem.path}
+                                    onClick={() => setSidebarOpen(false)}
+                                    className={`flex items-center space-x-3 px-4 py-2 transition-colors ${
+                                      isSubActive
+                                        ? 'text-white'
+                                        : 'text-white hover:bg-blue-800/50'
+                                    }`}
+                                  >
+                                    <SubIcon size={8} className="flex-shrink-0 fill-current" />
+                                    <span className={`text-sm font-medium ${isSubActive ? 'border-b-2 border-red-500 pb-0.5' : ''}`}>
+                                      {subItem.name}
+                                    </span>
+                                  </Link>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        )}
+                      </>
+                    ) : (
+                      <Link
+                        to={item.path}
+                        onClick={() => setSidebarOpen(false)}
+                        className={`flex items-center justify-between px-4 py-3 transition-colors ${
+                          isActive
+                            ? 'bg-blue-800 text-white'
+                            : 'text-white hover:bg-blue-800/50'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <Icon size={20} className="flex-shrink-0 text-white" />
+                          <span className="font-medium text-sm text-white">{item.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {item.badge && (
+                            <span className="bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0">
+                              {item.badge}
+                            </span>
+                          )}
+                        </div>
+                      </Link>
+                    )}
                   </li>
                 );
               })}
             </ul>
-          </nav>
 
-          <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-            <div className="mb-4 px-4 py-2">
-              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                {user?.profile?.firstName} {user?.profile?.lastName}
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">{user?.email}</p>
+            {/* User Account Section - Inside Scroll Area */}
+            <div className="mt-6 pt-6 border-t border-blue-800">
+              {/* User Account Information */}
+              <div className="mb-4 px-4 py-2">
+                <p className="text-base font-bold text-white mb-1">
+                  {user?.role === 'admin' ? 'Admin' : user?.role === 'super_admin' ? 'Super Admin' : user?.role === 'teacher' ? 'Teacher' : user?.role === 'accountant' ? 'Accountant' : 'Student'} {user?.profile?.firstName} {user?.profile?.lastName}
+                </p>
+                <p className="text-sm text-blue-200">{user?.email}</p>
+              </div>
+              
+              {/* Dark Mode Button */}
+              <button
+                onClick={toggleTheme}
+                className="w-full mb-2 flex items-center space-x-3 px-4 py-3 bg-blue-800 text-white hover:bg-blue-700 transition-colors"
+                title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              >
+                <Moon size={20} className="text-white" />
+                <span className="font-medium">Dark Mode</span>
+              </button>
+              
+              {/* Logout Button */}
+              <button
+                onClick={logout}
+                className="w-full flex items-center space-x-3 px-4 py-3 text-white hover:bg-blue-800 transition-colors"
+              >
+                <LogOut size={20} className="text-white" />
+                <span className="font-medium">Logout</span>
+              </button>
             </div>
-            <button
-              onClick={logout}
-              className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-            >
-              <LogOut size={20} />
-              <span>Logout</span>
-            </button>
-          </div>
+          </nav>
         </div>
       </aside>
 
       {/* Main content */}
-      <div className="lg:ml-64 pt-14 xs:pt-16 lg:pt-0">
+      <div className="lg:ml-72 pt-14 xs:pt-16 lg:pt-0">
         <main className="p-2 xs:p-3 sm:p-4 md:p-6">
           <Outlet />
         </main>

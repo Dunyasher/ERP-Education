@@ -26,10 +26,15 @@ import {
   CheckCircle,
   AlertCircle,
   Info,
-  AlertTriangle
+  AlertTriangle,
+  Shield,
+  KeyRound,
+  Building2
 } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
 
 const Settings = () => {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('profile');
   const [showPassword, setShowPassword] = useState(false);
@@ -43,6 +48,20 @@ const Settings = () => {
     confirmPassword: ''
   });
   const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [showPasswordResetModal, setShowPasswordResetModal] = useState(false);
+  const [passwordResetForm, setPasswordResetForm] = useState({
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [showCreateAdminModal, setShowCreateAdminModal] = useState(false);
+  const [createAdminForm, setCreateAdminForm] = useState({
+    email: '',
+    password: '',
+    firstName: '',
+    lastName: '',
+    phone: '',
+    collegeId: ''
+  });
 
   // Profile form state
   const [profileForm, setProfileForm] = useState({
@@ -81,6 +100,85 @@ const Settings = () => {
     return response.data;
   }, {
     enabled: activeTab === 'users'
+  });
+
+  // Fetch all college admins (Super Admin only)
+  const { data: allAdminsData, refetch: refetchAdmins } = useQuery('allCollegeAdmins', async () => {
+    const response = await api.get('/colleges/all-admins');
+    return response.data;
+  }, {
+    enabled: user?.role === 'super_admin' && activeTab === 'college-admins'
+  });
+
+  // Reset admin password mutation
+  const resetPasswordMutation = useMutation(
+    async ({ adminId, newPassword }) => {
+      return api.put(`/colleges/admins/${adminId}/reset-password`, { newPassword });
+    },
+    {
+      onSuccess: () => {
+        refetchAdmins();
+        toast.success('Password reset successfully');
+      },
+      onError: (error) => {
+        toast.error(error.response?.data?.message || 'Failed to reset password');
+      }
+    }
+  );
+
+  // Create new admin mutation
+  const createAdminMutation = useMutation(
+    async (formData) => {
+      const { email, password, firstName, lastName, phone, collegeId } = formData;
+      return api.post(`/colleges/${collegeId}/assign-admin`, {
+        email,
+        password,
+        profile: {
+          firstName,
+          lastName,
+          phone
+        }
+      });
+    },
+    {
+      onSuccess: () => {
+        refetchAdmins();
+        setShowCreateAdminModal(false);
+        setCreateAdminForm({
+          email: '',
+          password: '',
+          firstName: '',
+          lastName: '',
+          phone: '',
+          collegeId: ''
+        });
+        toast.success('Admin created successfully');
+      },
+      onError: (error) => {
+        toast.error(error.response?.data?.message || 'Failed to create admin');
+      }
+    }
+  );
+
+  const handleCreateAdmin = (e) => {
+    e.preventDefault();
+    if (!createAdminForm.collegeId) {
+      toast.error('Please select a college');
+      return;
+    }
+    if (createAdminForm.password.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+    createAdminMutation.mutate(createAdminForm);
+  };
+
+  // Fetch all colleges for admin creation (Super Admin only)
+  const { data: collegesData } = useQuery('allColleges', async () => {
+    const response = await api.get('/super-admin/institutes');
+    return response.data;
+  }, {
+    enabled: user?.role === 'super_admin' && showCreateAdminModal
   });
 
   // Filter users based on search query
@@ -297,6 +395,33 @@ const Settings = () => {
     }
   };
 
+  // Handle admin password reset (Super Admin only)
+  const handleAdminPasswordReset = async (e) => {
+    e.preventDefault();
+    
+    if (passwordResetForm.newPassword !== passwordResetForm.confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+
+    if (passwordResetForm.newPassword.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+
+    resetPasswordMutation.mutate({
+      adminId: selectedUser.id,
+      newPassword: passwordResetForm.newPassword
+    }, {
+      onSuccess: (data) => {
+        setShowPasswordResetModal(false);
+        setSelectedUser(null);
+        setPasswordResetForm({ newPassword: '', confirmPassword: '' });
+        toast.success(`Password reset! New password: ${data.data.admin.newPassword}`);
+      }
+    });
+  };
+
   const handleDeleteUser = (userId) => {
     if (window.confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
       deleteUserMutation.mutate(userId);
@@ -350,6 +475,7 @@ const Settings = () => {
     { id: 'profile', name: 'My Profile', icon: User },
     { id: 'password', name: 'Change Password', icon: Lock },
     { id: 'users', name: 'User Management', icon: Users },
+    ...(user?.role === 'super_admin' ? [{ id: 'college-admins', name: 'College Admins', icon: Shield }] : []),
     { id: 'notifications', name: 'Notifications', icon: Bell, badge: unreadCount.count > 0 ? unreadCount.count : null },
     { id: 'system', name: 'System Overview', icon: BarChart3 }
   ];
@@ -409,67 +535,167 @@ const Settings = () => {
                 <User className="w-6 h-6" />
                 My Profile
               </h2>
-              <form onSubmit={handleProfileSubmit} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
-                      <Mail className="w-4 h-4" />
-                      Email Address *
-                    </label>
-                    <input
-                      type="email"
-                      value={profileForm.email}
-                      onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
-                      required
-                      className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
-                      <Phone className="w-4 h-4" />
-                      Phone Number
-                    </label>
-                    <input
-                      type="tel"
-                      value={profileForm.phone}
-                      onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
-                      className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                      First Name
-                    </label>
-                    <input
-                      type="text"
-                      value={profileForm.firstName}
-                      onChange={(e) => setProfileForm({ ...profileForm, firstName: e.target.value })}
-                      className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                      Last Name
-                    </label>
-                    <input
-                      type="text"
-                      value={profileForm.lastName}
-                      onChange={(e) => setProfileForm({ ...profileForm, lastName: e.target.value })}
-                      className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
-                    />
+
+              {/* Admin Details Section (Read-Only) */}
+              {currentUser && user?.role === 'admin' && (
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-2 border-blue-200 dark:border-blue-800 rounded-lg p-6">
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                    <Shield className="w-5 h-5 text-blue-600" />
+                    Admin Account Details
+                  </h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Phone Number */}
+                    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                      <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2 flex items-center gap-2">
+                        <Phone className="w-4 h-4" />
+                        Phone Number
+                      </label>
+                      <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                        {currentUser.profile?.phone || currentUser.college?.contactInfo?.phone || 'Not set'}
+                      </p>
+                    </div>
+
+                    {/* College Name */}
+                    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                      <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2 flex items-center gap-2">
+                        <Building2 className="w-4 h-4" />
+                        {currentUser.college?.instituteType === 'school' ? 'School Name' : 
+                         currentUser.college?.instituteType === 'academy' ? 'Academy Name' : 
+                         currentUser.college?.instituteType === 'short_course' ? 'Institute Name' : 
+                         'College Name'}
+                      </label>
+                      <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                        {currentUser.college?.name || 'Not assigned'}
+                      </p>
+                      {currentUser.college?.instituteType && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 capitalize">
+                          Type: {currentUser.college.instituteType.replace('_', ' ')}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Address */}
+                    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2 flex items-center gap-2">
+                        <Mail className="w-4 h-4" />
+                        Address
+                      </label>
+                      {currentUser.college?.contactInfo?.address ? (
+                        <div className="text-gray-900 dark:text-white">
+                          {currentUser.college.contactInfo.address.street && (
+                            <p className="font-medium">{currentUser.college.contactInfo.address.street}</p>
+                          )}
+                          <p className="text-sm">
+                            {[
+                              currentUser.college.contactInfo.address.city,
+                              currentUser.college.contactInfo.address.state,
+                              currentUser.college.contactInfo.address.zipCode,
+                              currentUser.college.contactInfo.address.country
+                            ].filter(Boolean).join(', ') || 'No address details'}
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-gray-500 dark:text-gray-400">No address set</p>
+                      )}
+                    </div>
+
+                    {/* Password Field with Show/Hide */}
+                    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2 flex items-center gap-2">
+                        <Lock className="w-4 h-4" />
+                        Password
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          value={currentUser.password || 'Not set'}
+                          readOnly
+                          className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 pr-12 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white font-mono"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                        >
+                          {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                        Your account password (visible to you and super admin)
+                      </p>
+                    </div>
                   </div>
                 </div>
-                <div className="flex justify-end">
-                  <button
-                    type="submit"
-                    disabled={updateProfileMutation.isLoading}
-                    className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all disabled:opacity-50 flex items-center gap-2 font-semibold"
-                  >
-                    <Save className="w-5 h-5" />
-                    {updateProfileMutation.isLoading ? 'Saving...' : 'Save Changes'}
-                  </button>
-                </div>
-              </form>
+              )}
+
+              {/* Editable Profile Form */}
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
+                  Edit Profile Information
+                </h3>
+                <form onSubmit={handleProfileSubmit} className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+                        <Mail className="w-4 h-4" />
+                        Email Address *
+                      </label>
+                      <input
+                        type="email"
+                        value={profileForm.email}
+                        onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+                        required
+                        className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+                        <Phone className="w-4 h-4" />
+                        Phone Number
+                      </label>
+                      <input
+                        type="tel"
+                        value={profileForm.phone}
+                        onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                        className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                        First Name
+                      </label>
+                      <input
+                        type="text"
+                        value={profileForm.firstName}
+                        onChange={(e) => setProfileForm({ ...profileForm, firstName: e.target.value })}
+                        className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                        Last Name
+                      </label>
+                      <input
+                        type="text"
+                        value={profileForm.lastName}
+                        onChange={(e) => setProfileForm({ ...profileForm, lastName: e.target.value })}
+                        className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={updateProfileMutation.isLoading}
+                      className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all disabled:opacity-50 flex items-center gap-2 font-semibold"
+                    >
+                      <Save className="w-5 h-5" />
+                      {updateProfileMutation.isLoading ? 'Saving...' : 'Save Changes'}
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
           )}
 
@@ -928,6 +1154,459 @@ const Settings = () => {
                       >
                         <Lock className="w-4 h-4" />
                         {changeUserPasswordMutation.isLoading ? 'Updating...' : 'Update Password'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* College Admins Tab (Super Admin Only) */}
+          {activeTab === 'college-admins' && user?.role === 'super_admin' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center flex-wrap gap-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <Shield className="w-6 h-6" />
+                    College Admins Management
+                  </h2>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    View and manage all college admins across all institutes
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowCreateAdminModal(true)}
+                  className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all flex items-center gap-2 font-semibold"
+                >
+                  <Users className="w-5 h-5" />
+                  Create New Admin
+                </button>
+              </div>
+
+              {allAdminsData && (
+                <>
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="card bg-gradient-to-br from-blue-500 to-blue-600 text-white">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-blue-100">Total Admins</p>
+                          <p className="text-3xl font-bold mt-2">{allAdminsData.summary.totalAdmins}</p>
+                        </div>
+                        <Users className="w-8 h-8 text-blue-200" />
+                      </div>
+                    </div>
+
+                    <div className="card bg-gradient-to-br from-green-500 to-green-600 text-white">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-green-100">Active Admins</p>
+                          <p className="text-3xl font-bold mt-2">{allAdminsData.summary.activeAdmins}</p>
+                        </div>
+                        <CheckCircle className="w-8 h-8 text-green-200" />
+                      </div>
+                    </div>
+
+                    <div className="card bg-gradient-to-br from-gray-500 to-gray-600 text-white">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-gray-100">Inactive Admins</p>
+                          <p className="text-3xl font-bold mt-2">{allAdminsData.summary.inactiveAdmins}</p>
+                        </div>
+                        <XCircle className="w-8 h-8 text-gray-200" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Admins Table */}
+                  <div className="card">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                      All College Admins
+                    </h3>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b border-gray-200 dark:border-gray-700">
+                            <th className="text-left py-3 px-4 font-semibold text-gray-900 dark:text-white">Name</th>
+                            <th className="text-left py-3 px-4 font-semibold text-gray-900 dark:text-white">Email</th>
+                            <th className="text-left py-3 px-4 font-semibold text-gray-900 dark:text-white">Phone</th>
+                            <th className="text-left py-3 px-4 font-semibold text-gray-900 dark:text-white">College</th>
+                            <th className="text-left py-3 px-4 font-semibold text-gray-900 dark:text-white">Password</th>
+                            <th className="text-left py-3 px-4 font-semibold text-gray-900 dark:text-white">Status</th>
+                            <th className="text-left py-3 px-4 font-semibold text-gray-900 dark:text-white">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {allAdminsData.admins.map((admin, index) => (
+                            <tr
+                              key={admin.id}
+                              className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                            >
+                              <td className="py-3 px-4">
+                                <div className="font-medium text-gray-900 dark:text-white">
+                                  {admin.name}
+                                </div>
+                              </td>
+                              <td className="py-3 px-4">
+                                <div className="text-gray-700 dark:text-gray-300">{admin.email}</div>
+                              </td>
+                              <td className="py-3 px-4">
+                                <div className="text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                                  <Phone className="w-4 h-4" />
+                                  {admin.phone}
+                                </div>
+                              </td>
+                              <td className="py-3 px-4">
+                                <div>
+                                  <div className="font-medium text-gray-900 dark:text-white">
+                                    {admin.college.name}
+                                  </div>
+                                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                                    {admin.college.instituteType}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-3 px-4">
+                                <div className="flex items-center gap-2">
+                                  <KeyRound className="w-4 h-4 text-gray-500" />
+                                  <code className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-sm font-mono">
+                                    {admin.password}
+                                  </code>
+                                </div>
+                              </td>
+                              <td className="py-3 px-4">
+                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                  admin.isActive
+                                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                    : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                }`}>
+                                  {admin.isActive ? 'Active' : 'Inactive'}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4">
+                                <button
+                                  onClick={() => {
+                                    setSelectedUser(admin);
+                                    setPasswordResetForm({ newPassword: '', confirmPassword: '' });
+                                    setShowPasswordResetModal(true);
+                                  }}
+                                  className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-medium"
+                                >
+                                  Reset Password
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {allAdminsData.admins.length === 0 && (
+                      <div className="text-center py-8">
+                        <Shield className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                        <p className="text-gray-600 dark:text-gray-400">
+                          No college admins found. Create colleges and assign admins to them.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Create New Admin Modal */}
+          {showCreateAdminModal && (
+            <div
+              className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) {
+                  setShowCreateAdminModal(false);
+                  setCreateAdminForm({
+                    email: '',
+                    password: '',
+                    firstName: '',
+                    lastName: '',
+                    phone: '',
+                    collegeId: ''
+                  });
+                }
+              }}
+            >
+              <div
+                className="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full shadow-xl max-h-[90vh] overflow-y-auto"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="p-6">
+                  <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                      <Users className="w-6 h-6" />
+                      Create New Admin
+                    </h2>
+                    <button
+                      onClick={() => {
+                        setShowCreateAdminModal(false);
+                        setCreateAdminForm({
+                          email: '',
+                          password: '',
+                          firstName: '',
+                          lastName: '',
+                          phone: '',
+                          collegeId: ''
+                        });
+                      }}
+                      className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleCreateAdmin} className="space-y-4">
+                    {/* College Selection */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+                        <Building2 className="w-4 h-4" />
+                        College/Institute *
+                      </label>
+                      <select
+                        value={createAdminForm.collegeId}
+                        onChange={(e) => setCreateAdminForm({ ...createAdminForm, collegeId: e.target.value })}
+                        required
+                        className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+                      >
+                        <option value="">Select a college...</option>
+                        {collegesData?.institutes?.map((college) => (
+                          <option key={college.id} value={college.id}>
+                            {college.name} ({college.instituteType})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Email */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+                        <Mail className="w-4 h-4" />
+                        Email Address *
+                      </label>
+                      <input
+                        type="email"
+                        value={createAdminForm.email}
+                        onChange={(e) => setCreateAdminForm({ ...createAdminForm, email: e.target.value })}
+                        required
+                        className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+                        placeholder="admin@example.com"
+                      />
+                    </div>
+
+                    {/* Password */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+                        <Lock className="w-4 h-4" />
+                        Password *
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showNewPassword ? 'text' : 'password'}
+                          value={createAdminForm.password}
+                          onChange={(e) => setCreateAdminForm({ ...createAdminForm, password: e.target.value })}
+                          required
+                          minLength={6}
+                          className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 pr-10 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+                          placeholder="Enter password (min 6 characters)"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowNewPassword(!showNewPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                        >
+                          {showNewPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Must be at least 6 characters</p>
+                    </div>
+
+                    {/* First Name */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        First Name
+                      </label>
+                      <input
+                        type="text"
+                        value={createAdminForm.firstName}
+                        onChange={(e) => setCreateAdminForm({ ...createAdminForm, firstName: e.target.value })}
+                        className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+                        placeholder="First name"
+                      />
+                    </div>
+
+                    {/* Last Name */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Last Name
+                      </label>
+                      <input
+                        type="text"
+                        value={createAdminForm.lastName}
+                        onChange={(e) => setCreateAdminForm({ ...createAdminForm, lastName: e.target.value })}
+                        className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+                        placeholder="Last name"
+                      />
+                    </div>
+
+                    {/* Phone */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+                        <Phone className="w-4 h-4" />
+                        Phone Number
+                      </label>
+                      <input
+                        type="tel"
+                        value={createAdminForm.phone}
+                        onChange={(e) => setCreateAdminForm({ ...createAdminForm, phone: e.target.value })}
+                        className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+                        placeholder="Phone number"
+                      />
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowCreateAdminModal(false);
+                          setCreateAdminForm({
+                            email: '',
+                            password: '',
+                            firstName: '',
+                            lastName: '',
+                            phone: '',
+                            collegeId: ''
+                          });
+                        }}
+                        className="px-6 py-2 border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-all font-semibold"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={createAdminMutation.isLoading}
+                        className="px-6 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all font-semibold flex items-center gap-2 disabled:opacity-50"
+                      >
+                        <Save className="w-4 h-4" />
+                        {createAdminMutation.isLoading ? 'Creating...' : 'Create Admin'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Admin Password Reset Modal */}
+          {showPasswordResetModal && selectedUser && (
+            <div
+              className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+              onClick={() => {
+                setShowPasswordResetModal(false);
+                setSelectedUser(null);
+                setPasswordResetForm({ newPassword: '', confirmPassword: '' });
+              }}
+            >
+              <div
+                className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full shadow-xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="p-6">
+                  <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                      <KeyRound className="w-6 h-6" />
+                      Reset Admin Password
+                    </h2>
+                    <button
+                      onClick={() => {
+                        setShowPasswordResetModal(false);
+                        setSelectedUser(null);
+                        setPasswordResetForm({ newPassword: '', confirmPassword: '' });
+                      }}
+                      className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                    <p className="text-sm text-blue-800 dark:text-blue-200">
+                      <strong>Admin:</strong> {selectedUser.name}
+                    </p>
+                    <p className="text-xs text-blue-600 dark:text-blue-300 mt-1">
+                      Email: {selectedUser.email} | College: {selectedUser.college?.name || 'N/A'}
+                    </p>
+                    <p className="text-xs text-blue-600 dark:text-blue-300 mt-1">
+                      Current Password: <code className="font-mono bg-blue-100 dark:bg-blue-900 px-2 py-1 rounded">{selectedUser.password}</code>
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleAdminPasswordReset} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        New Password *
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showNewPassword ? 'text' : 'password'}
+                          value={passwordResetForm.newPassword}
+                          onChange={(e) => setPasswordResetForm({ ...passwordResetForm, newPassword: e.target.value })}
+                          required
+                          minLength={6}
+                          className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 pr-10 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+                          placeholder="Enter new password"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowNewPassword(!showNewPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                        >
+                          {showNewPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Must be at least 6 characters</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Confirm New Password *
+                      </label>
+                      <input
+                        type="password"
+                        value={passwordResetForm.confirmPassword}
+                        onChange={(e) => setPasswordResetForm({ ...passwordResetForm, confirmPassword: e.target.value })}
+                        required
+                        minLength={6}
+                        className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+                        placeholder="Confirm new password"
+                      />
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowPasswordResetModal(false);
+                          setSelectedUser(null);
+                          setPasswordResetForm({ newPassword: '', confirmPassword: '' });
+                        }}
+                        className="px-6 py-2 border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-all font-semibold"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={resetPasswordMutation.isLoading}
+                        className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all font-semibold flex items-center gap-2 disabled:opacity-50"
+                      >
+                        <Save className="w-4 h-4" />
+                        {resetPasswordMutation.isLoading ? 'Resetting...' : 'Reset Password'}
                       </button>
                     </div>
                   </form>

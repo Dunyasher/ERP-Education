@@ -46,6 +46,7 @@ const Classes = () => {
     days: [],
     room: '',
     capacity: 50,
+    feeAmount: 0,
     status: 'published'
   });
 
@@ -300,6 +301,10 @@ const Classes = () => {
         instructorId: data.instructorId || null,
         capacity: data.capacity || 50,
         status: data.status || 'published',
+        fee: {
+          amount: data.feeAmount || 0,
+          currency: 'USD'
+        },
         schedules: []
       };
 
@@ -331,20 +336,61 @@ const Classes = () => {
           days: [],
           room: '',
           capacity: 50,
+          feeAmount: 0,
           status: 'published'
         });
         toast.success('Class created successfully!');
       },
       onError: (error) => {
-        toast.error(error.response?.data?.message || 'Failed to create class');
+        const errorMessage = error.response?.data?.message || error.response?.data?.error || 'Failed to create class';
+        toast.error(errorMessage);
+        console.error('Create class error:', error);
       }
     }
   );
 
+  // Fill sample data for testing
+  const fillSampleData = () => {
+    const sampleData = {
+      name: 'Sample English Class',
+      categoryId: categories.length > 0 ? categories[0]._id : '',
+      instructorId: teachers.length > 0 ? teachers[0]._id : '',
+      startTime: '09:00',
+      endTime: '11:00',
+      days: ['Monday', 'Wednesday', 'Friday'],
+      room: 'Room 101',
+      capacity: 30,
+      feeAmount: 500,
+      status: 'published'
+    };
+    setNewClassForm(sampleData);
+    toast.success('Sample data filled! You can modify the values as needed.');
+  };
+
   const handleCreateClassSubmit = (e) => {
     e.preventDefault();
-    if (!newClassForm.name || !newClassForm.categoryId) {
-      toast.error('Please provide class name and category');
+    if (!newClassForm.name || !newClassForm.name.trim()) {
+      toast.error('Please provide class name');
+      return;
+    }
+    if (!newClassForm.categoryId) {
+      toast.error('Please select a category');
+      return;
+    }
+    if (!newClassForm.instructorId) {
+      toast.error('Please select a teacher');
+      return;
+    }
+    if (!newClassForm.startTime || !newClassForm.endTime) {
+      toast.error('Please provide start time and end time');
+      return;
+    }
+    if (newClassForm.days.length === 0) {
+      toast.error('Please select at least one day');
+      return;
+    }
+    if (!newClassForm.feeAmount || newClassForm.feeAmount < 0) {
+      toast.error('Please provide a valid fee amount');
       return;
     }
     createClassMutation.mutate(newClassForm);
@@ -907,10 +953,10 @@ const Classes = () => {
         </div>
         <button
           onClick={() => setShowCreateClassForm(true)}
-          className="btn-primary flex items-center gap-2"
+          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold transition-colors duration-200 shadow-lg hover:shadow-xl"
         >
           <Plus className="w-5 h-5" />
-          Create New Class
+          Add Class
         </button>
       </div>
 
@@ -1027,14 +1073,7 @@ const Classes = () => {
       {classes.length === 0 && (
         <div className="card text-center py-12">
           <BookOpen className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-          <p className="text-gray-600 dark:text-gray-400 mb-4">No classes found</p>
-          <button
-            onClick={() => setShowCreateClassForm(true)}
-            className="btn-primary flex items-center gap-2 mx-auto"
-          >
-            <Plus className="w-5 h-5" />
-            Create Your First Class
-          </button>
+          <p className="text-gray-600 dark:text-gray-400">No classes found</p>
         </div>
       )}
 
@@ -1046,25 +1085,37 @@ const Classes = () => {
               <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
                 Create New Class
               </h3>
-              <button
-                onClick={() => {
-                  setShowCreateClassForm(false);
-                  setNewClassForm({
-                    name: '',
-                    categoryId: '',
-                    instructorId: '',
-                    startTime: '',
-                    endTime: '',
-                    days: [],
-                    room: '',
-                    capacity: 50,
-                    status: 'published'
-                  });
-                }}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-              >
-                <X className="w-6 h-6" />
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={fillSampleData}
+                  type="button"
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors duration-200"
+                  title="Fill form with sample data"
+                >
+                  <FileText className="w-4 h-4" />
+                  Fill Sample
+                </button>
+                <button
+                  onClick={() => {
+                    setShowCreateClassForm(false);
+                    setNewClassForm({
+                      name: '',
+                      categoryId: '',
+                      instructorId: '',
+                      startTime: '',
+                      endTime: '',
+                      days: [],
+                      room: '',
+                      capacity: 50,
+                      feeAmount: 0,
+                      status: 'published'
+                    });
+                  }}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
             </div>
             <form onSubmit={handleCreateClassSubmit} className="space-y-6">
               {/* Class Name and Category */}
@@ -1115,12 +1166,21 @@ const Classes = () => {
                   className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
                 >
                   <option value="">Select a teacher</option>
-                  {teachers.map((teacher) => (
-                    <option key={teacher._id} value={teacher._id}>
-                      {teacher.personalInfo?.fullName || 'N/A'}
-                    </option>
-                  ))}
+                  {teachers.length > 0 ? (
+                    teachers.map((teacher) => (
+                      <option key={teacher._id} value={teacher._id}>
+                        {teacher.personalInfo?.fullName || 'N/A'}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="" disabled>No teachers available. Please add teachers first.</option>
+                  )}
                 </select>
+                {teachers.length === 0 && (
+                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                    No teachers found. Please add teachers before creating a class.
+                  </p>
+                )}
               </div>
 
               {/* Class Schedule */}
@@ -1157,7 +1217,7 @@ const Classes = () => {
                 </div>
                 <div className="mb-4">
                   <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                    Days of the Week
+                    Days of the Week *
                   </label>
                   <div className="flex flex-wrap gap-2">
                     {weekDays.map((day) => (
@@ -1175,6 +1235,11 @@ const Classes = () => {
                       </button>
                     ))}
                   </div>
+                  {newClassForm.days.length === 0 && (
+                    <p className="text-xs text-red-600 dark:text-red-400 mt-2">
+                      Please select at least one day
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
@@ -1190,18 +1255,36 @@ const Classes = () => {
                 </div>
               </div>
 
-              {/* Capacity */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                  Class Capacity
-                </label>
-                <input
-                  type="number"
-                  value={newClassForm.capacity}
-                  onChange={(e) => setNewClassForm({ ...newClassForm, capacity: parseInt(e.target.value) || 50 })}
-                  min="1"
-                  className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
-                />
+              {/* Capacity and Fee */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                    Class Capacity *
+                  </label>
+                  <input
+                    type="number"
+                    value={newClassForm.capacity}
+                    onChange={(e) => setNewClassForm({ ...newClassForm, capacity: parseInt(e.target.value) || 50 })}
+                    min="1"
+                    required
+                    className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                    Fee Amount (USD) *
+                  </label>
+                  <input
+                    type="number"
+                    value={newClassForm.feeAmount}
+                    onChange={(e) => setNewClassForm({ ...newClassForm, feeAmount: parseFloat(e.target.value) || 0 })}
+                    min="0"
+                    step="0.01"
+                    required
+                    placeholder="0.00"
+                    className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+                  />
+                </div>
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
@@ -1218,6 +1301,7 @@ const Classes = () => {
                       days: [],
                       room: '',
                       capacity: 50,
+                      feeAmount: 0,
                       status: 'published'
                     });
                   }}
