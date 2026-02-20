@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
 import api from '../../utils/api';
 import { 
   Users, 
@@ -24,9 +24,12 @@ import {
 const AdminDashboard = () => {
   const [searchQuery, setSearchQuery] = useState('');
   
-  const { data: stats, isLoading } = useQuery('adminStats', async () => {
-    const response = await api.get('/dashboard/admin');
-    return response.data;
+  const { data: stats, isLoading } = useQuery({
+    queryKey: ['adminStats'],
+    queryFn: async () => {
+      const response = await api.get('/dashboard/admin');
+      return response.data;
+    }
   });
 
   const handleSearch = (e) => {

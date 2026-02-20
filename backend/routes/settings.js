@@ -6,20 +6,44 @@ const Student = require('../models/Student');
 const Teacher = require('../models/Teacher');
 const Course = require('../models/Course');
 const Category = require('../models/Category');
+const College = require('../models/College');
 const { authenticate, authorize } = require('../middleware/auth');
 const bcrypt = require('bcryptjs');
 const { notifyEmailChanged, notifyPasswordChanged } = require('../utils/notifications');
 
 // @route   GET /api/settings/profile
-// @desc    Get current user profile
+// @desc    Get current user profile with college information and password
 // @access  Private
 router.get('/profile', authenticate, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select('-password');
+    const user = await User.findById(req.user.id)
+      .select('+tempPassword')
+      .populate('collegeId', 'name email instituteType contactInfo');
+    
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
-    res.json(user);
+
+    // Format response with college information
+    const profileData = {
+      id: user._id,
+      email: user.email,
+      role: user.role,
+      profile: user.profile,
+      isActive: user.isActive,
+      college: user.collegeId ? {
+        id: user.collegeId._id,
+        name: user.collegeId.name,
+        email: user.collegeId.email,
+        instituteType: user.collegeId.instituteType,
+        contactInfo: user.collegeId.contactInfo
+      } : null,
+      password: user.tempPassword || 'Not set', // Include password for admin viewing
+      createdAt: user.createdAt,
+      lastLogin: user.lastLogin
+    };
+
+    res.json(profileData);
   } catch (error) {
     console.error('Error fetching profile:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -261,16 +285,31 @@ router.post('/users', authenticate, authorize('admin', 'super_admin'), [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { email, password, role, firstName, lastName, phone } = req.body;
+    const { email, password, role, firstName, lastName, phone, collegeId, permissions } = req.body;
 
-    // Check if user exists
-    const userExists = await User.findOne({ email: email.toLowerCase().trim() });
+    // Determine collegeId - use provided or from user's college (for non-super-admin)
+    let targetCollegeId = collegeId;
+    if (!targetCollegeId && req.user.role !== 'super_admin') {
+      targetCollegeId = req.user.collegeId;
+    }
+    
+    // Super admin must provide collegeId for non-super-admin users
+    if (!targetCollegeId && role !== 'super_admin' && req.user.role === 'super_admin') {
+      return res.status(400).json({ message: 'collegeId is required when creating users' });
+    }
+
+    // Check if user exists in this college (or globally for super_admin)
+    const query = { email: email.toLowerCase().trim() };
+    if (targetCollegeId) {
+      query.collegeId = targetCollegeId;
+    }
+    const userExists = await User.findOne(query);
     if (userExists) {
-      return res.status(400).json({ message: 'User with this email already exists' });
+      return res.status(400).json({ message: 'User with this email already exists' + (targetCollegeId ? ' in this college' : '') });
     }
 
     // Create user
-    const user = await User.create({
+    const userData = {
       email: email.toLowerCase().trim(),
       password: password || 'password123',
       role: role,
@@ -279,7 +318,19 @@ router.post('/users', authenticate, authorize('admin', 'super_admin'), [
         lastName: lastName || '',
         phone: phone || ''
       }
-    });
+    };
+    
+    // Add collegeId if not super_admin
+    if (role !== 'super_admin' && targetCollegeId) {
+      userData.collegeId = targetCollegeId;
+    }
+    
+    // Add permissions if provided
+    if (permissions) {
+      userData.permissions = permissions;
+    }
+    
+    const user = await User.create(userData);
 
     res.status(201).json({
       message: 'User created successfully',
@@ -302,11 +353,21 @@ router.post('/users', authenticate, authorize('admin', 'super_admin'), [
 });
 
 // @route   GET /api/settings/users
-// @desc    Get all users (Admin only)
+// @desc    Get all users (Admin only - filtered by college for non-super-admin)
 // @access  Private (Admin)
 router.get('/users', authenticate, authorize('admin', 'super_admin'), async (req, res) => {
   try {
-    const users = await User.find().select('-password').sort({ createdAt: -1 });
+    const query = {};
+    
+    // Non-super-admin users can only see users from their college
+    if (req.user.role !== 'super_admin' && req.user.collegeId) {
+      query.collegeId = req.user.collegeId;
+    }
+    
+    const users = await User.find(query)
+      .select('-password')
+      .populate('collegeId', 'name email')
+      .sort({ createdAt: -1 });
     res.json(users);
   } catch (error) {
     console.error('Error fetching users:', error);
@@ -419,6 +480,253 @@ router.get('/stats', authenticate, authorize('admin', 'super_admin'), async (req
     });
   } catch (error) {
     console.error('Error fetching stats:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// ==================== COLLEGE MANAGEMENT (Super Admin Only) ====================
+
+// @route   POST /api/settings/colleges
+// @desc    Create new college/institute (Super Admin only)
+// @access  Private (Super Admin)
+router.post('/colleges', authenticate, authorize('super_admin'), [
+  body('name').trim().notEmpty().withMessage('College name is required'),
+  body('email').isEmail().normalizeEmail(),
+  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+  body('phone').notEmpty().withMessage('Phone number is required'),
+  body('instituteType').isIn(['school', 'college', 'academy', 'short_course'])
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { 
+      name, 
+      email, 
+      password, 
+      phone, 
+      instituteType, 
+      contactInfo, 
+      registrationInfo,
+      settings,
+      subscription
+    } = req.body;
+
+    // Check if college exists
+    const collegeExists = await College.findOne({ email });
+    if (collegeExists) {
+      return res.status(400).json({ message: 'College with this email already exists' });
+    }
+
+    // Create college
+    const college = await College.create({
+      name,
+      email,
+      password,
+      instituteType,
+      contactInfo: {
+        phone,
+        ...contactInfo
+      },
+      registrationInfo,
+      settings: {
+        ...settings,
+        logo: settings?.logo,
+        theme: settings?.theme || {
+          primaryColor: '#1976d2',
+          secondaryColor: '#dc004e'
+        },
+        currency: settings?.currency || 'USD',
+        timezone: settings?.timezone || 'UTC'
+      },
+      subscription: {
+        plan: subscription?.plan || 'free',
+        startDate: subscription?.startDate || new Date(),
+        endDate: subscription?.endDate,
+        isActive: subscription?.isActive !== undefined ? subscription.isActive : true
+      }
+    });
+
+    res.status(201).json({
+      message: 'College created successfully',
+      college: {
+        id: college._id,
+        name: college.name,
+        email: college.email,
+        instituteType: college.instituteType,
+        isActive: college.isActive
+      }
+    });
+  } catch (error) {
+    console.error('Create college error:', error);
+    if (error.code === 11000) {
+      return res.status(400).json({ message: 'College with this email already exists' });
+    }
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// @route   GET /api/settings/colleges
+// @desc    Get all colleges (Super Admin only)
+// @access  Private (Super Admin)
+router.get('/colleges', authenticate, authorize('super_admin'), async (req, res) => {
+  try {
+    const { isActive, instituteType } = req.query;
+    const query = {};
+    
+    if (isActive !== undefined) {
+      query.isActive = isActive === 'true';
+    }
+    if (instituteType) {
+      query.instituteType = instituteType;
+    }
+    
+    const colleges = await College.find(query)
+      .select('-password')
+      .sort({ createdAt: -1 });
+    
+    res.json(colleges);
+  } catch (error) {
+    console.error('Get colleges error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// @route   POST /api/settings/colleges/:collegeId/assign-admin
+// @desc    Assign admin to college with permissions (Super Admin only)
+// @access  Private (Super Admin)
+router.post('/colleges/:collegeId/assign-admin', authenticate, authorize('super_admin'), [
+  body('email').isEmail().normalizeEmail(),
+  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+  body('profile.firstName').optional().trim(),
+  body('profile.lastName').optional().trim(),
+  body('profile.phone').optional().trim()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { email, password, profile, permissions } = req.body;
+    const collegeId = req.params.collegeId;
+
+    // Verify college exists
+    const college = await College.findById(collegeId);
+    if (!college) {
+      return res.status(404).json({ message: 'College not found' });
+    }
+
+    // Check if user already exists in this college
+    const existingUser = await User.findOne({ email, collegeId });
+    if (existingUser) {
+      return res.status(400).json({ message: 'User with this email already exists in this college' });
+    }
+
+    // Default permissions for admin
+    const defaultPermissions = {
+      manageStudents: true,
+      manageTeachers: true,
+      manageCourses: true,
+      manageFees: true,
+      manageAttendance: true,
+      viewReports: true,
+      manageSettings: false, // Only super admin can manage college settings
+      manageUsers: true
+    };
+
+    // Create admin user
+    const adminUser = await User.create({
+      email: email.toLowerCase().trim(),
+      password,
+      tempPassword: password, // Store original password for super admin viewing
+      role: 'admin',
+      collegeId: collegeId,
+      profile: {
+        firstName: profile?.firstName || 'Admin',
+        lastName: profile?.lastName || college.name,
+        phone: profile?.phone || college.contactInfo?.phone
+      },
+      permissions: permissions || defaultPermissions
+    });
+
+    res.status(201).json({
+      message: 'Admin assigned successfully',
+      user: {
+        id: adminUser._id,
+        email: adminUser.email,
+        role: adminUser.role,
+        collegeId: adminUser.collegeId,
+        permissions: adminUser.permissions || defaultPermissions,
+        profile: adminUser.profile
+      }
+    });
+  } catch (error) {
+    console.error('Assign admin error:', error);
+    if (error.code === 11000) {
+      return res.status(400).json({ message: 'User with this email already exists' });
+    }
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// @route   PUT /api/settings/colleges/:collegeId/payment-config
+// @desc    Configure payment system for college (Super Admin only)
+// @access  Private (Super Admin)
+router.put('/colleges/:collegeId/payment-config', authenticate, authorize('super_admin'), [
+  body('paymentMethods').optional().isArray(),
+  body('currency').optional().isString(),
+  body('taxRate').optional().isNumeric()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const college = await College.findById(req.params.collegeId);
+    if (!college) {
+      return res.status(404).json({ message: 'College not found' });
+    }
+
+    const { paymentMethods, currency, taxRate, feeStructure, paymentGateway } = req.body;
+
+    // Initialize paymentConfig if it doesn't exist
+    if (!college.settings) {
+      college.settings = {};
+    }
+    if (!college.settings.paymentConfig) {
+      college.settings.paymentConfig = {};
+    }
+
+    // Update payment configuration
+    if (paymentMethods) {
+      college.settings.paymentConfig.paymentMethods = paymentMethods;
+    }
+    if (currency) {
+      college.settings.currency = currency;
+      college.settings.paymentConfig.currency = currency;
+    }
+    if (taxRate !== undefined) {
+      college.settings.paymentConfig.taxRate = taxRate;
+    }
+    if (feeStructure) {
+      college.settings.paymentConfig.feeStructure = feeStructure;
+    }
+    if (paymentGateway) {
+      college.settings.paymentConfig.paymentGateway = paymentGateway;
+    }
+
+    await college.save();
+
+    res.json({
+      message: 'Payment configuration updated successfully',
+      paymentConfig: college.settings.paymentConfig
+    });
+  } catch (error) {
+    console.error('Update payment config error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });

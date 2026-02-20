@@ -1,6 +1,6 @@
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
 import api from '../../utils/api';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../store/hooks';
 import { Calendar, BookOpen, CheckCircle, XCircle, Clock, AlertCircle, TrendingUp } from 'lucide-react';
 import { useState } from 'react';
 
@@ -26,9 +26,9 @@ const StudentAttendance = () => {
   };
 
   // Fetch student attendance
-  const { data: attendanceData, isLoading, refetch } = useQuery(
-    ['studentAttendance', user?.id, dateRange],
-    async () => {
+  const { data: attendanceData, isLoading, refetch } = useQuery({
+    queryKey: ['studentAttendance', user?.id, dateRange],
+    queryFn: async () => {
       const studentId = await getStudentId();
       if (!studentId) {
         throw new Error('Student record not found');
@@ -41,11 +41,9 @@ const StudentAttendance = () => {
       const response = await api.get(`/attendance/student/${studentId}?${params.toString()}`);
       return response.data;
     },
-    {
-      enabled: !!user?.id,
-      retry: 1
-    }
-  );
+    enabled: !!user?.id,
+    retry: 1
+  });
 
   const handleDateRangeChange = (field, value) => {
     setDateRange(prev => ({

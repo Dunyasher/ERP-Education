@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from 'react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
 import { Plus, Edit, Trash2, Search, BookOpen, FileText, X } from 'lucide-react';
@@ -39,15 +39,18 @@ const Courses = () => {
   });
 
   // Fetch courses
-  const { data: courses = [], isLoading } = useQuery('courses', async () => {
-    const response = await api.get('/courses');
-    return response.data;
+  const { data: courses = [], isLoading } = useQuery({
+    queryKey: ['courses'],
+    queryFn: async () => {
+      const response = await api.get('/courses');
+      return response.data;
+    }
   });
 
   // Fetch categories (only course categories)
-  const { data: categories = [], isLoading: categoriesLoading, error: categoriesError } = useQuery(
-    ['categories', 'course'], 
-    async () => {
+  const { data: categories = [], isLoading: categoriesLoading, error: categoriesError } = useQuery({
+    queryKey: ['categories', 'course'],
+    queryFn: async () => {
       try {
         const response = await api.get('/categories?categoryType=course');
         return response.data || [];
@@ -61,113 +64,106 @@ const Courses = () => {
         return [];
       }
     },
-    {
-      retry: 1,
-      refetchOnWindowFocus: false
-    }
-  );
+    retry: 1,
+    refetchOnWindowFocus: false
+  });
 
   // Fetch teachers
-  const { data: teachers = [] } = useQuery('teachers', async () => {
-    const response = await api.get('/teachers');
-    return response.data;
+  const { data: teachers = [] } = useQuery({
+    queryKey: ['teachers'],
+    queryFn: async () => {
+      const response = await api.get('/teachers');
+      return response.data;
+    }
   });
 
   // Create/Update course mutation
-  const courseMutation = useMutation(
-    async (data) => {
+  const courseMutation = useMutation({
+    mutationFn: async (data) => {
       if (editingCourse) {
         return api.put(`/courses/${editingCourse._id}`, data);
       } else {
         return api.post('/courses', data);
       }
     },
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries('courses');
-        toast.success(editingCourse ? 'Course updated successfully!' : 'Course created successfully!');
-        setShowForm(false);
-        setEditingCourse(null);
-        resetForm();
-      },
-      onError: (error) => {
-        toast.error(error.response?.data?.message || 'Failed to save course');
-      }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courses'] });
+      toast.success(editingCourse ? 'Course updated successfully!' : 'Course created successfully!');
+      setShowForm(false);
+      setEditingCourse(null);
+      resetForm();
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to save course');
     }
-  );
+  });
 
   // Delete course mutation
-  const deleteMutation = useMutation(
-    async (id) => api.delete(`/courses/${id}`),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries('courses');
-        toast.success('Course deleted successfully!');
-      },
-      onError: () => {
-        toast.error('Failed to delete course');
-      }
+  const deleteMutation = useMutation({
+    mutationFn: async (id) => api.delete(`/courses/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courses'] });
+      toast.success('Course deleted successfully!');
+    },
+    onError: () => {
+      toast.error('Failed to delete course');
     }
-  );
+  });
 
   // Category mutations
-  const categoryMutation = useMutation(
-    async (data) => {
+  const categoryMutation = useMutation({
+    mutationFn: async (data) => {
       if (editingCategory) {
         return api.put(`/categories/${editingCategory._id}`, data);
       } else {
         return api.post('/categories', data);
       }
     },
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries(['categories', 'course']);
-        toast.success(editingCategory ? 'Category updated successfully!' : 'Category created successfully!');
-        setShowCategoryForm(false);
-        setEditingCategory(null);
-        setSelectedCategoryId('');
-        setCategoryFormData({
-          name: '',
-          instituteType: 'college',
-          categoryType: 'course',
-          description: ''
-        });
-      },
-      onError: (error) => {
-        console.error('Category mutation error:', error);
-        console.error('Error response:', error.response?.data);
-        console.error('Error status:', error.response?.status);
-        console.error('Request URL:', error.config?.baseURL + error.config?.url);
-        console.error('Request method:', error.config?.method);
-        
-        if (error.response?.status === 404) {
-          toast.error('Category endpoint not found. Please restart the backend server.');
-        } else if (error.response?.status === 401) {
-          toast.error('Authentication required. Please log in again.');
-        } else if (error.response?.status === 403) {
-          toast.error('You do not have permission to perform this action.');
-        } else if (!error.response) {
-          toast.error('Cannot connect to server. Please make sure the backend server is running on port 5000.');
-        } else {
-          toast.error(error.response?.data?.message || 'Failed to save category');
-        }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categories', 'course'] });
+      toast.success(editingCategory ? 'Category updated successfully!' : 'Category created successfully!');
+      setShowCategoryForm(false);
+      setEditingCategory(null);
+      setSelectedCategoryId('');
+      setCategoryFormData({
+        name: '',
+        instituteType: 'college',
+        categoryType: 'course',
+        description: ''
+      });
+    },
+    onError: (error) => {
+      console.error('Category mutation error:', error);
+      console.error('Error response:', error.response?.data);
+      console.error('Error status:', error.response?.status);
+      console.error('Request URL:', error.config?.baseURL + error.config?.url);
+      console.error('Request method:', error.config?.method);
+      
+      if (error.response?.status === 404) {
+        toast.error('Category endpoint not found. Please restart the backend server.');
+      } else if (error.response?.status === 401) {
+        toast.error('Authentication required. Please log in again.');
+      } else if (error.response?.status === 403) {
+        toast.error('You do not have permission to perform this action.');
+      } else if (!error.response) {
+        toast.error('Cannot connect to server. Please make sure the backend server is running on port 5000.');
+      } else {
+        toast.error(error.response?.data?.message || 'Failed to save category');
       }
     }
-  );
+  });
 
-  const deleteCategoryMutation = useMutation(
-    async (id) => api.delete(`/categories/${id}`),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries(['categories', 'course']);
-        toast.success('Category deleted successfully!');
-        setSelectedCategoryId('');
-      },
-      onError: () => {
-        toast.error('Failed to delete category');
-      }
+  const deleteCategoryMutation = useMutation({
+    mutationFn: async (id) => api.delete(`/categories/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categories', 'course'] });
+      toast.success('Category deleted successfully!');
+      setSelectedCategoryId('');
+    },
+    onError: () => {
+      toast.error('Failed to delete category');
     }
-  );
+  });
 
   const handleCategoryEdit = (category) => {
     setEditingCategory(category);

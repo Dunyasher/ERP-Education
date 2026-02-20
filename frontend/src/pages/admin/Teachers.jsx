@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from 'react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
 import { Plus, Edit, Trash2, Search, GraduationCap, User, Mail, Phone, CreditCard, Award, Users, X } from 'lucide-react';
@@ -61,62 +61,69 @@ const Teachers = () => {
   });
 
   // Fetch teachers
-  const { data: teachers = [], isLoading } = useQuery('teachers', async () => {
-    const response = await api.get('/teachers');
-    return response.data;
+  const { data: teachers = [], isLoading } = useQuery({
+    queryKey: ['teachers'],
+    queryFn: async () => {
+      const response = await api.get('/teachers');
+      return response.data;
+    }
   });
 
   // Fetch courses for assignment
-  const { data: courses = [] } = useQuery('courses', async () => {
-    try {
-      const response = await api.get('/courses');
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching courses:', error);
-      // Return empty array if endpoint doesn't exist or fails
-      if (error.response?.status === 404) {
-        console.warn('Courses endpoint not found. Make sure backend server is running.');
+  const { data: courses = [] } = useQuery({
+    queryKey: ['courses'],
+    queryFn: async () => {
+      try {
+        const response = await api.get('/courses');
+        return response.data;
+      } catch (error) {
+        console.error('Error fetching courses:', error);
+        // Return empty array if endpoint doesn't exist or fails
+        if (error.response?.status === 404) {
+          console.warn('Courses endpoint not found. Make sure backend server is running.');
+          return [];
+        }
         return [];
       }
-      return [];
-    }
-  }, {
+    },
     retry: 1,
     refetchOnWindowFocus: false
   });
 
   // Fetch staff categories
-  const { data: staffCategories = [] } = useQuery('staffCategories', async () => {
-    try {
-      const response = await api.get('/staff-categories');
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching staff categories:', error);
-      // Return empty array if endpoint doesn't exist or fails
-      if (error.response?.status === 404) {
-        console.warn('Staff categories endpoint not found. Please restart the backend server.');
-        toast.error('Staff categories endpoint not found. Please restart the backend server to load the new route.');
+  const { data: staffCategories = [] } = useQuery({
+    queryKey: ['staffCategories'],
+    queryFn: async () => {
+      try {
+        const response = await api.get('/staff-categories');
+        return response.data;
+      } catch (error) {
+        console.error('Error fetching staff categories:', error);
+        // Return empty array if endpoint doesn't exist or fails
+        if (error.response?.status === 404) {
+          console.warn('Staff categories endpoint not found. Please restart the backend server.');
+          toast.error('Staff categories endpoint not found. Please restart the backend server to load the new route.');
+          return [];
+        }
+        if (error.response?.status === 401) {
+          console.warn('Unauthorized. Please log in again.');
+          return [];
+        }
+        // Don't show error for network errors (handled by interceptor)
+        if (!error.response) {
+          return [];
+        }
         return [];
       }
-      if (error.response?.status === 401) {
-        console.warn('Unauthorized. Please log in again.');
-        return [];
-      }
-      // Don't show error for network errors (handled by interceptor)
-      if (!error.response) {
-        return [];
-      }
-      return [];
-    }
-  }, {
+    },
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000 // Cache for 5 minutes
   });
 
   // Create/Update teacher/accountant mutation
-  const teacherMutation = useMutation(
-    async (data) => {
+  const teacherMutation = useMutation({
+    mutationFn: async (data) => {
       if (editingTeacher) {
         return api.put(`/teachers/${editingTeacher._id}`, data);
       } else {
@@ -136,63 +143,59 @@ const Teachers = () => {
         }
       }
     },
-    {
-      onSuccess: (response, variables) => {
-        queryClient.invalidateQueries('teachers');
-        const roleName = variables.role === 'accountant' ? 'Accountant' : 'Teacher';
-        toast.success(editingTeacher ? `${roleName} updated successfully!` : `${roleName} created successfully!`);
-        setShowForm(false);
-        setEditingTeacher(null);
-        resetForm();
-      },
-      onError: (error) => {
-        console.error('Teacher mutation error:', error);
-        
-        // Handle network errors
-        if (!error.response) {
-          if (error.code === 'ECONNREFUSED' || error.message?.includes('Network Error') || error.message?.includes('ERR_NETWORK')) {
-            toast.error('Cannot connect to server. Please make sure the backend server is running on port 5000.');
-            return;
-          }
-        }
-        
-        const errorMessage = error.response?.data?.message || 
-                            error.response?.data?.error || 
-                            error.message || 
-                            'Failed to save teacher';
-        
-        // If it's an email duplicate error, show it in the form field too
-        if (errorMessage.toLowerCase().includes('email') && errorMessage.toLowerCase().includes('already exists')) {
-          setEmailError(error.response?.data?.suggestion || 'This email is already registered');
-        }
-        
-        // Show full error message with suggestion if available
-        const fullMessage = error.response?.data?.suggestion 
-          ? `${errorMessage}. ${error.response.data.suggestion}`
-          : errorMessage;
-        toast.error(fullMessage);
-        
-        // Log validation errors if present
-        if (error.response?.data?.errors) {
-          console.error('Validation errors:', error.response.data.errors);
+    onSuccess: (response, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['teachers'] });
+      const roleName = variables.role === 'accountant' ? 'Accountant' : 'Teacher';
+      toast.success(editingTeacher ? `${roleName} updated successfully!` : `${roleName} created successfully!`);
+      setShowForm(false);
+      setEditingTeacher(null);
+      resetForm();
+    },
+    onError: (error) => {
+      console.error('Teacher mutation error:', error);
+      
+      // Handle network errors
+      if (!error.response) {
+        if (error.code === 'ECONNREFUSED' || error.message?.includes('Network Error') || error.message?.includes('ERR_NETWORK')) {
+          toast.error('Cannot connect to server. Please make sure the backend server is running on port 5000.');
+          return;
         }
       }
+      
+      const errorMessage = error.response?.data?.message || 
+                          error.response?.data?.error || 
+                          error.message || 
+                          'Failed to save teacher';
+      
+      // If it's an email duplicate error, show it in the form field too
+      if (errorMessage.toLowerCase().includes('email') && errorMessage.toLowerCase().includes('already exists')) {
+        setEmailError(error.response?.data?.suggestion || 'This email is already registered');
+      }
+      
+      // Show full error message with suggestion if available
+      const fullMessage = error.response?.data?.suggestion 
+        ? `${errorMessage}. ${error.response.data.suggestion}`
+        : errorMessage;
+      toast.error(fullMessage);
+      
+      // Log validation errors if present
+      if (error.response?.data?.errors) {
+        console.error('Validation errors:', error.response.data.errors);
+      }
     }
-  );
+  });
 
   // Delete teacher mutation
-  const deleteMutation = useMutation(
-    async (id) => api.delete(`/teachers/${id}`),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries('teachers');
-        toast.success('Teacher deleted successfully!');
-      },
-      onError: () => {
-        toast.error('Failed to delete teacher');
-      }
+  const deleteMutation = useMutation({
+    mutationFn: async (id) => api.delete(`/teachers/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teachers'] });
+      toast.success('Teacher deleted successfully!');
+    },
+    onError: () => {
+      toast.error('Failed to delete teacher');
     }
-  );
+  });
 
   // Check if email exists
   const checkEmailExists = async (email) => {

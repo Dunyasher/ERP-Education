@@ -7,10 +7,27 @@ const userSchema = new mongoose.Schema({
     type: String,
     unique: true
   },
+  collegeId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'College',
+    required: function() {
+      return this.role !== 'super_admin';
+    },
+    index: true
+  },
+  permissions: {
+    manageStudents: { type: Boolean, default: false },
+    manageTeachers: { type: Boolean, default: false },
+    manageCourses: { type: Boolean, default: false },
+    manageFees: { type: Boolean, default: false },
+    manageAttendance: { type: Boolean, default: false },
+    viewReports: { type: Boolean, default: false },
+    manageSettings: { type: Boolean, default: false },
+    manageUsers: { type: Boolean, default: false }
+  },
   email: {
     type: String,
     required: true,
-    unique: true,
     lowercase: true,
     trim: true
   },
@@ -18,6 +35,12 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true,
     minlength: 6
+  },
+  // Temporary password storage for super admin viewing (optional, not hashed)
+  // This is only set when password is created/reset by super admin
+  tempPassword: {
+    type: String,
+    select: false // Not selected by default for security
   },
   role: {
     type: String,
@@ -49,6 +72,9 @@ const userSchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
+
+// Compound index to ensure email is unique per college (sparse for super_admin)
+userSchema.index({ email: 1, collegeId: 1 }, { unique: true, sparse: true });
 
 // Hash password before saving
 userSchema.pre('save', async function(next) {

@@ -81,25 +81,39 @@ router.get('/:id', async (req, res) => {
 // @access  Private (Admin)
 router.post('/', authenticate, authorize('admin', 'super_admin'), async (req, res) => {
   try {
-    const { name, instituteType, categoryType, description } = req.body;
+    const { name, instituteType, categoryType, description, collegeId } = req.body;
     
     if (!name || !instituteType) {
       return res.status(400).json({ message: 'Name and institute type are required' });
     }
     
+    // Get collegeId from user or request body
+    let targetCollegeId = collegeId || req.collegeId;
+    if (!targetCollegeId && req.user.role !== 'super_admin') {
+      // For non-super-admin users, get collegeId from user
+      targetCollegeId = req.user.collegeId?._id || req.user.collegeId;
+    }
+    
+    if (!targetCollegeId && req.user.role !== 'super_admin') {
+      return res.status(400).json({ message: 'College ID is required' });
+    }
+    
     // Set default categoryType if not provided
     const finalCategoryType = categoryType || 'course';
     
-    // Check if category with same name, categoryType, and instituteType already exists (case-insensitive)
-    const existing = await Category.findOne({ 
+    // Check if category with same name, categoryType, instituteType, and collegeId already exists (case-insensitive)
+    const existingQuery = { 
       name: { $regex: new RegExp(`^${name.trim()}$`, 'i') }, 
       categoryType: finalCategoryType,
       instituteType,
+      collegeId: targetCollegeId,
       $or: [
         { isActive: true },
         { isActive: { $exists: false } }
       ]
-    });
+    };
+    
+    const existing = await Category.findOne(existingQuery);
     
     if (existing) {
       return res.status(400).json({ 
@@ -111,7 +125,8 @@ router.post('/', authenticate, authorize('admin', 'super_admin'), async (req, re
       name: name.trim(),
       instituteType,
       categoryType: finalCategoryType,
-      description: description || ''
+      description: description || '',
+      collegeId: targetCollegeId
     });
     
     res.status(201).json(category);

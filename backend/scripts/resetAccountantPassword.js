@@ -45,12 +45,30 @@ const resetAccountantPassword = async () => {
 
     console.log(`📧 Accountant Email: ${accountant.email}`);
     console.log(`📛 Name: ${accountant.profile?.firstName || 'N/A'} ${accountant.profile?.lastName || ''}`.trim());
+    console.log(`📚 College ID: ${accountant.collegeId || 'Not assigned (backward compatibility)'}`);
     console.log(`\n🔄 Resetting password...`);
 
-    // Reset password
+    // Reset password - use updateOne to bypass validation if needed
     accountant.password = newPassword;
     accountant.markModified('password');
-    await accountant.save();
+    
+    // If collegeId is missing and required, set it to null explicitly
+    if (!accountant.collegeId && accountant.role !== 'super_admin') {
+      accountant.collegeId = null;
+    }
+    
+    // Save with validation disabled if collegeId is missing
+    try {
+      await accountant.save({ validateBeforeSave: true });
+    } catch (saveError) {
+      // If validation fails due to collegeId, try without validation
+      if (saveError.message.includes('collegeId')) {
+        console.log('⚠️  Note: Accountant has no collegeId assigned (backward compatibility)');
+        await accountant.save({ validateBeforeSave: false });
+      } else {
+        throw saveError;
+      }
+    }
 
     console.log('✅ Password reset successfully!');
     console.log(`\n🔑 New Password: ${newPassword}`);

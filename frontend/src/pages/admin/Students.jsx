@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from 'react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
@@ -7,7 +7,7 @@ import { Plus, Edit, Trash2, Search, Users, Eye, Printer, X, Lock, EyeOff, Alert
 import StudentAdmissionPrint from '../../components/StudentAdmissionPrint';
 import AccountantAdmissionForm from '../../components/AccountantAdmissionForm';
 import ErrorCorrection from '../../components/ErrorCorrection';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../store/hooks';
 
 const Students = () => {
   const queryClient = useQueryClient();
@@ -86,19 +86,25 @@ const Students = () => {
   });
 
   // Fetch students
-  const { data: students = [], isLoading } = useQuery('students', async () => {
-    const response = await api.get('/students');
-    return response.data;
+  const { data: students = [], isLoading } = useQuery({
+    queryKey: ['students'],
+    queryFn: async () => {
+      const response = await api.get('/students');
+      return response.data;
+    }
   });
 
   // Fetch invoices for all students
-  const { data: invoices = [] } = useQuery('invoices', async () => {
-    try {
-      const response = await api.get('/fees/invoices');
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching invoices:', error);
-      return [];
+  const { data: invoices = [] } = useQuery({
+    queryKey: ['invoices'],
+    queryFn: async () => {
+      try {
+        const response = await api.get('/fees/invoices');
+        return response.data;
+      } catch (error) {
+        console.error('Error fetching invoices:', error);
+        return [];
+      }
     }
   });
 
@@ -150,15 +156,21 @@ const Students = () => {
   };
 
   // Fetch categories for dropdown
-  const { data: categories = [] } = useQuery('categories', async () => {
-    const response = await api.get('/categories');
-    return response.data;
+  const { data: categories = [] } = useQuery({
+    queryKey: ['categories'],
+    queryFn: async () => {
+      const response = await api.get('/categories');
+      return response.data;
+    }
   });
 
   // Fetch courses for dropdown
-  const { data: courses = [] } = useQuery('courses', async () => {
-    const response = await api.get('/courses');
-    return response.data;
+  const { data: courses = [] } = useQuery({
+    queryKey: ['courses'],
+    queryFn: async () => {
+      const response = await api.get('/courses');
+      return response.data;
+    }
   });
 
   // Filter courses based on selected category and institute type
@@ -176,101 +188,112 @@ const Students = () => {
   });
 
   // Create/Update student mutation
-  const studentMutation = useMutation(
-    async (data) => {
+  const studentMutation = useMutation({
+    mutationFn: async (data) => {
+      console.log('📤 Submitting student data:', { 
+        editing: !!editingStudent,
+        hasEmail: !!data.email,
+        hasFullName: !!data.personalInfo?.fullName,
+        hasDateOfBirth: !!data.personalInfo?.dateOfBirth,
+        hasGender: !!data.personalInfo?.gender,
+        hasInstituteType: !!data.academicInfo?.instituteType
+      });
+      
       if (editingStudent) {
         return api.put(`/students/${editingStudent._id}`, data);
       } else {
         return api.post('/students', data);
       }
     },
-    {
-      onSuccess: async (response) => {
-        queryClient.invalidateQueries('students');
-        queryClient.invalidateQueries('adminStats');
-        toast.success(editingStudent ? 'Student updated successfully!' : 'Student created successfully!');
-        setShowForm(false);
-        
-        // If new student created, show print option
-        if (!editingStudent) {
-          try {
-            // Get student ID from response (handle both old and new response formats)
-            const studentData = response.data?.data || response.data;
-            const studentId = studentData?._id || studentData?.id;
-            
-            if (studentId) {
-              // Fetch full student data with all relations
-              const fullStudent = await api.get(`/students/${studentId}`);
-              setPrintStudent(fullStudent.data);
-            }
-          } catch (error) {
-            console.error('Error fetching student for print:', error);
-            // Don't show error to user, just skip print option
+    onSuccess: async (response) => {
+      console.log('✅ Student mutation success:', response);
+      queryClient.invalidateQueries({ queryKey: ['students'] });
+      queryClient.invalidateQueries({ queryKey: ['adminStats'] });
+      toast.success(editingStudent ? 'Student updated successfully!' : 'Student created successfully!');
+      setShowForm(false);
+      
+      // If new student created, show print option
+      if (!editingStudent) {
+        try {
+          // Get student ID from response (handle both old and new response formats)
+          const studentData = response.data?.data || response.data;
+          const studentId = studentData?._id || studentData?.id;
+          
+          if (studentId) {
+            // Fetch full student data with all relations
+            const fullStudent = await api.get(`/students/${studentId}`);
+            setPrintStudent(fullStudent.data);
           }
-        }
-        
-        setEditingStudent(null);
-        resetForm();
-      },
-      onError: (error) => {
-        console.error('Student mutation error:', error);
-        const errorMessage = error.response?.data?.message || 
-                           error.response?.data?.error || 
-                           error.message || 
-                           'Failed to save student';
-        
-        // If it's an email duplicate error, show it in the form field too
-        if (errorMessage.toLowerCase().includes('email') && errorMessage.toLowerCase().includes('already exists')) {
-          setEmailError(error.response?.data?.suggestion || 'This email is already registered');
-        }
-        
-        // Show full error message with suggestion if available
-        const fullMessage = error.response?.data?.suggestion 
-          ? `${errorMessage}. ${error.response.data.suggestion}`
-          : errorMessage;
-        toast.error(fullMessage);
-        
-        // Show validation errors if available
-        if (error.response?.data?.errors && Array.isArray(error.response.data.errors)) {
-          error.response.data.errors.forEach(err => {
-            toast.error(err);
-          });
+        } catch (error) {
+          console.error('Error fetching student for print:', error);
+          // Don't show error to user, just skip print option
         }
       }
+      
+      setEditingStudent(null);
+      resetForm();
+    },
+    onError: (error) => {
+      console.error('❌ Student mutation error:', error);
+      console.error('Error details:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        message: error.message
+      });
+      
+      const errorMessage = error.response?.data?.message || 
+                         error.response?.data?.error || 
+                         error.message || 
+                         'Failed to save student';
+      
+      // If it's an email duplicate error, show it in the form field too
+      if (errorMessage.toLowerCase().includes('email') && errorMessage.toLowerCase().includes('already exists')) {
+        setEmailError(error.response?.data?.suggestion || 'This email is already registered');
+      }
+      
+      // Show full error message with suggestion if available
+      const fullMessage = error.response?.data?.suggestion 
+        ? `${errorMessage}. ${error.response.data.suggestion}`
+        : errorMessage;
+      toast.error(fullMessage);
+      
+      // Show validation errors if available
+      if (error.response?.data?.errors && Array.isArray(error.response.data.errors)) {
+        error.response.data.errors.forEach(err => {
+          toast.error(err);
+        });
+      }
     }
-  );
+  });
 
   // Delete student mutation
-  const deleteMutation = useMutation(
-    async (id) => api.delete(`/students/${id}`),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries('students');
-        toast.success('Student deleted successfully!');
-      },
-      onError: () => {
-        toast.error('Failed to delete student');
-      }
+  const deleteMutation = useMutation({
+    mutationFn: async (id) => api.delete(`/students/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['students'] });
+      toast.success('Student deleted successfully!');
+    },
+    onError: () => {
+      toast.error('Failed to delete student');
     }
-  );
+  });
 
   // Change student password mutation
-  const changePasswordMutation = useMutation(
-    async ({ userId, password }) => {
+  const changePasswordMutation = useMutation({
+    mutationFn: async ({ userId, password }) => {
       return api.put(`/settings/password/${userId}`, { newPassword: password });
     },
-    {
-      onSuccess: () => {
-        toast.success('Student password updated successfully!');
-        setShowPasswordModal(false);
-        setSelectedStudent(null);
-        setPasswordForm({ newPassword: '', confirmPassword: '' });
-      },
-      onError: (error) => {
-        toast.error(error.response?.data?.message || 'Failed to update password');
-      }
+    onSuccess: () => {
+      toast.success('Student password updated successfully!');
+      setShowPasswordModal(false);
+      setSelectedStudent(null);
+      setPasswordForm({ newPassword: '', confirmPassword: '' });
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to update password');
     }
-  );
+  });
 
   const handleOpenPasswordModal = (student) => {
     setSelectedStudent(student);
@@ -448,7 +471,7 @@ const Students = () => {
         await api.delete(`/students/${student._id}`, {
           data: { reason: reason || 'No reason provided' }
         });
-        queryClient.invalidateQueries('students');
+        queryClient.invalidateQueries({ queryKey: ['students'] });
         toast.success('Student deleted successfully. Notification sent to admin and director.');
       } catch (error) {
         const errorMessage = error.response?.data?.message || error.message || 'Failed to delete student';
@@ -591,8 +614,8 @@ const Students = () => {
             resetForm();
           }}
           onSuccess={(studentData) => {
-            queryClient.invalidateQueries('students');
-            queryClient.invalidateQueries('accountantStats');
+            queryClient.invalidateQueries({ queryKey: ['students'] });
+            queryClient.invalidateQueries({ queryKey: ['accountantStats'] });
             setShowForm(false);
             setEditingStudent(null);
             resetForm();

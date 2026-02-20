@@ -13,13 +13,24 @@ const authenticate = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_secret_key');
-    const user = await User.findById(decoded.id).select('-password');
+    const user = await User.findById(decoded.id)
+      .select('-password')
+      .populate('collegeId', 'name email isActive');
     
     if (!user || !user.isActive) {
       return res.status(401).json({ message: 'User not found or inactive' });
     }
 
+    // Check if college is active (unless super_admin)
+    if (user.role !== 'super_admin' && user.collegeId && !user.collegeId.isActive) {
+      return res.status(403).json({ message: 'College account is inactive. Please contact administrator.' });
+    }
+
     req.user = user;
+    // Set collegeId for easy access in routes
+    if (user.collegeId) {
+      req.collegeId = user.collegeId._id || user.collegeId;
+    }
     next();
   } catch (error) {
     if (error.name === 'JsonWebTokenError') {

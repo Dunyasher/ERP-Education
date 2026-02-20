@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { useQuery, useMutation, useQueryClient } from 'react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../store/hooks';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
 import { X, Save, Printer, User, Phone, MapPin, DollarSign, BookOpen } from 'lucide-react';
@@ -26,19 +26,25 @@ const BitelAdmissionForm = ({ onClose, onSuccess, editingStudent = null, showOve
   });
 
   // Fetch courses
-  const { data: courses = [], isLoading: coursesLoading } = useQuery('courses', async () => {
-    const response = await api.get('/courses');
-    return response.data;
+  const { data: courses = [], isLoading: coursesLoading } = useQuery({
+    queryKey: ['courses'],
+    queryFn: async () => {
+      const response = await api.get('/courses');
+      return response.data;
+    }
   });
 
   // Fetch next serial number
-  const { data: serialData } = useQuery('nextSerial', async () => {
-    try {
-      const response = await api.get('/students/next-serial');
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching next serial:', error);
-      return { nextSerial: 'A1', nextNumber: 1 };
+  const { data: serialData } = useQuery({
+    queryKey: ['nextSerial'],
+    queryFn: async () => {
+      try {
+        const response = await api.get('/students/next-serial');
+        return response.data;
+      } catch (error) {
+        console.error('Error fetching next serial:', error);
+        return { nextSerial: 'A1', nextNumber: 1 };
+      }
     }
   });
 
@@ -103,19 +109,18 @@ const BitelAdmissionForm = ({ onClose, onSuccess, editingStudent = null, showOve
   }, [onClose]);
 
   // Create student mutation
-  const createStudentMutation = useMutation(
-    async (data) => {
+  const createStudentMutation = useMutation({
+    mutationFn: async (data) => {
       if (editingStudent) {
         return api.put(`/students/${editingStudent._id}`, data);
       }
       return api.post('/students', data);
     },
-    {
-      onSuccess: (response, variables) => {
-        queryClient.invalidateQueries('students');
-        queryClient.invalidateQueries('adminStats');
-        queryClient.invalidateQueries('classes');
-        queryClient.invalidateQueries('nextSerial');
+    onSuccess: (response, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['students'] });
+      queryClient.invalidateQueries({ queryKey: ['adminStats'] });
+      queryClient.invalidateQueries({ queryKey: ['classes'] });
+      queryClient.invalidateQueries({ queryKey: ['nextSerial'] });
         
         const courseId = variables._courseId || variables.academicInfo?.courseId || response.data?.academicInfo?.courseId;
         const courseName = variables._courseName || response.data?.academicInfo?.courseId?.name || 'the class';
@@ -147,8 +152,7 @@ const BitelAdmissionForm = ({ onClose, onSuccess, editingStudent = null, showOve
                            'Failed to save student';
         toast.error(errorMessage);
       }
-    }
-  );
+  });
 
   const handleSubmit = async (e) => {
     e.preventDefault();

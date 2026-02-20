@@ -2,15 +2,16 @@ const express = require('express');
 const router = express.Router();
 const Expense = require('../models/Expense');
 const { authenticate } = require('../middleware/auth');
+const { addCollegeFilter, buildCollegeQuery } = require('../middleware/collegeFilter');
 const { notifyFinancialUpdate } = require('../utils/notifications');
 
 // @route   GET /api/expenses
 // @desc    Get all expenses with filters
 // @access  Private (Admin)
-router.get('/', authenticate, async (req, res) => {
+router.get('/', authenticate, addCollegeFilter, async (req, res) => {
   try {
     const { startDate, endDate, category, department } = req.query;
-    const query = {};
+    const query = buildCollegeQuery(req);
 
     if (startDate || endDate) {
       query.date = {};
@@ -54,10 +55,18 @@ router.get('/:id', authenticate, async (req, res) => {
 // @route   POST /api/expenses
 // @desc    Create new expense
 // @access  Private (Admin)
-router.post('/', authenticate, async (req, res) => {
+router.post('/', authenticate, addCollegeFilter, async (req, res) => {
   try {
+    // Get collegeId from user or request (typo already fixed by middleware)
+    const collegeId = req.collegeId || req.user.collegeId?._id || req.user.collegeId || req.body.collegeId;
+    
+    if (!collegeId && req.user.role !== 'super_admin') {
+      return res.status(400).json({ message: 'collegeId is required' });
+    }
+
     const expenseData = {
       ...req.body,
+      collegeId: collegeId,
       createdBy: req.user.id
     };
 
@@ -140,7 +149,7 @@ router.delete('/:id', authenticate, async (req, res) => {
 // @route   GET /api/expenses/reports/daily
 // @desc    Get daily expense report
 // @access  Private (Admin)
-router.get('/reports/daily', authenticate, async (req, res) => {
+router.get('/reports/daily', authenticate, addCollegeFilter, async (req, res) => {
   try {
     const { date, startDate, endDate } = req.query;
     
@@ -171,8 +180,11 @@ router.get('/reports/daily', authenticate, async (req, res) => {
       query.date = { $gte: dayStart, $lte: dayEnd };
     }
 
+    // Build query with college filter
+    const collegeQuery = buildCollegeQuery(req, query);
+    
     // Get expenses
-    const expenses = await Expense.find(query)
+    const expenses = await Expense.find(collegeQuery)
       .populate('createdBy', 'email profile.firstName profile.lastName')
       .sort({ date: -1 });
 
@@ -224,7 +236,7 @@ router.get('/reports/daily', authenticate, async (req, res) => {
 // @route   GET /api/expenses/stats/monthly
 // @desc    Get monthly expense statistics
 // @access  Private (Admin)
-router.get('/stats/monthly', authenticate, async (req, res) => {
+router.get('/stats/monthly', authenticate, addCollegeFilter, async (req, res) => {
   try {
     const { year, month } = req.query;
     const now = new Date();
@@ -234,14 +246,20 @@ router.get('/stats/monthly', authenticate, async (req, res) => {
     const monthStart = new Date(targetYear, targetMonth, 1);
     const monthEnd = new Date(targetYear, targetMonth + 1, 0, 23, 59, 59);
 
+    // Build match query with college filter
+    const matchQuery = {
+      date: {
+        $gte: monthStart,
+        $lte: monthEnd
+      }
+    };
+    if (req.collegeId) {
+      matchQuery.collegeId = req.collegeId;
+    }
+
     const stats = await Expense.aggregate([
       {
-        $match: {
-          date: {
-            $gte: monthStart,
-            $lte: monthEnd
-          }
-        }
+        $match: matchQuery
       },
       {
         $group: {
@@ -254,12 +272,7 @@ router.get('/stats/monthly', authenticate, async (req, res) => {
 
     const totalExpenses = await Expense.aggregate([
       {
-        $match: {
-          date: {
-            $gte: monthStart,
-            $lte: monthEnd
-          }
-        }
+        $match: matchQuery
       },
       {
         $group: {

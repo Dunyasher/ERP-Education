@@ -14,16 +14,17 @@ try {
   PaymentTransaction = null;
 }
 const { authenticate, authorize } = require('../middleware/auth');
+const { addCollegeFilter, requireCollegeId, buildCollegeQuery } = require('../middleware/collegeFilter');
 const { notifyStudentCreated, notifyStudentDeleted } = require('../utils/notifications');
 const { getCurrentSerialNumber } = require('../utils/autoSerialNumber');
 
 // @route   GET /api/students
-// @desc    Get all students
+// @desc    Get all students (filtered by college)
 // @access  Private
-router.get('/', authenticate, async (req, res) => {
+router.get('/', authenticate, addCollegeFilter, async (req, res) => {
   try {
     const { instituteType, status, courseId } = req.query;
-    const query = {};
+    const query = buildCollegeQuery(req);
     
     if (instituteType) query['academicInfo.instituteType'] = instituteType;
     if (status) query['academicInfo.status'] = status;
@@ -88,7 +89,7 @@ router.get('/next-serial', authenticate, async (req, res) => {
 // @desc    Get student complete history including payment installments
 // @access  Private
 // IMPORTANT: This route must be defined BEFORE /:id to avoid route conflicts
-router.get('/:id/history', authenticate, async (req, res) => {
+router.get('/:id/history', authenticate, addCollegeFilter, async (req, res) => {
   try {
     console.log('=== ✅ HISTORY ROUTE HIT ===');
     console.log('Request params:', req.params);
@@ -99,12 +100,16 @@ router.get('/:id/history', authenticate, async (req, res) => {
     console.log('History route hit for student ID:', req.params.id);
     console.log('Authenticated user:', req.user?.email || 'N/A');
     
+    // Build query with college filter
+    const query = buildCollegeQuery(req);
+    
     // Try to find student by ObjectId first, then fallback to srNo
     let student = null;
     
     if (mongoose.Types.ObjectId.isValid(req.params.id)) {
-      // Try finding by ObjectId
-      student = await Student.findById(req.params.id)
+      // Try finding by ObjectId with college filter
+      query._id = req.params.id;
+      student = await Student.findOne(query)
         .populate('userId', 'email profile')
         .populate({
           path: 'academicInfo.courseId',
@@ -117,10 +122,11 @@ router.get('/:id/history', authenticate, async (req, res) => {
         .populate('feeInfo.feeStructureId');
     }
     
-    // If not found by ObjectId, try finding by serial number
+    // If not found by ObjectId, try finding by serial number with college filter
     if (!student) {
       console.log('Student not found by ObjectId, trying to find by srNo:', req.params.id);
-      student = await Student.findOne({ srNo: req.params.id })
+      const srNoQuery = buildCollegeQuery(req, { srNo: req.params.id });
+      student = await Student.findOne(srNoQuery)
         .populate('userId', 'email profile')
         .populate({
           path: 'academicInfo.courseId',
@@ -205,10 +211,14 @@ router.get('/:id/history', authenticate, async (req, res) => {
     
     console.log('✅ Student found:', student.srNo || student._id, '| Name:', student.personalInfo?.fullName || 'N/A');
 
-    // Get all invoices for this student (use student._id, not req.params.id)
+    // Get all invoices for this student (use student._id, not req.params.id) with college filter
     let invoices = [];
     try {
-      invoices = await Invoice.find({ studentId: student._id })
+      const invoiceQuery = { studentId: student._id };
+      if (req.collegeId) {
+        invoiceQuery.collegeId = req.collegeId;
+      }
+      invoices = await Invoice.find(invoiceQuery)
         .populate('feeStructureId')
         .sort({ createdAt: -1 });
     } catch (invoiceError) {
@@ -433,22 +443,52 @@ router.get('/:id/history', authenticate, async (req, res) => {
 // @route   GET /api/students/:id
 // @desc    Get single student
 // @access  Private
-router.get('/:id', authenticate, async (req, res) => {
+router.get('/:id', authenticate, addCollegeFilter, async (req, res) => {
   try {
+    console.log('🔍 Fetching student:', req.params.id);
+    console.log('   User collegeId:', req.collegeId || 'null');
+    console.log('   User role:', req.user?.role);
+    
     // Validate ID format
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ message: 'Invalid student ID format' });
     }
 
-    const student = await Student.findById(req.params.id)
+    // Build query - try to find student by ID first, then check college access
+    let query = { _id: req.params.id };
+    
+    const student = await Student.findOne(query)
       .populate('userId', 'email profile')
       .populate('academicInfo.courseId', 'name')
       .populate('feeInfo.feeStructureId');
     
     if (!student) {
+      console.log('❌ Student not found with ID:', req.params.id);
       return res.status(404).json({ message: 'Student not found' });
     }
     
+    console.log('✅ Student found:', student.personalInfo?.fullName || 'N/A');
+    console.log('   Student collegeId:', student.collegeId || 'null');
+    
+    // Check college access
+    // If user has collegeId, student must have same collegeId (or no collegeId for backward compatibility)
+    // If user doesn't have collegeId, allow access to students without collegeId
+    if (req.collegeId) {
+      // User has collegeId - check if student matches
+      if (student.collegeId && student.collegeId.toString() !== req.collegeId.toString()) {
+        console.log('❌ College mismatch - Access denied');
+        return res.status(403).json({ message: 'Access denied' });
+      }
+      // Allow access if student has no collegeId (backward compatibility)
+    } else {
+      // User doesn't have collegeId - only allow access to students without collegeId
+      if (student.collegeId) {
+        console.log('❌ User has no collegeId but student has collegeId - Access denied');
+        return res.status(403).json({ message: 'Access denied' });
+      }
+    }
+    
+    console.log('✅ Access granted, returning student data');
     res.json(student);
   } catch (error) {
     console.error('Get student error:', error);
@@ -534,12 +574,29 @@ router.post('/', authenticate, authorize('admin', 'super_admin', 'accountant'), 
       }
     }
     
-    // Check if email already exists before creating
-    const existingUser = await User.findOne({ email: email.toLowerCase().trim() });
+    // Get collegeId from authenticated user
+    // Allow admins/accountants without collegeId for backward compatibility
+    const collegeId = req.collegeId || req.body.collegeId || null;
+    
+    // Only require collegeId for super_admin if explicitly provided
+    // For regular admins/accountants, allow null collegeId (backward compatibility)
+    
+    // Check if email already exists in this college (or globally if no collegeId)
+    const emailQuery = { email: email.toLowerCase().trim() };
+    if (collegeId) {
+      emailQuery.collegeId = collegeId;
+    } else {
+      // For backward compatibility, check if email exists without collegeId
+      emailQuery.$or = [
+        { collegeId: { $exists: false } },
+        { collegeId: null }
+      ];
+    }
+    const existingUser = await User.findOne(emailQuery);
     if (existingUser) {
       clearTimeout(timeout);
       return res.status(400).json({ 
-        message: 'User with this email already exists',
+        message: 'User with this email already exists in this college',
         email: email,
         suggestion: 'Please use a different email address or check if this student already exists in the system'
       });
@@ -552,6 +609,7 @@ router.post('/', authenticate, authorize('admin', 'super_admin', 'accountant'), 
         email: email.toLowerCase().trim(),
         password: password || 'password123', // Default password, should be changed
         role: 'student',
+        collegeId: collegeId,
         profile: {
           firstName: personalInfo.fullName.split(' ')[0] || personalInfo.fullName,
           lastName: personalInfo.fullName.split(' ').slice(1).join(' ') || '',
@@ -576,6 +634,7 @@ router.post('/', authenticate, authorize('admin', 'super_admin', 'accountant'), 
     // Prepare student data - ensure all required fields are present and clean
     const studentData = {
       userId: user._id,
+      collegeId: collegeId,
       personalInfo: {
         fullName: personalInfo.fullName.trim(),
         dateOfBirth: dateOfBirthDate,
@@ -789,19 +848,33 @@ router.post('/', authenticate, authorize('admin', 'super_admin', 'accountant'), 
 // @route   PUT /api/students/:id
 // @desc    Update student
 // @access  Private
-router.put('/:id', authenticate, async (req, res) => {
+router.put('/:id', authenticate, addCollegeFilter, async (req, res) => {
   try {
     // Validate ID format
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ message: 'Invalid student ID format' });
     }
 
+    // Build query with college filter
+    const query = buildCollegeQuery(req, { _id: req.params.id });
+
     // Students can only update their own profile
     if (req.user.role === 'student') {
-      const student = await Student.findOne({ userId: req.user.id });
-      if (!student || student._id.toString() !== req.params.id) {
+      query.userId = req.user.id;
+      const student = await Student.findOne(query);
+      if (!student) {
         return res.status(403).json({ message: 'Access denied' });
       }
+    }
+    
+    // Verify student belongs to user's college before updating
+    const existingStudent = await Student.findById(req.params.id);
+    if (!existingStudent) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+    
+    if (req.collegeId && existingStudent.collegeId.toString() !== req.collegeId.toString()) {
+      return res.status(403).json({ message: 'Access denied' });
     }
     
     // Handle classId -> courseId conversion
@@ -822,6 +895,9 @@ router.put('/:id', authenticate, async (req, res) => {
     if (req.body.academicInfo?.courseId && !mongoose.Types.ObjectId.isValid(req.body.academicInfo.courseId)) {
       return res.status(400).json({ message: 'Invalid course ID format' });
     }
+    
+    // Don't allow changing collegeId
+    delete req.body.collegeId;
     
     const student = await Student.findByIdAndUpdate(
       req.params.id,
@@ -857,14 +933,15 @@ router.put('/:id', authenticate, async (req, res) => {
 // @route   DELETE /api/students/:id
 // @desc    Delete student
 // @access  Private (Admin)
-router.delete('/:id', authenticate, authorize('admin', 'super_admin'), async (req, res) => {
+router.delete('/:id', authenticate, authorize('admin', 'super_admin'), addCollegeFilter, async (req, res) => {
   try {
     // Validate ID format
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ message: 'Invalid student ID format' });
     }
 
-    const student = await Student.findById(req.params.id)
+    const query = buildCollegeQuery(req, { _id: req.params.id });
+    const student = await Student.findOne(query)
       .populate('userId', 'email')
       .populate('academicInfo.courseId', 'name');
     

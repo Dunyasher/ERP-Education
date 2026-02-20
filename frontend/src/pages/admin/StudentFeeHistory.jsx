@@ -1,5 +1,5 @@
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
 import api from '../../utils/api';
 import { ArrowLeft, DollarSign, CheckCircle, AlertCircle, Calendar, Clock, Printer } from 'lucide-react';
 import { useEffect, useRef } from 'react';

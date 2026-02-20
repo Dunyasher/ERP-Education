@@ -1,5 +1,8 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { useAuth } from './store/hooks';
+import { useEffect } from 'react';
+import { useAppDispatch } from './store/hooks';
+import { checkAuth } from './store/slices/authSlice';
 import Login from './pages/Login';
 import AdminDashboard from './pages/admin/Dashboard';
 import SuperAdminDashboard from './pages/superAdmin/Dashboard';
@@ -36,6 +39,11 @@ import ProtectedRoute from './components/ProtectedRoute';
 
 function AppRoutes() {
   const { user, loading } = useAuth();
+  const dispatch = useAppDispatch();
+
+  useEffect(() => {
+    dispatch(checkAuth());
+  }, [dispatch]);
 
   if (loading) {
     return (
@@ -92,11 +100,7 @@ function AppRoutes() {
 }
 
 function App() {
-  return (
-    <AuthProvider>
-      <AppRoutes />
-    </AuthProvider>
-  );
+  return <AppRoutes />;
 }
 
 export default App;

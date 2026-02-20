@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
 import api from '../../utils/api';
 import { Users, DollarSign, FileText, TrendingUp, GraduationCap, Calendar, Receipt, CheckCircle, Clock, AlertCircle, Eye, Download } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -10,15 +10,21 @@ const AccountantDashboard = () => {
   const [feeFilter, setFeeFilter] = useState('all'); // all, pending, paid, overdue
 
   // Fetch dashboard stats
-  const { data: stats, isLoading } = useQuery('accountantStats', async () => {
-    const response = await api.get('/accountant/dashboard');
-    return response.data;
+  const { data: stats, isLoading } = useQuery({
+    queryKey: ['accountantStats'],
+    queryFn: async () => {
+      const response = await api.get('/accountant/dashboard');
+      return response.data;
+    }
   });
 
   // Fetch fee invoices
-  const { data: invoices = [], isLoading: invoicesLoading } = useQuery('feeInvoices', async () => {
-    const response = await api.get('/fees/invoices');
-    return response.data || [];
+  const { data: invoices = [], isLoading: invoicesLoading } = useQuery({
+    queryKey: ['feeInvoices'],
+    queryFn: async () => {
+      const response = await api.get('/fees/invoices');
+      return response.data || [];
+    }
   });
 
   // Filter invoices based on status

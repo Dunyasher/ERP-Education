@@ -6,9 +6,14 @@ const teacherSchema = new mongoose.Schema({
     type: String,
     unique: true
   },
+  collegeId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'College',
+    required: true,
+    index: true
+  },
   teacherId: {
-    type: String,
-    unique: true
+    type: String
   },
   userId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -87,6 +92,9 @@ const teacherSchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
+
+// Compound index to ensure teacherId is unique per college
+teacherSchema.index({ teacherId: 1, collegeId: 1 }, { unique: true, sparse: true });
 
 // Generate SR No and Teacher ID before saving
 teacherSchema.pre('save', async function(next) {

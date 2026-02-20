@@ -7,12 +7,7 @@
 ```bash
 # Install root dependencies
 npm install
-
-# Install frontend dependencies
-cd frontend
-npm install
-cd ..
-```
+``` 
 
 ### 2. Setup Environment Variables
 

@@ -7,6 +7,7 @@ const Student = require('../models/Student');
 const User = require('../models/User');
 const Teacher = require('../models/Teacher');
 const { authenticate, authorize } = require('../middleware/auth');
+const { addCollegeFilter, buildCollegeQuery } = require('../middleware/collegeFilter');
 
 // Fee Structure Routes
 
@@ -271,6 +272,202 @@ router.delete('/invoices/:id', authenticate, authorize('admin', 'super_admin'), 
     res.json({ message: 'Invoice deleted successfully' });
   } catch (error) {
     console.error('Delete invoice error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// @route   GET /api/fees/student/:studentId/summary
+// @desc    Get comprehensive student fee summary with payment tracking
+// @access  Private
+router.get('/student/:studentId/summary', authenticate, addCollegeFilter, async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    
+    // Verify student belongs to user's college
+    const studentQuery = buildCollegeQuery(req, { _id: studentId });
+    const student = await Student.findOne(studentQuery)
+      .populate('userId', 'email')
+      .populate('academicInfo.courseId', 'name');
+    
+    if (!student) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+    
+    // Get all invoices for this student
+    const invoiceQuery = buildCollegeQuery(req, { studentId });
+    const invoices = await Invoice.find(invoiceQuery)
+      .populate('feeStructureId')
+      .sort({ invoiceDate: -1 });
+    
+    // Get all payment transactions for this student
+    let paymentTransactions = [];
+    try {
+      const PaymentTransactionModel = require('../models/PaymentTransaction');
+      paymentTransactions = await PaymentTransactionModel.find({ studentId })
+        .populate('invoiceId', 'invoiceNo dueDate')
+        .sort({ paymentDate: -1 });
+    } catch (error) {
+      console.error('Error fetching payment transactions:', error);
+    }
+    
+    // Calculate totals
+    let totalFeeAmount = 0;
+    let totalPaidAmount = 0;
+    let totalPendingAmount = 0;
+    let totalOverdueAmount = 0;
+    let paidOnTimeCount = 0;
+    let overdueCount = 0;
+    let pendingCount = 0;
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Process each invoice
+    const invoiceDetails = invoices.map(invoice => {
+      const invoiceTotal = invoice.totalAmount || 0;
+      const invoicePaid = invoice.paidAmount || 0;
+      const invoicePending = invoice.pendingAmount || (invoiceTotal - invoicePaid);
+      const dueDate = invoice.dueDate ? new Date(invoice.dueDate) : null;
+      const paymentDate = invoice.paymentDate ? new Date(invoice.paymentDate) : null;
+      
+      // Determine payment status
+      let paymentStatus = 'pending';
+      let isOverdue = false;
+      let isPaidOnTime = false;
+      
+      if (invoice.status === 'paid') {
+        if (dueDate && paymentDate) {
+          if (paymentDate <= dueDate) {
+            paymentStatus = 'paid_on_time';
+            isPaidOnTime = true;
+            paidOnTimeCount++;
+          } else {
+            paymentStatus = 'paid_late';
+            overdueCount++;
+          }
+        } else {
+          paymentStatus = 'paid';
+          paidOnTimeCount++;
+        }
+      } else if (invoice.status === 'partial') {
+        paymentStatus = 'partial';
+        pendingCount++;
+        if (dueDate && today > dueDate) {
+          isOverdue = true;
+          overdueCount++;
+        }
+      } else if (invoice.status === 'overdue') {
+        paymentStatus = 'overdue';
+        isOverdue = true;
+        overdueCount++;
+      } else {
+        paymentStatus = 'pending';
+        pendingCount++;
+        if (dueDate && today > dueDate) {
+          isOverdue = true;
+          overdueCount++;
+        }
+      }
+      
+      // Get payment transactions for this invoice
+      const invoiceTransactions = paymentTransactions.filter(txn => 
+        txn.invoiceId?._id?.toString() === invoice._id.toString()
+      );
+      
+      totalFeeAmount += invoiceTotal;
+      totalPaidAmount += invoicePaid;
+      totalPendingAmount += invoicePending;
+      
+      if (isOverdue) {
+        totalOverdueAmount += invoicePending;
+      }
+      
+      return {
+        invoiceId: invoice._id,
+        invoiceNo: invoice.invoiceNo,
+        invoiceDate: invoice.invoiceDate,
+        dueDate: invoice.dueDate,
+        paymentDate: invoice.paymentDate,
+        totalAmount: invoiceTotal,
+        paidAmount: invoicePaid,
+        pendingAmount: invoicePending,
+        discount: invoice.discount || 0,
+        status: invoice.status,
+        paymentStatus: paymentStatus,
+        isOverdue: isOverdue,
+        isPaidOnTime: isPaidOnTime,
+        items: invoice.items || [],
+        paymentMethod: invoice.paymentMethod,
+        collectedByName: invoice.collectedByName,
+        transactions: invoiceTransactions.map(txn => ({
+          transactionNo: txn.transactionNo,
+          amount: txn.amount,
+          paymentDate: txn.paymentDate,
+          paymentMethod: txn.paymentMethod,
+          receiptNo: txn.receiptNo,
+          notes: txn.notes
+        }))
+      };
+    });
+    
+    // Calculate overall payment percentage
+    const paymentPercentage = totalFeeAmount > 0 
+      ? ((totalPaidAmount / totalFeeAmount) * 100).toFixed(2)
+      : 0;
+    
+    // Determine overall payment status
+    let overallStatus = 'complete';
+    if (totalPendingAmount > 0) {
+      if (totalOverdueAmount > 0) {
+        overallStatus = 'overdue';
+      } else {
+        overallStatus = 'pending';
+      }
+    }
+    
+    // Get student's fee info
+    const studentTotalFee = student.feeInfo?.totalFee || 0;
+    const studentPaidFee = student.feeInfo?.paidFee || 0;
+    const studentPendingFee = student.feeInfo?.pendingFee || (studentTotalFee - studentPaidFee);
+    
+    // Use student's fee info if available, otherwise use calculated totals
+    const finalTotalFee = studentTotalFee > 0 ? studentTotalFee : totalFeeAmount;
+    const finalPaidFee = studentPaidFee > 0 ? studentPaidFee : totalPaidAmount;
+    const finalPendingFee = studentPendingFee > 0 ? studentPendingFee : totalPendingAmount;
+    
+    res.json({
+      studentId: student._id,
+      studentName: student.personalInfo?.fullName,
+      studentSrNo: student.srNo,
+      admissionNo: student.admissionNo,
+      course: student.academicInfo?.courseId?.name || 'N/A',
+      summary: {
+        totalFeeAmount: finalTotalFee,
+        totalPaidAmount: finalPaidFee,
+        totalPendingAmount: finalPendingFee,
+        totalOverdueAmount: totalOverdueAmount,
+        paymentPercentage: paymentPercentage,
+        overallStatus: overallStatus
+      },
+      paymentStatus: {
+        paidOnTime: paidOnTimeCount,
+        overdue: overdueCount,
+        pending: pendingCount,
+        totalInvoices: invoices.length
+      },
+      invoices: invoiceDetails,
+      confirmation: {
+        totalPaidOverall: finalPaidFee,
+        totalDueOverall: finalPendingFee,
+        totalFeeOverall: finalTotalFee,
+        lastPaymentDate: paymentTransactions.length > 0 
+          ? paymentTransactions[0].paymentDate 
+          : null,
+        paymentCount: paymentTransactions.length
+      }
+    });
+  } catch (error) {
+    console.error('Get student fee summary error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });

@@ -6,6 +6,12 @@ const categorySchema = new mongoose.Schema({
     type: String,
     unique: true
   },
+  collegeId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'College',
+    required: true,
+    index: true
+  },
   name: {
     type: String,
     required: true,
@@ -13,7 +19,6 @@ const categorySchema = new mongoose.Schema({
   },
   slug: {
     type: String,
-    unique: true,
     lowercase: true
   },
   instituteType: {
@@ -59,12 +64,14 @@ categorySchema.pre('save', async function(next) {
 
 // Index for efficient queries
 categorySchema.index({ categoryType: 1, instituteType: 1, isActive: 1 });
-// Unique index on name + categoryType + instituteType combination (sparse to handle missing categoryType)
-categorySchema.index({ name: 1, categoryType: 1, instituteType: 1 }, { 
+// Unique index on name + categoryType + instituteType + collegeId combination
+categorySchema.index({ name: 1, categoryType: 1, instituteType: 1, collegeId: 1 }, { 
   unique: true,
   sparse: true,
   partialFilterExpression: { isActive: true, categoryType: { $exists: true } }
 });
+// Unique index on slug per college
+categorySchema.index({ slug: 1, collegeId: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('Category', categorySchema);
 

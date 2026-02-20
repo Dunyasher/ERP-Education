@@ -1,6 +1,6 @@
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
 import api from '../../utils/api';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../store/hooks';
 import { DollarSign, CheckCircle, XCircle, Clock, AlertTriangle, Calendar, Receipt, TrendingUp } from 'lucide-react';
 import { useState } from 'react';
 
@@ -22,9 +22,9 @@ const StudentFees = () => {
   };
 
   // Fetch student fee summary
-  const { data: feeSummary, isLoading, error } = useQuery(
-    ['studentFeeSummary', user?.id],
-    async () => {
+  const { data: feeSummary, isLoading, error } = useQuery({
+    queryKey: ['studentFeeSummary', user?.id],
+    queryFn: async () => {
       const studentId = await getStudentId();
       if (!studentId) {
         throw new Error('Student record not found');
@@ -32,11 +32,9 @@ const StudentFees = () => {
       const response = await api.get(`/fees/student/${studentId}/summary`);
       return response.data;
     },
-    {
-      enabled: !!user?.id,
-      retry: 1
-    }
-  );
+    enabled: !!user?.id,
+    retry: 1
+  });
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-US', {

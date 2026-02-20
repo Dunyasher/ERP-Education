@@ -3,21 +3,38 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  optimizeDeps: {
+    include: ['react-redux', '@reduxjs/toolkit'],
+    force: true, // Force re-optimization
+  },
   server: {
-    port: 3000,
+    port: 5173,
     host: '0.0.0.0',
+    strictPort: false,
     proxy: {
       '/api': {
         target: 'http://localhost:5000',
         changeOrigin: true,
         secure: false,
+        ws: true, // Enable WebSocket proxying
         rewrite: (path) => path,
         configure: (proxy, _options) => {
           proxy.on('error', (err, _req, _res) => {
-            console.log('proxy error', err);
+            console.error('❌ Proxy error:', err.message);
           });
           proxy.on('proxyReq', (proxyReq, req, _res) => {
-            console.log('Proxying request:', req.method, req.url, '->', 'http://localhost:5000' + req.url);
+            // Log only in development for cleaner output
+            const isDev = process.env.NODE_ENV !== 'production';
+            if (isDev) {
+              console.log(`🔄 ${req.method} ${req.url} -> http://localhost:5000${req.url}`);
+            }
+          });
+          proxy.on('proxyRes', (proxyRes, req, _res) => {
+            // Log successful responses in development
+            const isDev = process.env.NODE_ENV !== 'production';
+            if (isDev && proxyRes.statusCode >= 200 && proxyRes.statusCode < 300) {
+              console.log(`✅ ${req.method} ${req.url} - ${proxyRes.statusCode}`);
+            }
           });
         }
       }

@@ -1,20 +1,21 @@
 import { useState } from 'react';
-import { useAuth } from '../contexts/AuthContext';
+import { useAppDispatch } from '../store/hooks';
+import { login } from '../store/slices/authSlice';
 import { GraduationCap } from 'lucide-react';
 
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const dispatch = useAppDispatch();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
-      await login(email, password);
+      await dispatch(login({ email, password })).unwrap();
     } catch (error) {
-      // Error handled in AuthContext
+      // Error handled in authSlice
     } finally {
       setLoading(false);
     }

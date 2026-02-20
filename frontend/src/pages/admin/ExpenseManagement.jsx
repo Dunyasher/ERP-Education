@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from 'react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
 import { Plus, Edit, Trash2, Search, DollarSign, Calendar, Filter, Download } from 'lucide-react';

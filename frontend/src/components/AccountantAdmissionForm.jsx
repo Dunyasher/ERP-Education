@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { useQuery, useMutation, useQueryClient } from 'react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../store/hooks';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
 import { X, Save, Printer, User, Phone, MapPin, DollarSign, BookOpen, Link2, School } from 'lucide-react';

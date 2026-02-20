@@ -1,4 +1,4 @@
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
 import api from '../../utils/api';
 import { BookOpen, DollarSign, FileText, Calendar, User, GraduationCap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -7,19 +7,22 @@ const StudentDashboard = () => {
   const navigate = useNavigate();
 
   // Fetch student dashboard stats
-  const { data: stats, isLoading } = useQuery('studentStats', async () => {
-    try {
-      const response = await api.get('/dashboard/student');
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching student stats:', error);
-      return {
-        myCourses: [],
-        pendingFees: 0,
-        totalFees: 0,
-        paidFees: 0,
-        attendance: { present: 0, total: 0 }
-      };
+  const { data: stats, isLoading } = useQuery({
+    queryKey: ['studentStats'],
+    queryFn: async () => {
+      try {
+        const response = await api.get('/dashboard/student');
+        return response.data;
+      } catch (error) {
+        console.error('Error fetching student stats:', error);
+        return {
+          myCourses: [],
+          pendingFees: 0,
+          totalFees: 0,
+          paidFees: 0,
+          attendance: { present: 0, total: 0 }
+        };
+      }
     }
   });
 

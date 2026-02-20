@@ -4,36 +4,41 @@
   "description": "Complete Education ERP System (CMS + LMS + IMS)",
   "main": "server.js",
   "scripts": {
-    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "dev": "concurrently \"npm run server:watch\" \"npm run client\" --names \"backend,frontend\" --prefix-colors \"blue,green\"",
     "server": "node backend/server.js",
-    "server:watch": "nodemon backend/server.js",
-    "client": "cd frontend && npm start",
-    "client:win": "cd frontend && npm start",
+    "server:watch": "cd backend && nodemon server.js",
+    "client": "cd frontend && npm run dev",
+    "client:win": "cd frontend && npm run dev",
     "install-all": "npm install && cd frontend && npm install",
     "create-admin": "node backend/scripts/createAdmin.js",
     "start:backend": "node backend/server.js",
-    "start:frontend": "cd frontend && npm start"
+    "start:frontend": "cd frontend && npm run dev"
   },
-  "keywords": ["education", "erp", "lms", "cms", "ims"],
+  "keywords": [
+    "education",
+    "erp",
+    "lms",
+    "cms",
+    "ims"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "express": "^4.18.2",
-    "mongoose": "^7.5.0",
     "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.2",
-    "dotenv": "^16.3.1",
     "cors": "^2.8.5",
-    "multer": "^1.4.5-lts.1",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
     "express-validator": "^7.0.1",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^7.5.0",
+    "multer": "^1.4.5-lts.1",
     "nodemailer": "^6.9.7",
+    "pdfkit": "^0.13.0",
     "qrcode": "^1.5.3",
-    "pdfkit": "^0.13.0"
+    "react-datepicker": "^9.1.0"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1",
-    "concurrently": "^8.2.1"
+    "concurrently": "^8.2.1",
+    "nodemon": "^3.0.1"
   }
 }
-
-                                                                                    

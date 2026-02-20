@@ -29,6 +29,10 @@ router.get('/admin', authenticate, async (req, res) => {
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
     const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
     
+    // Get current year start and end dates
+    const currentYearStart = new Date(now.getFullYear(), 0, 1);
+    const currentYearEnd = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+    
     // Get all students with their courses and categories for department breakdown
     let students = [];
     let departmentStats = [];
@@ -124,6 +128,78 @@ router.get('/admin', authenticate, async (req, res) => {
       monthlyIncome = 0;
     }
     
+    // Calculate today's income (from invoices paid today)
+    let todayIncome = 0;
+    try {
+      const todayIncomeResult = await Invoice.aggregate([
+        {
+          $match: {
+            status: { $in: ['paid', 'partial'] },
+            $or: [
+              {
+                paymentDate: {
+                  $gte: todayStart,
+                  $lte: todayEnd
+                }
+              },
+              {
+                $and: [
+                  { paymentDate: { $exists: false } },
+                  { updatedAt: { $gte: todayStart, $lte: todayEnd } }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: '$paidAmount' }
+          }
+        }
+      ]);
+      todayIncome = todayIncomeResult[0]?.total || 0;
+    } catch (todayIncomeError) {
+      console.error('Error calculating today income:', todayIncomeError.message);
+      todayIncome = 0;
+    }
+    
+    // Calculate total income this year
+    let totalIncomeThisYear = 0;
+    try {
+      const yearIncomeResult = await Invoice.aggregate([
+        {
+          $match: {
+            status: { $in: ['paid', 'partial'] },
+            $or: [
+              {
+                paymentDate: {
+                  $gte: currentYearStart,
+                  $lte: currentYearEnd
+                }
+              },
+              {
+                $and: [
+                  { paymentDate: { $exists: false } },
+                  { updatedAt: { $gte: currentYearStart, $lte: currentYearEnd } }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: '$paidAmount' }
+          }
+        }
+      ]);
+      totalIncomeThisYear = yearIncomeResult[0]?.total || 0;
+    } catch (yearIncomeError) {
+      console.error('Error calculating yearly income:', yearIncomeError.message);
+      totalIncomeThisYear = 0;
+    }
+    
     // Calculate monthly expenses
     let monthlyExpenses = 0;
     try {
@@ -146,9 +222,77 @@ router.get('/admin', authenticate, async (req, res) => {
       monthlyExpenses = monthlyExpensesResult[0]?.total || 0;
     } catch (expenseError) {
       console.error('Error calculating monthly expenses:', expenseError.message);
-      // Continue with 0 expenses if there's an error
       monthlyExpenses = 0;
     }
+    
+    // Calculate today's expenses
+    let todayExpenses = 0;
+    try {
+      const todayExpensesResult = await Expense.aggregate([
+        {
+          $match: {
+            date: {
+              $gte: todayStart,
+              $lte: todayEnd
+            }
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: '$amount' }
+          }
+        }
+      ]);
+      todayExpenses = todayExpensesResult[0]?.total || 0;
+    } catch (todayExpenseError) {
+      console.error('Error calculating today expenses:', todayExpenseError.message);
+      todayExpenses = 0;
+    }
+    
+    // Calculate total expenses this year
+    let totalExpenseThisYear = 0;
+    try {
+      const yearExpensesResult = await Expense.aggregate([
+        {
+          $match: {
+            date: {
+              $gte: currentYearStart,
+              $lte: currentYearEnd
+            }
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: '$amount' }
+          }
+        }
+      ]);
+      totalExpenseThisYear = yearExpensesResult[0]?.total || 0;
+    } catch (yearExpenseError) {
+      console.error('Error calculating yearly expenses:', yearExpenseError.message);
+      totalExpenseThisYear = 0;
+    }
+    
+    // Calculate dues (pending fees)
+    let duesAmount = 0;
+    let duesCount = 0;
+    try {
+      const pendingInvoices = await Invoice.find({
+        status: { $in: ['pending', 'partial', 'overdue'] },
+        pendingAmount: { $gt: 0 }
+      });
+      duesAmount = pendingInvoices.reduce((sum, inv) => sum + (inv.pendingAmount || 0), 0);
+      duesCount = pendingInvoices.length;
+    } catch (duesError) {
+      console.error('Error calculating dues:', duesError.message);
+      duesAmount = 0;
+      duesCount = 0;
+    }
+    
+    // Calculate profit this month (income - expenses)
+    const profitThisMonth = monthlyIncome - monthlyExpenses;
     
     // Get other stats
     let totalStudents = 0;
@@ -260,7 +404,14 @@ router.get('/admin', authenticate, async (req, res) => {
       totalFeeAmount,
       amountCollected,
       monthlyIncome,
+      todayIncome,
+      totalIncomeThisYear,
       monthlyExpenses,
+      todayExpenses,
+      totalExpenseThisYear,
+      profitThisMonth,
+      duesAmount,
+      duesCount,
       netBalance: monthlyIncome - monthlyExpenses,
       // Admission statistics
       admissionsThisMonth,

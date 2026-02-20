@@ -6,6 +6,12 @@ const expenseSchema = new mongoose.Schema({
     type: String,
     unique: true
   },
+  collegeId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'College',
+    required: false, // Temporarily optional for backward compatibility
+    index: true
+  },
   date: {
     type: Date,
     required: true,

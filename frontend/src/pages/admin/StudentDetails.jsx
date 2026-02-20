@@ -1,8 +1,8 @@
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
 import api from '../../utils/api';
 import { ArrowLeft, Users, DollarSign, Edit, X, User, Phone, Mail, Calendar, GraduationCap, BookOpen, MapPin, CreditCard, FileText, CheckCircle, Clock, AlertCircle, UserCircle, PhoneCall, Printer } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../store/hooks';
 import { useEffect } from 'react';
 
 const StudentDetails = () => {
@@ -21,22 +21,31 @@ const StudentDetails = () => {
   };
 
   // Fetch student details
-  const { data: studentDetail, isLoading: isLoadingDetail } = useQuery(
-    ['studentDetail', id],
-    async () => {
+  const { data: studentDetail, isLoading: isLoadingDetail, error: studentError } = useQuery({
+    queryKey: ['studentDetail', id],
+    queryFn: async () => {
       if (!id) return null;
-      const response = await api.get(`/students/${id}`);
-      return response.data;
+      console.log('📥 Fetching student details for ID:', id);
+      try {
+        const response = await api.get(`/students/${id}`);
+        console.log('✅ Student data received:', response.data);
+        console.log('   Student name:', response.data?.personalInfo?.fullName || 'N/A');
+        console.log('   Student email:', response.data?.userId?.email || 'N/A');
+        return response.data;
+      } catch (error) {
+        console.error('❌ Error fetching student:', error);
+        console.error('   Status:', error.response?.status);
+        console.error('   Message:', error.response?.data?.message || error.message);
+        throw error;
+      }
     },
-    {
-      enabled: !!id,
-    }
-  );
+    enabled: !!id,
+  });
 
   // Fetch invoices for the student to get fee breakdown
-  const { data: studentInvoices = [] } = useQuery(
-    ['studentInvoices', id],
-    async () => {
+  const { data: studentInvoices = [] } = useQuery({
+    queryKey: ['studentInvoices', id],
+    queryFn: async () => {
       if (!id) return [];
       try {
         const response = await api.get('/fees/invoices');
@@ -51,10 +60,8 @@ const StudentDetails = () => {
         return [];
       }
     },
-    {
-      enabled: !!id,
-    }
-  );
+    enabled: !!id,
+  });
 
   // Print styles - Optimized to fit all data on one page
   // IMPORTANT: useEffect must be called before any early returns to follow Rules of Hooks
@@ -273,12 +280,33 @@ const StudentDetails = () => {
     );
   }
 
+  if (studentError) {
+    const errorMessage = studentError.response?.data?.message || studentError.message || 'Failed to load student details';
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center p-6">
+        <div className="text-center bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 max-w-md">
+          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <p className="text-gray-600 dark:text-gray-400 mb-2 text-lg font-semibold">Error Loading Student</p>
+          <p className="text-gray-500 dark:text-gray-500 mb-6 text-sm">{errorMessage}</p>
+          <p className="text-gray-400 dark:text-gray-600 mb-6 text-xs">Status: {studentError.response?.status || 'Unknown'}</p>
+          <button
+            onClick={() => navigate(getBackPath())}
+            className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl font-medium"
+          >
+            Back to Students
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!studentDetail) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center p-6">
         <div className="text-center bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 max-w-md">
           <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <p className="text-gray-600 dark:text-gray-400 mb-6 text-lg">Student not found</p>
+          <p className="text-gray-500 dark:text-gray-500 mb-6 text-sm">Student ID: {id}</p>
           <button
             onClick={() => navigate(getBackPath())}
             className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl font-medium"

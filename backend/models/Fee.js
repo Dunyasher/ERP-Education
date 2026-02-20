@@ -6,6 +6,12 @@ const feeStructureSchema = new mongoose.Schema({
     type: String,
     unique: true
   },
+  collegeId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'College',
+    required: true,
+    index: true
+  },
   name: {
     type: String,
     required: true
@@ -55,8 +61,13 @@ feeStructureSchema.pre('save', async function(next) {
 
 const invoiceSchema = new mongoose.Schema({
   invoiceNo: {
-    type: String,
-    unique: true
+    type: String
+  },
+  collegeId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'College',
+    required: true,
+    index: true
   },
   studentId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -122,24 +133,41 @@ invoiceSchema.pre('save', async function(next) {
   next();
 });
 
-// Calculate amounts
+// Calculate amounts and update status
 invoiceSchema.pre('save', function(next) {
   if (this.items && this.items.length > 0) {
     this.subtotal = this.items.reduce((sum, item) => sum + (item.amount * item.quantity), 0);
     this.totalAmount = this.subtotal - (this.discount || 0);
     this.pendingAmount = this.totalAmount - (this.paidAmount || 0);
-    
-    // Update status
-    if (this.pendingAmount <= 0) {
-      this.status = 'paid';
-    } else if (this.paidAmount > 0) {
-      this.status = 'partial';
-    } else if (this.dueDate && new Date() > this.dueDate) {
+  }
+  
+  // Update status based on payment and due date
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  if (this.pendingAmount <= 0) {
+    this.status = 'paid';
+  } else if (this.paidAmount > 0) {
+    // Check if partial payment is overdue
+    if (this.dueDate && new Date(this.dueDate) < today) {
       this.status = 'overdue';
+    } else {
+      this.status = 'partial';
+    }
+  } else {
+    // No payment made - check if overdue
+    if (this.dueDate && new Date(this.dueDate) < today) {
+      this.status = 'overdue';
+    } else {
+      this.status = 'pending';
     }
   }
+  
   next();
 });
+
+// Compound index to ensure invoiceNo is unique per college
+invoiceSchema.index({ invoiceNo: 1, collegeId: 1 }, { unique: true, sparse: true });
 
 module.exports = {
   FeeStructure: mongoose.model('FeeStructure', feeStructureSchema),

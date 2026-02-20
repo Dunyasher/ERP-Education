@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
 import api from '../../utils/api';
 import { Calendar, DollarSign, Search, Plus, Eye } from 'lucide-react';
 import MonthlyPaymentRecording from '../../components/MonthlyPaymentRecording';

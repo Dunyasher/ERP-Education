@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from 'react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
 import {
@@ -29,9 +29,10 @@ import {
   AlertTriangle,
   Shield,
   KeyRound,
-  Building2
+  Building2,
+  XCircle
 } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../store/hooks';
 
 const Settings = () => {
   const { user } = useAuth();
@@ -89,46 +90,51 @@ const Settings = () => {
   });
 
   // Fetch current user profile
-  const { data: currentUser } = useQuery('currentProfile', async () => {
-    const response = await api.get('/settings/profile');
-    return response.data;
+  const { data: currentUser } = useQuery({
+    queryKey: ['currentProfile'],
+    queryFn: async () => {
+      const response = await api.get('/settings/profile');
+      return response.data;
+    }
   });
 
   // Fetch all users (Admin only)
-  const { data: users = [] } = useQuery('allUsers', async () => {
-    const response = await api.get('/settings/users');
-    return response.data;
-  }, {
+  const { data: users = [] } = useQuery({
+    queryKey: ['allUsers'],
+    queryFn: async () => {
+      const response = await api.get('/settings/users');
+      return response.data;
+    },
     enabled: activeTab === 'users'
   });
 
   // Fetch all college admins (Super Admin only)
-  const { data: allAdminsData, refetch: refetchAdmins } = useQuery('allCollegeAdmins', async () => {
-    const response = await api.get('/colleges/all-admins');
-    return response.data;
-  }, {
+  const { data: allAdminsData, refetch: refetchAdmins } = useQuery({
+    queryKey: ['allCollegeAdmins'],
+    queryFn: async () => {
+      const response = await api.get('/colleges/all-admins');
+      return response.data;
+    },
     enabled: user?.role === 'super_admin' && activeTab === 'college-admins'
   });
 
   // Reset admin password mutation
-  const resetPasswordMutation = useMutation(
-    async ({ adminId, newPassword }) => {
+  const resetPasswordMutation = useMutation({
+    mutationFn: async ({ adminId, newPassword }) => {
       return api.put(`/colleges/admins/${adminId}/reset-password`, { newPassword });
     },
-    {
-      onSuccess: () => {
-        refetchAdmins();
-        toast.success('Password reset successfully');
-      },
-      onError: (error) => {
-        toast.error(error.response?.data?.message || 'Failed to reset password');
-      }
+    onSuccess: () => {
+      refetchAdmins();
+      toast.success('Password reset successfully');
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to reset password');
     }
-  );
+  });
 
   // Create new admin mutation
-  const createAdminMutation = useMutation(
-    async (formData) => {
+  const createAdminMutation = useMutation({
+    mutationFn: async (formData) => {
       const { email, password, firstName, lastName, phone, collegeId } = formData;
       return api.post(`/colleges/${collegeId}/assign-admin`, {
         email,
@@ -140,25 +146,23 @@ const Settings = () => {
         }
       });
     },
-    {
-      onSuccess: () => {
-        refetchAdmins();
-        setShowCreateAdminModal(false);
-        setCreateAdminForm({
-          email: '',
-          password: '',
-          firstName: '',
-          lastName: '',
-          phone: '',
-          collegeId: ''
-        });
-        toast.success('Admin created successfully');
-      },
-      onError: (error) => {
-        toast.error(error.response?.data?.message || 'Failed to create admin');
-      }
+    onSuccess: () => {
+      refetchAdmins();
+      setShowCreateAdminModal(false);
+      setCreateAdminForm({
+        email: '',
+        password: '',
+        firstName: '',
+        lastName: '',
+        phone: '',
+        collegeId: ''
+      });
+      toast.success('Admin created successfully');
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to create admin');
     }
-  );
+  });
 
   const handleCreateAdmin = (e) => {
     e.preventDefault();
@@ -174,10 +178,12 @@ const Settings = () => {
   };
 
   // Fetch all colleges for admin creation (Super Admin only)
-  const { data: collegesData } = useQuery('allColleges', async () => {
-    const response = await api.get('/super-admin/institutes');
-    return response.data;
-  }, {
+  const { data: collegesData } = useQuery({
+    queryKey: ['allColleges'],
+    queryFn: async () => {
+      const response = await api.get('/super-admin/institutes');
+      return response.data;
+    },
     enabled: user?.role === 'super_admin' && showCreateAdminModal
   });
 
@@ -193,9 +199,12 @@ const Settings = () => {
   }, [users, userSearchQuery]);
 
   // Fetch system stats
-  const { data: stats } = useQuery('systemStats', async () => {
-    const response = await api.get('/settings/stats');
-    return response.data;
+  const { data: stats } = useQuery({
+    queryKey: ['systemStats'],
+    queryFn: async () => {
+      const response = await api.get('/settings/stats');
+      return response.data;
+    }
   });
 
   // Update profile form when user data loads
@@ -211,8 +220,8 @@ const Settings = () => {
   }, [currentUser]);
 
   // Update profile mutation
-  const updateProfileMutation = useMutation(
-    async (data) => {
+  const updateProfileMutation = useMutation({
+    mutationFn: async (data) => {
       const payload = {
         email: data.email || undefined,
         profile: {}
@@ -231,113 +240,103 @@ const Settings = () => {
       
       return api.put('/settings/profile', payload);
     },
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries('currentProfile');
-        queryClient.invalidateQueries('allUsers');
-        toast.success('Profile updated successfully');
-      },
-      onError: (error) => {
-        console.error('Profile update error:', error);
-        const errorMessage = error.response?.data?.message || 
-                           error.response?.data?.error || 
-                           'Failed to update profile';
-        toast.error(errorMessage);
-        
-        // Show validation errors if available
-        if (error.response?.data?.errors && Array.isArray(error.response.data.errors)) {
-          error.response.data.errors.forEach(err => {
-            if (err.msg) {
-              toast.error(err.msg);
-            }
-          });
-        }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['currentProfile'] });
+      queryClient.invalidateQueries({ queryKey: ['allUsers'] });
+      toast.success('Profile updated successfully');
+    },
+    onError: (error) => {
+      console.error('Profile update error:', error);
+      const errorMessage = error.response?.data?.message || 
+                         error.response?.data?.error || 
+                         'Failed to update profile';
+      toast.error(errorMessage);
+      
+      // Show validation errors if available
+      if (error.response?.data?.errors && Array.isArray(error.response.data.errors)) {
+        error.response.data.errors.forEach(err => {
+          if (err.msg) {
+            toast.error(err.msg);
+          }
+        });
       }
     }
-  );
+  });
 
   // Change password mutation
-  const changePasswordMutation = useMutation(
-    async (data) => {
+  const changePasswordMutation = useMutation({
+    mutationFn: async (data) => {
       return api.put('/settings/password', {
         currentPassword: data.currentPassword,
         newPassword: data.newPassword
       });
     },
-    {
-      onSuccess: () => {
-        setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
-        toast.success('Password changed successfully');
-      },
-      onError: (error) => {
-        console.error('Password change error:', error);
-        const errorMessage = error.response?.data?.message || 
-                           error.response?.data?.error || 
-                           'Failed to change password';
-        toast.error(errorMessage);
-        
-        // Show validation errors if available
-        if (error.response?.data?.errors && Array.isArray(error.response.data.errors)) {
-          error.response.data.errors.forEach(err => {
-            if (err.msg) {
-              toast.error(err.msg);
-            }
-          });
-        }
+    onSuccess: () => {
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      toast.success('Password changed successfully');
+    },
+    onError: (error) => {
+      console.error('Password change error:', error);
+      const errorMessage = error.response?.data?.message || 
+                         error.response?.data?.error || 
+                         'Failed to change password';
+      toast.error(errorMessage);
+      
+      // Show validation errors if available
+      if (error.response?.data?.errors && Array.isArray(error.response.data.errors)) {
+        error.response.data.errors.forEach(err => {
+          if (err.msg) {
+            toast.error(err.msg);
+          }
+        });
       }
     }
-  );
+  });
 
   // Update user mutation (Admin)
-  const updateUserMutation = useMutation(
-    async ({ userId, data }) => {
+  const updateUserMutation = useMutation({
+    mutationFn: async ({ userId, data }) => {
       return api.put(`/settings/users/${userId}`, data);
     },
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries('allUsers');
-        setEditingUserId(null);
-        toast.success('User updated successfully');
-      },
-      onError: (error) => {
-        toast.error(error.response?.data?.message || 'Failed to update user');
-      }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['allUsers'] });
+      setEditingUserId(null);
+      toast.success('User updated successfully');
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to update user');
     }
-  );
+  });
 
   // Change user password mutation (Admin)
-  const changeUserPasswordMutation = useMutation(
-    async ({ userId, password }) => {
+  const changeUserPasswordMutation = useMutation({
+    mutationFn: async ({ userId, password }) => {
       return api.put(`/settings/password/${userId}`, { newPassword: password });
     },
-    {
-      onSuccess: () => {
-        toast.success('Password updated successfully');
-        setShowEditPasswordModal(false);
-        setSelectedUser(null);
-        setEditPasswordForm({ newPassword: '', confirmPassword: '' });
-      },
-      onError: (error) => {
-        toast.error(error.response?.data?.message || 'Failed to update password');
-      }
+    onSuccess: () => {
+      toast.success('Password updated successfully');
+      setShowEditPasswordModal(false);
+      setSelectedUser(null);
+      setEditPasswordForm({ newPassword: '', confirmPassword: '' });
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to update password');
     }
-  );
+  });
 
   // Delete user mutation (Admin)
-  const deleteUserMutation = useMutation(
-    async (userId) => {
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId) => {
       return api.delete(`/settings/users/${userId}`);
     },
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries('allUsers');
-        toast.success('User deleted successfully');
-      },
-      onError: (error) => {
-        toast.error(error.response?.data?.message || 'Failed to delete user');
-      }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['allUsers'] });
+      toast.success('User deleted successfully');
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to delete user');
     }
-  );
+  });
 
   const handleProfileSubmit = (e) => {
     e.preventDefault();
@@ -429,47 +428,47 @@ const Settings = () => {
   };
 
   // Fetch notifications
-  const { data: notifications = [], refetch: refetchNotifications } = useQuery('notifications', async () => {
-    const response = await api.get('/notifications?limit=100');
-    return response.data;
-  }, {
+  const { data: notifications = [], refetch: refetchNotifications } = useQuery({
+    queryKey: ['notifications'],
+    queryFn: async () => {
+      const response = await api.get('/notifications?limit=100');
+      return response.data;
+    },
     enabled: activeTab === 'notifications',
     refetchInterval: activeTab === 'notifications' ? 30000 : false // Refetch every 30 seconds when on notifications tab
   });
 
-  const { data: unreadCount = { count: 0 } } = useQuery('unreadNotifications', async () => {
-    const response = await api.get('/notifications/unread/count');
-    return response.data;
-  }, {
+  const { data: unreadCount = { count: 0 } } = useQuery({
+    queryKey: ['unreadNotifications'],
+    queryFn: async () => {
+      const response = await api.get('/notifications/unread/count');
+      return response.data;
+    },
     refetchInterval: 30000 // Refetch every 30 seconds
   });
 
   // Mark notification as read
-  const markAsReadMutation = useMutation(
-    async (notificationId) => {
+  const markAsReadMutation = useMutation({
+    mutationFn: async (notificationId) => {
       return api.put(`/notifications/${notificationId}/read`);
     },
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries('notifications');
-        queryClient.invalidateQueries('unreadNotifications');
-      }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['unreadNotifications'] });
     }
-  );
+  });
 
   // Mark all as read
-  const markAllAsReadMutation = useMutation(
-    async () => {
+  const markAllAsReadMutation = useMutation({
+    mutationFn: async () => {
       return api.put('/notifications/read-all');
     },
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries('notifications');
-        queryClient.invalidateQueries('unreadNotifications');
-        toast.success('All notifications marked as read');
-      }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['unreadNotifications'] });
+      toast.success('All notifications marked as read');
     }
-  );
+  });
 
   const tabs = [
     { id: 'profile', name: 'My Profile', icon: User },

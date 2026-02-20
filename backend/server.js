@@ -16,24 +16,48 @@ if (!fs.existsSync(uploadsDir)) {
 
 const app = express();
 
-// Middleware - CORS Configuration
+// Middleware - CORS Configuration (Optimized for seamless connection)
 app.use(cors({
   origin: [
     'http://localhost:3000', 
     'http://localhost:5173', 
     'http://127.0.0.1:3000', 
     'http://127.0.0.1:5173',
-    'http://localhost:3000',
-    'http://127.0.0.1:3000'
+    'http://localhost:5173',
+    'http://127.0.0.1:5173'
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  exposedHeaders: ['Content-Range', 'X-Content-Range']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  optionsSuccessStatus: 200,
+  preflightContinue: false
 }));
-// Increase JSON payload limit and add timeout
-app.use(express.json({ limit: '10mb', extended: true }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
+// Increase JSON payload limit and optimize parsing
+app.use(express.json({ 
+  limit: '10mb', 
+  extended: true,
+  strict: false // Allow non-strict JSON
+}));
+app.use(express.urlencoded({ 
+  limit: '10mb', 
+  extended: true,
+  parameterLimit: 50000
+}));
+
+// Fix typo middleware: collegeld -> collegeId
+app.use((req, res, next) => {
+  if (req.body && req.body.collegeld) {
+    req.body.collegeId = req.body.collegeld;
+    delete req.body.collegeld;
+  }
+  if (req.query && req.query.collegeld) {
+    req.query.collegeId = req.query.collegeld;
+    delete req.query.collegeld;
+  }
+  next();
+});
+
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Request timeout middleware (30 seconds)
@@ -112,6 +136,9 @@ app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/classes', require('./routes/classes'));
 app.use('/api/settings', require('./routes/settings'));
+app.use('/api/colleges', require('./routes/colleges'));
+app.use('/api/super-admin', require('./routes/superAdmin'));
+app.use('/api/qrcode', require('./routes/qrcode'));
 app.use('/api/audit', require('./routes/audit'));
 app.use('/api/staff-requests', require('./routes/staffRequests'));
 app.use('/api/staff-categories', require('./routes/staffCategories'));
@@ -185,10 +212,16 @@ const PORT = process.env.PORT || 5000;
 
 // Start server with error handling
 const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📡 Access at: http://localhost:${PORT}`);
-  console.log(`🏥 Health check: http://localhost:${PORT}/api/health`);
-  console.log(`✅ Server is ready to accept connections`);
+  console.log('\n' + '='.repeat(60));
+  console.log('🚀 EDUCATION ERP BACKEND SERVER');
+  console.log('='.repeat(60));
+  console.log(`✅ Server running on port ${PORT}`);
+  console.log(`📡 API Base URL: http://localhost:${PORT}/api`);
+  console.log(`🏥 Health Check: http://localhost:${PORT}/api/health`);
+  console.log(`🌐 CORS Enabled for: http://localhost:5173`);
+  console.log(`📊 MongoDB: ${mongoose.connection.readyState === 1 ? '✅ Connected' : '⏳ Connecting...'}`);
+  console.log('='.repeat(60));
+  console.log('✅ Server is ready to accept connections\n');
 });
 
 // Handle server errors

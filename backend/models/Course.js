@@ -6,6 +6,12 @@ const courseSchema = new mongoose.Schema({
     type: String,
     unique: true
   },
+  collegeId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'College',
+    required: true,
+    index: true
+  },
   name: {
     type: String,
     required: true,
@@ -13,7 +19,6 @@ const courseSchema = new mongoose.Schema({
   },
   slug: {
     type: String,
-    unique: true,
     lowercase: true
   },
   categoryId: {
@@ -96,6 +101,9 @@ const courseSchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
+
+// Compound index to ensure slug is unique per college
+courseSchema.index({ slug: 1, collegeId: 1 }, { unique: true });
 
 // Generate slug from name
 courseSchema.pre('save', async function(next) {

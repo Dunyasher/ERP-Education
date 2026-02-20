@@ -1,5 +1,6 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, useTheme, useAppDispatch } from '../store/hooks';
+import { logout } from '../store/slices/authSlice';
 import {
   LayoutDashboard,
   Users,
@@ -33,11 +34,15 @@ import {
   Circle
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { useTheme } from '../contexts/ThemeContext';
 
 const Layout = () => {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const dispatch = useAppDispatch();
+  
+  const handleLogout = () => {
+    dispatch(logout());
+  };
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [openSubmenus, setOpenSubmenus] = useState({});
@@ -48,11 +53,6 @@ const Layout = () => {
       { name: 'Print Student Cards', path: '/admin/print-id-cards', icon: Users },
       { name: 'Print Staff Cards', path: '/admin/print-staff-cards', icon: GraduationCap },
       { name: 'ID Card Settings', path: '/admin/id-card-settings', icon: Settings },
-    ],
-    'Admission Management': [
-      { name: 'New Admission', path: '/admin/fees', icon: UserPlus },
-      { name: 'Admission List', path: '/admin/admissions', icon: FileText },
-      { name: 'Admission Reports', path: '/admin/admissions/reports', icon: BarChart3 },
     ],
     'Student Management': [
       { name: 'All Students', path: '/admin/students', icon: Users },
@@ -71,7 +71,6 @@ const Layout = () => {
 
   const adminMenu = [
     { name: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard, hasSubmenu: false },
-    { name: 'Admission Management', path: '/admin/fees', icon: UserPlus, hasSubmenu: true },
     { name: 'Student Management', path: '/admin/students', icon: Users, hasSubmenu: true },
     { name: 'Staff Management', path: '/admin/teachers', icon: GraduationCap, hasSubmenu: false },
     { name: 'ID Card Printing', path: '/admin/id-card-menu', icon: CreditCard, hasSubmenu: true },
@@ -296,7 +295,7 @@ const Layout = () => {
               
               {/* Logout Button */}
               <button
-                onClick={logout}
+                onClick={handleLogout}
                 className="w-full flex items-center space-x-3 px-4 py-3 text-white hover:bg-blue-800 transition-colors"
               >
                 <LogOut size={20} className="text-white" />
