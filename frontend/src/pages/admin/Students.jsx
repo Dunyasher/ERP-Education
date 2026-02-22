@@ -3,10 +3,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
-import { Plus, Edit, Trash2, Search, Users, Eye, Printer, X, Lock, EyeOff, AlertTriangle, DollarSign, FileText } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Users, Eye, Printer, X, Lock, EyeOff, AlertTriangle, DollarSign, FileText, CreditCard, Receipt, CheckCircle, User } from 'lucide-react';
 import StudentAdmissionPrint from '../../components/StudentAdmissionPrint';
 import AccountantAdmissionForm from '../../components/AccountantAdmissionForm';
 import ErrorCorrection from '../../components/ErrorCorrection';
+import MonthlyPaymentRecording from '../../components/MonthlyPaymentRecording';
 import { useAuth } from '../../store/hooks';
 
 const Students = () => {
@@ -42,6 +43,10 @@ const Students = () => {
     confirmPassword: ''
   });
   const [showPassword, setShowPassword] = useState(false);
+  const [selectedStudentForPayment, setSelectedStudentForPayment] = useState(null);
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [showPaymentSearchModal, setShowPaymentSearchModal] = useState(false);
+  const [paymentSearchTerm, setPaymentSearchTerm] = useState('');
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -498,6 +503,20 @@ const Students = () => {
     navigate(path);
   };
 
+  const handleRecordPayment = (student) => {
+    setSelectedStudentForPayment(student);
+    setShowPaymentForm(true);
+  };
+
+  const handlePaymentSuccess = (updatedStudent) => {
+    // Refresh students list
+    queryClient.invalidateQueries({ queryKey: ['students'] });
+    // Update the student in the list if available
+    if (updatedStudent) {
+      setSelectedStudentForPayment(updatedStudent);
+    }
+  };
+
   if (isLoading) {
     return <div className="text-center py-12">Loading students...</div>;
   }
@@ -513,22 +532,34 @@ const Students = () => {
             {isAccountant ? 'Add new admissions and manage student records' : 'Manage all students in the system'}
           </p>
         </div>
-        <button
-          onClick={() => {
-            if (isAccountant) {
-              setShowForm(true);
-              setEditingStudent(null);
-            } else {
-              setShowForm(true);
-              setEditingStudent(null);
-              resetForm();
-            }
-          }}
-          className="btn-primary flex items-center gap-2"
-        >
-          <Plus className="w-5 h-5" />
-          {isAccountant ? 'Add Admission' : 'Add Student'}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => {
+              setShowPaymentSearchModal(true);
+              setPaymentSearchTerm('');
+              setSelectedStudentForPayment(null);
+            }}
+            className="btn-primary flex items-center gap-2 bg-green-600 hover:bg-green-700"
+          >
+            <Receipt className="w-5 h-5" />
+            Add Payment
+          </button>
+          <button
+            onClick={() => {
+              if (isAccountant) {
+                setShowForm(true);
+                setEditingStudent(null);
+              } else {
+                // Navigate to dedicated new admission page
+                navigate('/admin/students/new');
+              }
+            }}
+            className="btn-primary flex items-center gap-2"
+          >
+            <Plus className="w-5 h-5" />
+            {isAccountant ? 'Add Admission' : 'New Admission'}
+          </button>
+        </div>
       </div>
 
       {/* Search Bar */}
@@ -587,14 +618,26 @@ const Students = () => {
                       {student.parentInfo?.fatherName || 'N/A'}
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
-                      <button
-                        onClick={() => handleViewDetails(student)}
-                        className="px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors duration-200 flex items-center gap-2"
-                        title="View Details"
-                      >
-                        <Eye className="w-4 h-4" />
-                        Details
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleViewDetails(student)}
+                          className="px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors duration-200 flex items-center gap-2"
+                          title="View Details"
+                        >
+                          <Eye className="w-4 h-4" />
+                          Details
+                        </button>
+                        {(isAccountant || user?.role === 'admin' || user?.role === 'super_admin') && (
+                          <button
+                            onClick={() => handleRecordPayment(student)}
+                            className="px-4 py-2 text-sm font-medium rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors duration-200 flex items-center gap-2"
+                            title="Record Payment"
+                          >
+                            <CreditCard className="w-4 h-4" />
+                            Payment
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -1518,6 +1561,223 @@ const Students = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Student Search Modal for Payment */}
+      {showPaymentSearchModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <Receipt className="w-6 h-6 text-green-600" />
+                Add Payment - Search Student
+              </h2>
+              <button
+                onClick={() => {
+                  setShowPaymentSearchModal(false);
+                  setPaymentSearchTerm('');
+                  setSelectedStudentForPayment(null);
+                }}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Search Input */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Search by Student Name or Serial Number
+                </label>
+                <div className="relative">
+                  <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-5 h-5" />
+                  <input
+                    type="text"
+                    placeholder="Enter student name or serial number..."
+                    value={paymentSearchTerm}
+                    onChange={(e) => setPaymentSearchTerm(e.target.value)}
+                    className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 pl-12 focus:outline-none focus:ring-2 focus:ring-green-500 dark:bg-gray-700 dark:text-white"
+                    autoFocus
+                  />
+                </div>
+              </div>
+
+              {/* Search Results */}
+              {paymentSearchTerm && (
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {students
+                    .filter(student => {
+                      const searchLower = paymentSearchTerm.toLowerCase();
+                      return (
+                        student.personalInfo?.fullName?.toLowerCase().includes(searchLower) ||
+                        student.srNo?.toLowerCase().includes(searchLower) ||
+                        student.personalInfo?.fullName?.toLowerCase().startsWith(searchLower)
+                      );
+                    })
+                    .slice(0, 10)
+                    .map((student) => (
+                      <div
+                        key={student._id}
+                        onClick={() => setSelectedStudentForPayment(student)}
+                        className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                          selectedStudentForPayment?._id === student._id
+                            ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                            : 'border-gray-200 dark:border-gray-700 hover:border-green-300 dark:hover:border-green-700'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
+                                <User className="w-6 h-6 text-green-600 dark:text-green-400" />
+                              </div>
+                              <div>
+                                <h3 className="font-semibold text-gray-900 dark:text-white">
+                                  {student.personalInfo?.fullName || 'N/A'}
+                                </h3>
+                                <p className="text-sm text-gray-600 dark:text-gray-400">
+                                  Serial No: <span className="font-medium">{student.srNo || 'N/A'}</span>
+                                </p>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 mt-2 text-sm">
+                              <div>
+                                <span className="text-gray-500 dark:text-gray-400">Father:</span>{' '}
+                                <span className="text-gray-700 dark:text-gray-300">
+                                  {student.parentInfo?.fatherName || 'N/A'}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-gray-500 dark:text-gray-400">Course:</span>{' '}
+                                <span className="text-gray-700 dark:text-gray-300">
+                                  {student.academicInfo?.courseName || 'N/A'}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-gray-500 dark:text-gray-400">Phone:</span>{' '}
+                                <span className="text-gray-700 dark:text-gray-300">
+                                  {student.contactInfo?.phone || 'N/A'}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-gray-500 dark:text-gray-400">Total Fee:</span>{' '}
+                                <span className="font-semibold text-green-600 dark:text-green-400">
+                                  Rs. {student.feeInfo?.totalFee?.toLocaleString('en-PK') || '0'}
+                                </span>
+                              </div>
+                            </div>
+                            {student.feeInfo && (
+                              <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                                <div className="flex items-center justify-between text-sm">
+                                  <span className="text-gray-600 dark:text-gray-400">Paid:</span>
+                                  <span className="font-semibold text-green-600 dark:text-green-400">
+                                    Rs. {student.feeInfo.paidFee?.toLocaleString('en-PK') || '0'}
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between text-sm mt-1">
+                                  <span className="text-gray-600 dark:text-gray-400">Remaining:</span>
+                                  <span className="font-semibold text-red-600 dark:text-red-400">
+                                    Rs. {student.feeInfo.pendingFee?.toLocaleString('en-PK') || '0'}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          {selectedStudentForPayment?._id === student._id && (
+                            <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400 flex-shrink-0" />
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  {students.filter(student => {
+                    const searchLower = paymentSearchTerm.toLowerCase();
+                    return (
+                      student.personalInfo?.fullName?.toLowerCase().includes(searchLower) ||
+                      student.srNo?.toLowerCase().includes(searchLower)
+                    );
+                  }).length === 0 && (
+                    <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                      <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                      <p>No students found matching "{paymentSearchTerm}"</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Selected Student Summary */}
+              {selectedStudentForPayment && (
+                <div className="p-4 bg-green-50 dark:bg-green-900/20 border-2 border-green-500 rounded-lg">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                      <CheckCircle className="w-5 h-5 text-green-600" />
+                      Selected Student
+                    </h3>
+                    <button
+                      onClick={() => setSelectedStudentForPayment(null)}
+                      className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                    >
+                      Change
+                    </button>
+                  </div>
+                  <div className="space-y-1 text-sm">
+                    <p>
+                      <span className="font-medium">Name:</span> {selectedStudentForPayment.personalInfo?.fullName}
+                    </p>
+                    <p>
+                      <span className="font-medium">Serial No:</span> {selectedStudentForPayment.srNo}
+                    </p>
+                    <p>
+                      <span className="font-medium">Course:</span> {selectedStudentForPayment.academicInfo?.courseName || 'N/A'}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <button
+                  onClick={() => {
+                    setShowPaymentSearchModal(false);
+                    setPaymentSearchTerm('');
+                    setSelectedStudentForPayment(null);
+                  }}
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    if (selectedStudentForPayment) {
+                      setShowPaymentSearchModal(false);
+                      setShowPaymentForm(true);
+                    } else {
+                      toast.error('Please select a student first');
+                    }
+                  }}
+                  disabled={!selectedStudentForPayment}
+                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                >
+                  <DollarSign className="w-5 h-5" />
+                  Proceed to Payment
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Recording Modal */}
+      {showPaymentForm && selectedStudentForPayment && (
+        <MonthlyPaymentRecording
+          student={selectedStudentForPayment}
+          onClose={() => {
+            setShowPaymentForm(false);
+            setSelectedStudentForPayment(null);
+            setPaymentSearchTerm('');
+          }}
+          onStudentUpdate={handlePaymentSuccess}
+        />
       )}
     </div>
   );

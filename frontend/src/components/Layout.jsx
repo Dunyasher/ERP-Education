@@ -74,7 +74,6 @@ const Layout = () => {
     { name: 'Student Management', path: '/admin/students', icon: Users, hasSubmenu: true },
     { name: 'Staff Management', path: '/admin/teachers', icon: GraduationCap, hasSubmenu: false },
     { name: 'ID Card Printing', path: '/admin/id-card-menu', icon: CreditCard, hasSubmenu: true },
-    { name: 'Accountants', path: '/admin/accountants', icon: Users, hasSubmenu: false },
     { name: 'Public Messages', path: '/admin/messages', icon: MessageSquare, hasSubmenu: false, badge: 3 },
     { name: 'Classes', path: '/admin/classes', icon: School, hasSubmenu: true },
     { name: 'Subjects', path: '/admin/courses', icon: BookOpen, hasSubmenu: false },
@@ -111,6 +110,7 @@ const Layout = () => {
     { name: 'Dashboard', path: '/accountant/dashboard', icon: LayoutDashboard },
     { name: 'Admissions', path: '/accountant/students', icon: Users },
     { name: 'Monthly Payments', path: '/accountant/monthly-payments', icon: Calendar },
+    { name: 'Payment Records', path: '/accountant/payment-records', icon: FileText },
     { name: 'Reports', path: '/accountant/reports', icon: BarChart3 },
   ];
 

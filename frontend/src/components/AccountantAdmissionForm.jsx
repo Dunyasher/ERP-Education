@@ -40,9 +40,12 @@ const AccountantAdmissionForm = ({ onClose, onSuccess, editingStudent = null, sh
   ];
 
   // Fetch courses
-  const { data: courses = [], isLoading: coursesLoading } = useQuery('courses', async () => {
-    const response = await api.get('/courses');
-    return response.data;
+  const { data: courses = [], isLoading: coursesLoading } = useQuery({
+    queryKey: ['courses'],
+    queryFn: async () => {
+      const response = await api.get('/courses');
+      return response.data;
+    }
   });
 
   // Filter courses based on selected institute type
@@ -51,13 +54,16 @@ const AccountantAdmissionForm = ({ onClose, onSuccess, editingStudent = null, sh
   );
 
   // Fetch next serial number
-  const { data: serialData } = useQuery('nextSerial', async () => {
-    try {
-      const response = await api.get('/students/next-serial');
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching next serial:', error);
-      return { nextSerial: 'A1', nextNumber: 1 };
+  const { data: serialData } = useQuery({
+    queryKey: ['nextSerial'],
+    queryFn: async () => {
+      try {
+        const response = await api.get('/students/next-serial');
+        return response.data;
+      } catch (error) {
+        console.error('Error fetching next serial:', error);
+        return { nextSerial: 'A1', nextNumber: 1 };
+      }
     }
   });
 

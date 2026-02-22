@@ -51,8 +51,8 @@ const ErrorCorrection = ({ student, onClose, showOverlay = true }) => {
     },
     {
       onSuccess: () => {
-        queryClient.invalidateQueries('students');
-        queryClient.invalidateQueries('accountantStats');
+        queryClient.invalidateQueries({ queryKey: ['students'] });
+        queryClient.invalidateQueries({ queryKey: ['accountantStats'] });
         toast.success('Error corrected successfully!');
         onClose();
       },

@@ -25,9 +25,12 @@ const FingerprintScan = () => {
   const inputRef = useRef(null);
 
   // Fetch courses for selection
-  const { data: courses = [] } = useQuery('courses', async () => {
-    const response = await api.get('/courses');
-    return response.data;
+  const { data: courses = [] } = useQuery({
+    queryKey: ['courses'],
+    queryFn: async () => {
+      const response = await api.get('/courses');
+      return response.data;
+    }
   });
 
   // Start fingerprint scanner
@@ -46,31 +49,29 @@ const FingerprintScan = () => {
   };
 
   // Fingerprint scan mutation
-  const fingerprintScanMutation = useMutation(
-    async (data) => {
+  const fingerprintScanMutation = useMutation({
+    mutationFn: async (data) => {
       return api.post('/attendance/fingerprint-scan', data);
     },
-    {
-      onSuccess: (response) => {
-        const { student, time, status } = response.data;
-        toast.success(
-          `Attendance recorded for ${student.name} at ${new Date(time).toLocaleTimeString()}`,
-          {
-            icon: status === 'late' ? '⏰' : '✅',
-            duration: 3000
-          }
-        );
-        setFingerprintData('');
-        inputRef.current?.focus();
-        refetchHistory();
-      },
-      onError: (error) => {
-        toast.error(error.response?.data?.message || 'Failed to record attendance');
-        setFingerprintData('');
-        inputRef.current?.focus();
-      }
+    onSuccess: (response) => {
+      const { student, time, status } = response.data;
+      toast.success(
+        `Attendance recorded for ${student.name} at ${new Date(time).toLocaleTimeString()}`,
+        {
+          icon: status === 'late' ? '⏰' : '✅',
+          duration: 3000
+        }
+      );
+      setFingerprintData('');
+      inputRef.current?.focus();
+      refetchHistory();
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to record attendance');
+      setFingerprintData('');
+      inputRef.current?.focus();
     }
-  );
+  });
 
   // Handle fingerprint scan
   const handleScan = async (e) => {
@@ -94,16 +95,14 @@ const FingerprintScan = () => {
   };
 
   // Fetch scan history
-  const { data: historyData, refetch: refetchHistory } = useQuery(
-    ['fingerprintScanHistory'],
-    async () => {
+  const { data: historyData, refetch: refetchHistory } = useQuery({
+    queryKey: ['fingerprintScanHistory'],
+    queryFn: async () => {
       const response = await api.get('/attendance/scan/history');
       return response.data;
     },
-    {
-      enabled: false
-    }
-  );
+    enabled: false
+  });
 
   // Auto-fetch history when shown
   useEffect(() => {

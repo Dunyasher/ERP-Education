@@ -3,9 +3,12 @@ import api from '../../utils/api';
 import { BookOpen, Users, Clock } from 'lucide-react';
 
 const TeacherDashboard = () => {
-  const { data: stats, isLoading } = useQuery('teacherStats', async () => {
-    const response = await api.get('/dashboard/teacher');
-    return response.data;
+  const { data: stats, isLoading } = useQuery({
+    queryKey: ['teacherStats'],
+    queryFn: async () => {
+      const response = await api.get('/dashboard/teacher');
+      return response.data;
+    }
   });
 
   if (isLoading) {

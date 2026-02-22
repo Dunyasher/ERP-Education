@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
@@ -139,20 +139,45 @@ const Teachers = () => {
           });
         } else {
           // Create teacher via teachers route
-          return api.post('/teachers', data);
+          // Prepare data structure matching backend expectations
+          const teacherData = {
+            email: data.email,
+            password: data.password || 'password123',
+            personalInfo: data.personalInfo || {},
+            contactInfo: data.contactInfo || {},
+            qualification: data.qualification || {},
+            employment: data.employment || {},
+            salary: data.salary || {},
+            ...(data.staffCategoryId && { staffCategoryId: data.staffCategoryId })
+          };
+          
+          // Log the data being sent for debugging
+          console.log('Sending teacher data:', teacherData);
+          
+          return api.post('/teachers', teacherData);
         }
       }
     },
     onSuccess: (response, variables) => {
       queryClient.invalidateQueries({ queryKey: ['teachers'] });
       const roleName = variables.role === 'accountant' ? 'Accountant' : 'Teacher';
-      toast.success(editingTeacher ? `${roleName} updated successfully!` : `${roleName} created successfully!`);
+      const teacherName = response?.data?.personalInfo?.fullName || variables.personalInfo?.fullName || roleName;
+      toast.success(
+        editingTeacher 
+          ? `${teacherName} updated successfully!` 
+          : `${teacherName} created successfully!`,
+        {
+          duration: 3000,
+          icon: '✅'
+        }
+      );
       setShowForm(false);
       setEditingTeacher(null);
       resetForm();
     },
     onError: (error) => {
       console.error('Teacher mutation error:', error);
+      console.error('Error response:', error.response?.data);
       
       // Handle network errors
       if (!error.response) {
@@ -160,6 +185,39 @@ const Teachers = () => {
           toast.error('Cannot connect to server. Please make sure the backend server is running on port 5000.');
           return;
         }
+      }
+      
+      // Handle 400 Bad Request - show detailed validation errors
+      if (error.response?.status === 400) {
+        const errorData = error.response.data;
+        let errorMessage = errorData.message || 'Validation failed';
+        
+        // If there are specific validation errors, show them
+        if (errorData.errors && Array.isArray(errorData.errors)) {
+          errorMessage = errorData.errors.join(', ');
+        } else if (errorData.details) {
+          errorMessage = `${errorMessage}: ${errorData.details}`;
+        }
+        
+        // If it's an email duplicate error, show it in the form field too
+        if (errorMessage.toLowerCase().includes('email') && errorMessage.toLowerCase().includes('already exists')) {
+          setEmailError(errorData.suggestion || 'This email is already registered');
+        }
+        
+        // Show full error message with suggestion if available
+        const fullMessage = errorData.suggestion 
+          ? `${errorMessage}. ${errorData.suggestion}`
+          : errorMessage;
+        toast.error(fullMessage, {
+          duration: 5000,
+          icon: '❌'
+        });
+        
+        // Log validation errors for debugging
+        if (errorData.errors) {
+          console.error('Validation errors:', errorData.errors);
+        }
+        return;
       }
       
       const errorMessage = error.response?.data?.message || 
@@ -176,7 +234,10 @@ const Teachers = () => {
       const fullMessage = error.response?.data?.suggestion 
         ? `${errorMessage}. ${error.response.data.suggestion}`
         : errorMessage;
-      toast.error(fullMessage);
+      toast.error(fullMessage, {
+        duration: 5000,
+        icon: '❌'
+      });
       
       // Log validation errors if present
       if (error.response?.data?.errors) {
@@ -187,13 +248,28 @@ const Teachers = () => {
 
   // Delete teacher mutation
   const deleteMutation = useMutation({
-    mutationFn: async (id) => api.delete(`/teachers/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['teachers'] });
-      toast.success('Teacher deleted successfully!');
+    mutationFn: async (id) => {
+      const response = await api.delete(`/teachers/${id}`);
+      return response.data;
     },
-    onError: () => {
-      toast.error('Failed to delete teacher');
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['teachers'] });
+      const teacherName = data?.deletedTeacher?.name || 'Teacher';
+      toast.success(`${teacherName} deleted successfully!`, {
+        duration: 3000,
+        icon: '✅'
+      });
+    },
+    onError: (error) => {
+      console.error('Delete teacher error:', error);
+      const errorMessage = error.response?.data?.message || 
+                          error.response?.data?.error || 
+                          error.message || 
+                          'Failed to delete teacher';
+      toast.error(errorMessage, {
+        duration: 4000,
+        icon: '❌'
+      });
     }
   });
 
@@ -294,6 +370,28 @@ const Teachers = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
+    // Validate required fields
+    if (!formData.personalInfo?.fullName || !formData.personalInfo.fullName.trim()) {
+      toast.error('Full name is required');
+      return;
+    }
+    
+    if (!formData.email || !formData.email.trim()) {
+      toast.error('Email is required');
+      return;
+    }
+    
+    if (!formData.contactInfo?.phone || !formData.contactInfo.phone.trim()) {
+      toast.error('Phone number is required');
+      return;
+    }
+    
+    // Validate institute type for teachers
+    if (formData.role === 'teacher' && (!formData.employment?.instituteType || !formData.employment.instituteType.trim())) {
+      toast.error('Institute type is required for teachers');
+      return;
+    }
+    
     // Validate phone number for accountants
     if (formData.role === 'accountant' && !formData.contactInfo.phone) {
       toast.error('Phone number is required for accountant accounts');
@@ -309,7 +407,14 @@ const Teachers = () => {
       }
     }
     
-    teacherMutation.mutate(formData);
+    // Show loading state
+    toast.loading('Creating teacher...', { id: 'creating-teacher' });
+    
+    teacherMutation.mutate(formData, {
+      onSettled: () => {
+        toast.dismiss('creating-teacher');
+      }
+    });
   };
 
   const handleDelete = (id) => {
@@ -319,38 +424,36 @@ const Teachers = () => {
   };
 
   // Staff Category mutation
-  const categoryMutation = useMutation(
-    async (data) => {
+  const categoryMutation = useMutation({
+    mutationFn: async (data) => {
       if (editingCategory) {
         return api.put(`/staff-categories/${editingCategory._id}`, data);
       } else {
         return api.post('/staff-categories', data);
       }
     },
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries('staffCategories');
-        toast.success(editingCategory ? 'Category updated successfully!' : 'Category created successfully!');
-        setShowCategoryForm(false);
-        setEditingCategory(null);
-        setCategoryFormData({
-          name: '',
-          instituteType: 'college',
-          description: '',
-          isActive: true
-        });
-      },
-      onError: (error) => {
-        console.error('Category mutation error:', error);
-        console.error('Error response:', error.response?.data);
-        const errorMessage = error.response?.data?.message || 
-                            error.response?.data?.error || 
-                            error.message ||
-                            'Failed to save category';
-        toast.error(errorMessage);
-      }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['staffCategories'] });
+      toast.success(editingCategory ? 'Category updated successfully!' : 'Category created successfully!');
+      setShowCategoryForm(false);
+      setEditingCategory(null);
+      setCategoryFormData({
+        name: '',
+        instituteType: 'college',
+        description: '',
+        isActive: true
+      });
+    },
+    onError: (error) => {
+      console.error('Category mutation error:', error);
+      console.error('Error response:', error.response?.data);
+      const errorMessage = error.response?.data?.message || 
+                          error.response?.data?.error || 
+                          error.message ||
+                          'Failed to save category';
+      toast.error(errorMessage);
     }
-  );
+  });
 
   const handleCategorySubmit = async (e) => {
     e.preventDefault();
@@ -383,24 +486,52 @@ const Teachers = () => {
     setShowCategoryForm(true);
   };
 
-  const deleteCategoryMutation = useMutation(
-    async (id) => api.delete(`/staff-categories/${id}`),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries('staffCategories');
-        toast.success('Category deleted successfully!');
-      },
-      onError: () => {
-        toast.error('Failed to delete category');
-      }
+  const deleteCategoryMutation = useMutation({
+    mutationFn: async (id) => api.delete(`/staff-categories/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['staffCategories'] });
+      toast.success('Category deleted successfully!');
+    },
+    onError: () => {
+      toast.error('Failed to delete category');
     }
-  );
+  });
 
   const handleDeleteCategory = (id) => {
     if (window.confirm('Are you sure you want to delete this category?')) {
       deleteCategoryMutation.mutate(id);
     }
   };
+
+  // Filter categories based on selected institute type
+  const filteredCategories = useMemo(() => {
+    if (!staffCategories || staffCategories.length === 0) {
+      return [];
+    }
+    
+    if (!formData.employment?.instituteType) {
+      return staffCategories.filter(cat => cat.isActive !== false);
+    }
+    
+    return staffCategories.filter(cat => 
+      cat.isActive !== false && 
+      cat.instituteType === formData.employment.instituteType
+    );
+  }, [staffCategories, formData.employment?.instituteType]);
+
+  // Clear category selection when institute type changes if category doesn't match
+  useEffect(() => {
+    if (formData.employment?.instituteType && formData.staffCategoryId) {
+      const selectedCategory = staffCategories.find(cat => cat._id === formData.staffCategoryId);
+      if (selectedCategory && selectedCategory.instituteType !== formData.employment.instituteType) {
+        setFormData(prev => ({ ...prev, staffCategoryId: '' }));
+        toast.info('Category selection cleared - please select a category matching the institute type', {
+          duration: 3000,
+          icon: 'ℹ️'
+        });
+      }
+    }
+  }, [formData.employment?.instituteType, staffCategories, formData.staffCategoryId]);
 
   // Filter teachers
   const filteredTeachers = teachers.filter(teacher => {
@@ -641,14 +772,25 @@ const Teachers = () => {
                         className="input-field"
                       >
                         <option value="">No category</option>
-                        {staffCategories
-                          .filter(cat => cat.isActive !== false)
-                          .map((category) => (
+                        {filteredCategories.length > 0 ? (
+                          filteredCategories.map((category) => (
                             <option key={category._id} value={category._id}>
                               {category.name}
                             </option>
-                          ))}
+                          ))
+                        ) : (
+                          <option value="" disabled>
+                            {formData.employment?.instituteType 
+                              ? `No categories available for ${formData.employment.instituteType.replace('_', ' ')}`
+                              : 'No categories available'}
+                          </option>
+                        )}
                       </select>
+                      {formData.employment?.instituteType && (
+                        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                          Showing categories for: <span className="font-semibold capitalize">{formData.employment.instituteType.replace('_', ' ')}</span>
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}
@@ -811,17 +953,41 @@ const Teachers = () => {
                             staffCategoryId: categoryId
                           });
                         }}
-                        className="input-field"
+                        disabled={!formData.employment?.instituteType}
+                        className="input-field disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        <option value="">Select a category</option>
-                        {staffCategories
-                          .filter(cat => cat.isActive !== false)
-                          .map((category) => (
+                        <option value="">
+                          {!formData.employment?.instituteType 
+                            ? 'Please select institute type first' 
+                            : filteredCategories.length === 0 
+                            ? `No categories available for ${formData.employment.instituteType.replace('_', ' ')}`
+                            : 'Select a category'}
+                        </option>
+                        {filteredCategories.length > 0 ? (
+                          filteredCategories.map((category) => (
                             <option key={category._id} value={category._id}>
                               {category.name}
                             </option>
-                          ))}
+                          ))
+                        ) : (
+                          <option value="" disabled>
+                            {formData.employment?.instituteType 
+                              ? `No categories available for ${formData.employment.instituteType.replace('_', ' ')}. Please create categories for this institute type first.`
+                              : 'No categories available'}
+                          </option>
+                        )}
                       </select>
+                      {formData.employment?.instituteType && (
+                        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                          Showing categories for: <span className="font-semibold capitalize">{formData.employment.instituteType.replace('_', ' ')}</span>
+                          {filteredCategories.length > 0 && ` (${filteredCategories.length} available)`}
+                        </p>
+                      )}
+                      {!formData.employment?.instituteType && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                          Please select an institute type first to see available categories
+                        </p>
+                      )}
                     </div>
                   </div>
                   </div>

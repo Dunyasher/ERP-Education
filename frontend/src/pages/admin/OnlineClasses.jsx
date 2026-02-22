@@ -49,26 +49,32 @@ const OnlineClasses = () => {
   });
 
   // Fetch online classes
-  const { data: onlineClasses = [], isLoading } = useQuery('onlineClasses', async () => {
-    try {
-      const response = await api.get('/online-classes');
-      return response.data;
-    } catch (error) {
-      // If endpoint doesn't exist, return empty array
-      if (error.response?.status === 404) {
-        return [];
+  const { data: onlineClasses = [], isLoading } = useQuery({
+    queryKey: ['onlineClasses'],
+    queryFn: async () => {
+      try {
+        const response = await api.get('/online-classes');
+        return response.data;
+      } catch (error) {
+        // If endpoint doesn't exist, return empty array
+        if (error.response?.status === 404) {
+          return [];
+        }
+        throw error;
       }
-      throw error;
     }
   });
 
   // Fetch students to get unique classes and sections
-  const { data: students = [] } = useQuery('allStudents', async () => {
-    try {
-      const response = await api.get('/students');
-      return response.data;
-    } catch (error) {
-      return [];
+  const { data: students = [] } = useQuery({
+    queryKey: ['allStudents'],
+    queryFn: async () => {
+      try {
+        const response = await api.get('/students');
+        return response.data;
+      } catch (error) {
+        return [];
+      }
     }
   });
 
@@ -76,18 +82,21 @@ const OnlineClasses = () => {
   const uniqueSections = [...new Set(students.map(s => s.section).filter(Boolean))].sort();
 
   // Fetch categories
-  const { data: categories = [] } = useQuery('categories', async () => {
-    try {
-      const response = await api.get('/categories?categoryType=course');
-      return response.data;
-    } catch (error) {
-      return [];
+  const { data: categories = [] } = useQuery({
+    queryKey: ['categories'],
+    queryFn: async () => {
+      try {
+        const response = await api.get('/categories?categoryType=course');
+        return response.data;
+      } catch (error) {
+        return [];
+      }
     }
   });
 
   // Create category mutation
-  const createCategoryMutation = useMutation(
-    async (data) => {
+  const createCategoryMutation = useMutation({
+    mutationFn: async (data) => {
       // Don't send collegeId - let backend get it from req.user or req.collegeId
       // Only include it if user is super_admin and explicitly provided
       const categoryData = { ...data };
@@ -95,24 +104,22 @@ const OnlineClasses = () => {
       delete categoryData.collegeId;
       return api.post('/categories', categoryData);
     },
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries('categories');
-        toast.success('Category created successfully!');
-        setShowCategoryModal(false);
-        setCategoryFormData({
-          name: '',
-          instituteType: 'college',
-          categoryType: 'course',
-          description: '',
-          isActive: true
-        });
-      },
-      onError: (error) => {
-        toast.error(error.response?.data?.message || 'Failed to create category');
-      }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      toast.success('Category created successfully!');
+      setShowCategoryModal(false);
+      setCategoryFormData({
+        name: '',
+        instituteType: 'college',
+        categoryType: 'course',
+        description: '',
+        isActive: true
+      });
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to create category');
     }
-  );
+  });
 
   // Create online class mutation
   const createClassMutation = useMutation(
@@ -134,7 +141,7 @@ const OnlineClasses = () => {
     },
     {
       onSuccess: () => {
-        queryClient.invalidateQueries('onlineClasses');
+        queryClient.invalidateQueries({ queryKey: ['onlineClasses'] });
         toast.success('Online class created successfully!');
         setShowAddModal(false);
         setFormData({
@@ -162,7 +169,7 @@ const OnlineClasses = () => {
     },
     {
       onSuccess: () => {
-        queryClient.invalidateQueries('onlineClasses');
+        queryClient.invalidateQueries({ queryKey: ['onlineClasses'] });
         toast.success('Online class deleted successfully!');
       },
       onError: (error) => {
@@ -178,7 +185,7 @@ const OnlineClasses = () => {
     },
     {
       onSuccess: () => {
-        queryClient.invalidateQueries('onlineClasses');
+        queryClient.invalidateQueries({ queryKey: ['onlineClasses'] });
         toast.success('Class approved successfully!');
       },
       onError: (error) => {

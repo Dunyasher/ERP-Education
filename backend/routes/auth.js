@@ -229,7 +229,7 @@ router.post('/register', [
 // @desc    Login user (college-specific)
 // @access  Public
 router.post('/login', [
-  body('email').isEmail().normalizeEmail(),
+  body('email').isEmail(),
   body('password').exists()
 ], async (req, res) => {
   try {
@@ -238,13 +238,30 @@ router.post('/login', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { email, password } = req.body;
+    // Get email from validated request (normalized) or fallback to lowercase
+    const email = req.body.email ? req.body.email.toLowerCase().trim() : '';
+    const password = req.body.password;
+
+    console.log(`🔍 Login attempt - Email: "${email}", Password length: ${password ? password.length : 0}`);
+
+    if (!email || !password) {
+      console.log(`❌ Missing email or password`);
+      return res.status(400).json({ message: 'Email and password are required' });
+    }
 
     // Find user (email is unique per college)
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
     if (!user) {
+      console.log(`❌ Login failed: User not found for email: "${email}"`);
+      // Check if any users exist with similar email
+      const similarUsers = await User.find({ email: { $regex: email.split('@')[0], $options: 'i' } }).select('email');
+      if (similarUsers.length > 0) {
+        console.log(`   Similar emails found: ${similarUsers.map(u => u.email).join(', ')}`);
+      }
       return res.status(401).json({ message: 'Invalid credentials' });
     }
+
+    console.log(`✅ User found: ${user.email}, Role: ${user.role}, Active: ${user.isActive}`);
 
     // Populate collegeId if it exists
     let college = null;
@@ -261,10 +278,20 @@ router.post('/login', [
       }
     }
 
+    // Check if user is active
+    if (!user.isActive) {
+      console.log(`❌ Login failed: User account is inactive for email: "${email}"`);
+      return res.status(403).json({ message: 'User account is inactive' });
+    }
+
     // Check password
+    console.log(`🔐 Comparing password...`);
     try {
       const isMatch = await user.comparePassword(password);
+      console.log(`🔐 Password match result: ${isMatch}`);
+      
       if (!isMatch) {
+        console.log(`❌ Login failed: Password mismatch for email: "${email}"`);
         return res.status(401).json({ message: 'Invalid credentials' });
       }
     } catch (passwordError) {
@@ -272,10 +299,7 @@ router.post('/login', [
       return res.status(500).json({ message: 'Error validating password' });
     }
 
-    // Check if user is active
-    if (user.isActive === false) {
-      return res.status(403).json({ message: 'User account is inactive' });
-    }
+    console.log(`✅ Login successful for: ${user.email} (${user.role})`);
 
     // Update last login
     try {

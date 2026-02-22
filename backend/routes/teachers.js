@@ -10,14 +10,21 @@ const { authenticate, authorize } = require('../middleware/auth');
 // @access  Private
 router.get('/', authenticate, async (req, res) => {
   try {
-    const { instituteType, status } = req.query;
+    const { instituteType, status, includeInactive } = req.query;
     const query = {};
     
     if (instituteType) query['employment.instituteType'] = instituteType;
-    if (status) query['employment.status'] = status;
+    
+    // By default, only show active teachers unless explicitly requested
+    if (status) {
+      query['employment.status'] = status;
+    } else if (includeInactive !== 'true') {
+      // Default: only show active teachers
+      query['employment.status'] = { $ne: 'inactive' };
+    }
     
     const teachers = await Teacher.find(query)
-      .populate('userId', 'email profile')
+      .populate('userId', 'email profile uniqueId')
       .populate('staffCategoryId', 'name description')
       .populate({
         path: 'employment.courses',
@@ -42,7 +49,8 @@ router.get('/', authenticate, async (req, res) => {
 router.get('/:id', authenticate, async (req, res) => {
   try {
     const teacher = await Teacher.findById(req.params.id)
-      .populate('userId', 'email profile')
+      .populate('userId', 'email profile uniqueId')
+      .populate('staffCategoryId', 'name description')
       .populate('employment.courses', 'name');
     
     if (!teacher) {
@@ -159,8 +167,16 @@ router.post('/', authenticate, authorize('admin', 'super_admin'), async (req, re
     }
     
     // Prepare teacher data - clean and validate
+    // Set collegeId from authenticated user
+    const collegeId = req.user?.collegeId;
+    if (!collegeId) {
+      clearTimeout(timeout);
+      return res.status(400).json({ message: 'College ID is required. Please ensure you are logged in.' });
+    }
+    
     const teacherData = {
       userId: user._id,
+      collegeId: collegeId,
       ...(staffCategoryId && mongoose.Types.ObjectId.isValid(staffCategoryId) && { staffCategoryId }),
       personalInfo: {
         fullName: personalInfo.fullName.trim(),
@@ -302,7 +318,8 @@ router.post('/', authenticate, authorize('admin', 'super_admin'), async (req, re
     let populatedTeacher;
     try {
       populatedTeacher = await Teacher.findById(teacher._id)
-        .populate('userId', 'email')
+        .populate('userId', 'email profile uniqueId')
+        .populate('staffCategoryId', 'name description')
         .populate({
           path: 'employment.courses',
           select: 'name',
@@ -380,7 +397,7 @@ router.put('/:id', authenticate, async (req, res) => {
       req.body,
       { new: true, runValidators: true }
     )
-      .populate('userId', 'email')
+      .populate('userId', 'email profile uniqueId')
       .populate('staffCategoryId', 'name description');
     
     if (!teacher) {
@@ -399,19 +416,60 @@ router.put('/:id', authenticate, async (req, res) => {
 // @access  Private (Admin)
 router.delete('/:id', authenticate, authorize('admin', 'super_admin'), async (req, res) => {
   try {
-    const teacher = await Teacher.findById(req.params.id);
+    // Validate ID format
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid teacher ID format' });
+    }
+
+    const teacher = await Teacher.findById(req.params.id)
+      .populate('userId', 'email');
+    
     if (!teacher) {
       return res.status(404).json({ message: 'Teacher not found' });
     }
     
-    // Soft delete - update status
-    teacher.employment.status = 'inactive';
-    await teacher.save();
+    const teacherName = teacher.personalInfo?.fullName || 'N/A';
+    const teacherEmail = teacher.userId?.email || teacher.contactInfo?.email || 'N/A';
+    const teacherSrNo = teacher.srNo || 'N/A';
+    const userId = teacher.userId?._id || teacher.userId;
     
-    res.json({ message: 'Teacher deleted successfully' });
+    // Delete the teacher record
+    await Teacher.findByIdAndDelete(req.params.id);
+    
+    // Optionally delete the associated user account
+    // Only delete if user exists and is a teacher role
+    if (userId) {
+      try {
+        const user = await User.findById(userId);
+        if (user && user.role === 'teacher') {
+          await User.findByIdAndDelete(userId);
+          console.log(`✅ Deleted associated user account: ${teacherEmail}`);
+        }
+      } catch (userError) {
+        console.error('Error deleting associated user (non-critical):', userError);
+        // Don't fail the entire operation if user deletion fails
+      }
+    }
+    
+    // Log deletion
+    console.log(`⚠️ TEACHER DELETED: ${teacherName} (${teacherSrNo}) - Email: ${teacherEmail} - Deleted by: ${req.user.email || 'System'}`);
+    
+    res.json({ 
+      message: 'Teacher deleted successfully',
+      deletedTeacher: {
+        name: teacherName,
+        email: teacherEmail,
+        srNo: teacherSrNo,
+        deletedBy: req.user.email || 'System',
+        deletedAt: new Date()
+      }
+    });
   } catch (error) {
     console.error('Delete teacher error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ 
+      message: 'Server error while deleting teacher',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'An unexpected error occurred'
+    });
   }
 });
 

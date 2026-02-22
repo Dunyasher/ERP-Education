@@ -14,22 +14,25 @@ const MonthlyPayments = () => {
   });
 
   // Fetch students
-  const { data: students = [], isLoading: studentsLoading } = useQuery('students', async () => {
-    const response = await api.get('/students');
-    return response.data;
+  const { data: students = [], isLoading: studentsLoading } = useQuery({
+    queryKey: ['students'],
+    queryFn: async () => {
+      const response = await api.get('/students');
+      return response.data;
+    }
   });
 
   // Fetch monthly payments
-  const { data: monthlyPayments = [], isLoading: paymentsLoading } = useQuery(
-    ['monthlyPayments', filters],
-    async () => {
+  const { data: monthlyPayments = [], isLoading: paymentsLoading } = useQuery({
+    queryKey: ['monthlyPayments', filters],
+    queryFn: async () => {
       const params = new URLSearchParams();
       if (filters.month) params.append('month', filters.month);
       if (filters.year) params.append('year', filters.year);
       const response = await api.get(`/accountant/monthly-payments?${params.toString()}`);
       return response.data;
     }
-  );
+  });
 
   const months = [
     { value: '', label: 'All Months' },

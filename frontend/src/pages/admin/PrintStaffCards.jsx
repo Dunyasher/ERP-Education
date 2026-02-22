@@ -24,9 +24,12 @@ const PrintStaffCards = () => {
   const [qrCodes, setQrCodes] = useState({});
 
   // Fetch teachers/staff
-  const { data: teachers = [], isLoading } = useQuery('teachers', async () => {
-    const response = await api.get('/teachers');
-    return response.data;
+  const { data: teachers = [], isLoading } = useQuery({
+    queryKey: ['teachers'],
+    queryFn: async () => {
+      const response = await api.get('/teachers');
+      return response.data;
+    }
   });
 
   // Get unique departments

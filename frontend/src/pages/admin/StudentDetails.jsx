@@ -28,9 +28,62 @@ const StudentDetails = () => {
       console.log('📥 Fetching student details for ID:', id);
       try {
         const response = await api.get(`/students/${id}`);
+        
+        // Check if response contains an error message
+        if (response.data?.message === 'Access denied') {
+          console.error('❌ Access denied by server');
+          throw new Error('Access denied: You do not have permission to view this student');
+        }
+        
         console.log('✅ Student data received:', response.data);
+        console.log('📋 Complete data structure:', {
+          _id: response.data?._id,
+          srNo: response.data?.srNo,
+          personalInfo: response.data?.personalInfo,
+          contactInfo: response.data?.contactInfo,
+          parentInfo: response.data?.parentInfo,
+          academicInfo: response.data?.academicInfo,
+          feeInfo: response.data?.feeInfo,
+          userId: response.data?.userId
+        });
         console.log('   Student name:', response.data?.personalInfo?.fullName || 'N/A');
-        console.log('   Student email:', response.data?.userId?.email || 'N/A');
+        console.log('   Student email:', response.data?.userId?.email || response.data?.contactInfo?.email || 'N/A');
+        console.log('   Student phone:', response.data?.contactInfo?.phone || 'N/A');
+        console.log('   Father name:', response.data?.parentInfo?.fatherName || 'N/A');
+        console.log('   Course:', response.data?.academicInfo?.courseId?.name || response.data?.academicInfo?.courseId || 'N/A');
+        
+        // Verify data exists
+        if (!response.data) {
+          console.error('❌ No data in response!');
+          throw new Error('No student data received');
+        }
+        
+        // Check for missing nested objects and log warnings
+        if (!response.data.personalInfo) {
+          console.error('❌ Missing personalInfo in response!');
+          console.error('   Response keys:', Object.keys(response.data));
+        }
+        if (!response.data.contactInfo) {
+          console.error('❌ Missing contactInfo in response!');
+        }
+        
+        // If nested objects are missing, create empty objects to prevent crashes
+        if (!response.data.personalInfo) {
+          response.data.personalInfo = {};
+        }
+        if (!response.data.contactInfo) {
+          response.data.contactInfo = { address: {} };
+        }
+        if (!response.data.parentInfo) {
+          response.data.parentInfo = {};
+        }
+        if (!response.data.academicInfo) {
+          response.data.academicInfo = {};
+        }
+        if (!response.data.feeInfo) {
+          response.data.feeInfo = {};
+        }
+        
         return response.data;
       } catch (error) {
         console.error('❌ Error fetching student:', error);
@@ -269,6 +322,20 @@ const StudentDetails = () => {
     return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
+  // Debug: Log studentDetail state
+  useEffect(() => {
+    if (studentDetail) {
+      console.log('🔍 StudentDetail in component:', studentDetail);
+      console.log('   Has personalInfo:', !!studentDetail.personalInfo);
+      console.log('   Has contactInfo:', !!studentDetail.contactInfo);
+      console.log('   Has parentInfo:', !!studentDetail.parentInfo);
+      console.log('   Has academicInfo:', !!studentDetail.academicInfo);
+      console.log('   Has feeInfo:', !!studentDetail.feeInfo);
+    } else {
+      console.log('⚠️ studentDetail is null/undefined');
+    }
+  }, [studentDetail]);
+
   if (isLoadingDetail) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center">
@@ -282,6 +349,12 @@ const StudentDetails = () => {
 
   if (studentError) {
     const errorMessage = studentError.response?.data?.message || studentError.message || 'Failed to load student details';
+    console.error('❌ StudentDetails Error:', {
+      error: studentError,
+      status: studentError.response?.status,
+      message: errorMessage,
+      data: studentError.response?.data
+    });
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center p-6">
         <div className="text-center bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 max-w-md">
@@ -289,6 +362,25 @@ const StudentDetails = () => {
           <p className="text-gray-600 dark:text-gray-400 mb-2 text-lg font-semibold">Error Loading Student</p>
           <p className="text-gray-500 dark:text-gray-500 mb-6 text-sm">{errorMessage}</p>
           <p className="text-gray-400 dark:text-gray-600 mb-6 text-xs">Status: {studentError.response?.status || 'Unknown'}</p>
+          <button
+            onClick={() => navigate(getBackPath())}
+            className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl font-medium"
+          >
+            Back to Students
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Check if studentDetail exists but has no data
+  if (!studentDetail) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center p-6">
+        <div className="text-center bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 max-w-md">
+          <AlertCircle className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
+          <p className="text-gray-600 dark:text-gray-400 mb-2 text-lg font-semibold">No Student Data</p>
+          <p className="text-gray-500 dark:text-gray-500 mb-6 text-sm">Student data not found or not loaded yet.</p>
           <button
             onClick={() => navigate(getBackPath())}
             className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl font-medium"

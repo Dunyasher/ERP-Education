@@ -48,41 +48,37 @@ const ExpenseManagement = () => {
   );
 
   // Create/Update expense mutation
-  const expenseMutation = useMutation(
-    async (data) => {
+  const expenseMutation = useMutation({
+    mutationFn: async (data) => {
       if (editingExpense) {
         return api.put(`/expenses/${editingExpense._id}`, data);
       } else {
         return api.post('/expenses', data);
       }
     },
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries('expenses');
-        toast.success(editingExpense ? 'Expense updated successfully!' : 'Expense created successfully!');
-        setShowForm(false);
-        setEditingExpense(null);
-        resetForm();
-      },
-      onError: (error) => {
-        toast.error(error.response?.data?.message || 'Failed to save expense');
-      }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      toast.success(editingExpense ? 'Expense updated successfully!' : 'Expense created successfully!');
+      setShowForm(false);
+      setEditingExpense(null);
+      resetForm();
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to save expense');
     }
-  );
+  });
 
   // Delete expense mutation
-  const deleteMutation = useMutation(
-    async (id) => api.delete(`/expenses/${id}`),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries('expenses');
-        toast.success('Expense deleted successfully!');
-      },
-      onError: () => {
-        toast.error('Failed to delete expense');
-      }
+  const deleteMutation = useMutation({
+    mutationFn: async (id) => api.delete(`/expenses/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      toast.success('Expense deleted successfully!');
+    },
+    onError: () => {
+      toast.error('Failed to delete expense');
     }
-  );
+  });
 
   const resetForm = () => {
     setFormData({

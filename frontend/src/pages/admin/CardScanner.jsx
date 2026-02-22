@@ -25,52 +25,51 @@ const CardScanner = () => {
   const inputRef = useRef(null);
 
   // Fetch courses for selection
-  const { data: courses = [] } = useQuery('courses', async () => {
-    const response = await api.get('/courses');
-    return response.data;
+  const { data: courses = [] } = useQuery({
+    queryKey: ['courses'],
+    queryFn: async () => {
+      const response = await api.get('/courses');
+      return response.data;
+    }
   });
 
   // Scan attendance mutation
-  const scanMutation = useMutation(
-    async (data) => {
+  const scanMutation = useMutation({
+    mutationFn: async (data) => {
       return api.post('/attendance/scan', data);
     },
-    {
-      onSuccess: (response) => {
-        const { student, time, status, isLate, isUpdate } = response.data;
-        toast.success(
-          isUpdate 
-            ? `Attendance updated for ${student.name}`
-            : `Attendance recorded for ${student.name} at ${time}`,
-          {
-            icon: isLate ? '⏰' : '✅',
-            duration: 3000
-          }
-        );
-        setCardId(''); // Clear input
-        inputRef.current?.focus(); // Refocus for next scan
-        // Refresh history
-        refetchHistory();
-      },
-      onError: (error) => {
-        toast.error(error.response?.data?.message || 'Failed to record attendance');
-        setCardId(''); // Clear input
-        inputRef.current?.focus(); // Refocus for next scan
-      }
+    onSuccess: (response) => {
+      const { student, time, status, isLate, isUpdate } = response.data;
+      toast.success(
+        isUpdate 
+          ? `Attendance updated for ${student.name}`
+          : `Attendance recorded for ${student.name} at ${time}`,
+        {
+          icon: isLate ? '⏰' : '✅',
+          duration: 3000
+        }
+      );
+      setCardId(''); // Clear input
+      inputRef.current?.focus(); // Refocus for next scan
+      // Refresh history
+      refetchHistory();
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to record attendance');
+      setCardId(''); // Clear input
+      inputRef.current?.focus(); // Refocus for next scan
     }
-  );
+  });
 
   // Fetch scan history
-  const { data: historyData, refetch: refetchHistory } = useQuery(
-    'scanHistory',
-    async () => {
+  const { data: historyData, refetch: refetchHistory } = useQuery({
+    queryKey: ['scanHistory'],
+    queryFn: async () => {
       const response = await api.get('/attendance/scan/history?limit=50');
       return response.data;
     },
-    {
-      enabled: showHistory
-    }
-  );
+    enabled: showHistory
+  });
 
   useEffect(() => {
     // Auto-focus input on mount

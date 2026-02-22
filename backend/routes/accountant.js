@@ -174,10 +174,6 @@ router.post('/monthly-payments', async (req, res) => {
       return res.status(400).json({ message: 'Missing required fields' });
     }
 
-    if (!accountName || !accountName.trim()) {
-      return res.status(400).json({ message: 'Account name is required' });
-    }
-
     // Check if payment for this month already exists
     const existingPayment = await MonthlyPayment.findOne({
       studentId,
@@ -285,13 +281,31 @@ router.post('/monthly-payments', async (req, res) => {
     student.calculatePendingFee();
     await student.save();
 
+    // Refresh student data to get updated totals
+    const updatedStudent = await Student.findById(studentId)
+      .populate('academicInfo.courseId', 'name')
+      .populate('feeInfo.feeStructureId')
+      .lean();
+
     console.log('✅ Monthly payment recorded successfully');
+    console.log('📊 Updated student fee totals:', {
+      totalFee: updatedStudent.feeInfo?.totalFee || 0,
+      paidFee: updatedStudent.feeInfo?.paidFee || 0,
+      pendingFee: updatedStudent.feeInfo?.pendingFee || 0
+    });
+
     res.status(201).json({
       message: 'Monthly payment recorded successfully',
       monthlyPayment,
       transaction,
       invoice,
-      student
+      student: updatedStudent,
+      paymentSummary: {
+        amountPaid: parseFloat(amount),
+        totalPaidSoFar: updatedStudent.feeInfo?.paidFee || 0,
+        remainingAmount: updatedStudent.feeInfo?.pendingFee || 0,
+        totalFee: updatedStudent.feeInfo?.totalFee || 0
+      }
     });
   } catch (error) {
     console.error('❌ Record monthly payment error:', error);
@@ -322,9 +336,17 @@ router.get('/monthly-payments', async (req, res) => {
     }
 
     const payments = await MonthlyPayment.find(query)
-      .populate('studentId', 'srNo personalInfo.fullName academicInfo.courseId')
+      .populate({
+        path: 'studentId',
+        select: 'srNo personalInfo contactInfo parentInfo academicInfo feeInfo',
+        populate: {
+          path: 'academicInfo.courseId',
+          select: 'name'
+        }
+      })
       .populate('invoiceId', 'invoiceNo')
       .populate('transactionId', 'transactionNo')
+      .populate('collectedBy', 'email profile')
       .sort({ paymentDate: -1, year: -1, month: -1 });
 
     res.json(payments);

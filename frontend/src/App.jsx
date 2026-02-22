@@ -12,12 +12,14 @@ import StudentDashboard from './pages/student/Dashboard';
 import StudentAttendance from './pages/student/Attendance';
 import StudentFees from './pages/student/Fees';
 import MonthlyPayments from './pages/accountant/MonthlyPayments';
+import PaymentRecords from './pages/accountant/PaymentRecords';
 import FeeManagement from './pages/admin/FeeManagement';
 import ExpenseManagement from './pages/admin/ExpenseManagement';
 import DailyExpenseReport from './pages/admin/DailyExpenseReport';
 import Students from './pages/admin/Students';
 import StudentFeeHistory from './pages/admin/StudentFeeHistory';
 import StudentDetails from './pages/admin/StudentDetails';
+import NewAdmission from './pages/admin/NewAdmission';
 import Teachers from './pages/admin/Teachers';
 import Courses from './pages/admin/Courses';
 import Reports from './pages/admin/Reports';
@@ -61,6 +63,7 @@ function AppRoutes() {
         <Route path="/super_admin/dashboard" element={<ProtectedRoute allowedRoles={['super_admin']}><SuperAdminDashboard /></ProtectedRoute>} />
         <Route path="/admin/dashboard" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><AdminDashboard /></ProtectedRoute>} />
         <Route path="/admin/students" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><Students /></ProtectedRoute>} />
+        <Route path="/admin/students/new" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><NewAdmission /></ProtectedRoute>} />
         <Route path="/admin/students/:id/details" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><StudentDetails /></ProtectedRoute>} />
         <Route path="/admin/students/:id/fee-history" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><StudentFeeHistory /></ProtectedRoute>} />
         <Route path="/admin/teachers" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Teachers /></ProtectedRoute>} />
@@ -85,9 +88,11 @@ function AppRoutes() {
         <Route path="/teacher/dashboard" element={<ProtectedRoute allowedRoles={['teacher']}><TeacherDashboard /></ProtectedRoute>} />
         <Route path="/accountant/dashboard" element={<ProtectedRoute allowedRoles={['accountant']}><AccountantDashboard /></ProtectedRoute>} />
         <Route path="/accountant/students" element={<ProtectedRoute allowedRoles={['accountant']}><Students /></ProtectedRoute>} />
+        <Route path="/accountant/students/new" element={<ProtectedRoute allowedRoles={['accountant']}><NewAdmission /></ProtectedRoute>} />
         <Route path="/accountant/students/:id/details" element={<ProtectedRoute allowedRoles={['accountant']}><StudentDetails /></ProtectedRoute>} />
         <Route path="/accountant/students/:id/fee-history" element={<ProtectedRoute allowedRoles={['accountant']}><StudentFeeHistory /></ProtectedRoute>} />
         <Route path="/accountant/monthly-payments" element={<ProtectedRoute allowedRoles={['accountant']}><MonthlyPayments /></ProtectedRoute>} />
+        <Route path="/accountant/payment-records" element={<ProtectedRoute allowedRoles={['accountant']}><PaymentRecords /></ProtectedRoute>} />
         <Route path="/accountant/reports" element={<ProtectedRoute allowedRoles={['accountant']}><Reports /></ProtectedRoute>} />
         <Route path="/student/dashboard" element={<ProtectedRoute allowedRoles={['student']}><StudentDashboard /></ProtectedRoute>} />
         <Route path="/student/attendance" element={<ProtectedRoute allowedRoles={['student']}><StudentAttendance /></ProtectedRoute>} />

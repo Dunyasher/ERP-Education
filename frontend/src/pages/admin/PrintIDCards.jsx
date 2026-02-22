@@ -24,9 +24,12 @@ const PrintIDCards = () => {
   const [qrCodes, setQrCodes] = useState({}); // Store QR codes by student ID
 
   // Fetch students
-  const { data: students = [], isLoading } = useQuery('allStudents', async () => {
-    const response = await api.get('/students');
-    return response.data;
+  const { data: students = [], isLoading } = useQuery({
+    queryKey: ['allStudents'],
+    queryFn: async () => {
+      const response = await api.get('/students');
+      return response.data;
+    }
   });
 
   // Get unique campuses, classes, and sections

@@ -54,7 +54,7 @@ const StaffAttendance = () => {
     },
     {
       onSuccess: () => {
-        queryClient.invalidateQueries('attendance');
+        queryClient.invalidateQueries({ queryKey: ['attendance'] });
         toast.success('Attendance marked successfully!');
         setAttendanceStatus({});
       },

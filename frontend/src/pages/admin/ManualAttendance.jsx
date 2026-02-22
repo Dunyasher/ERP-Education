@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../../utils/api';
@@ -21,33 +21,36 @@ const ManualAttendance = () => {
   const [attendanceStatus, setAttendanceStatus] = useState({});
   const [showTable, setShowTable] = useState(false);
 
-  // Fetch students based on filters
-  const { data: students = [], isLoading: isLoadingStudents, refetch } = useQuery(
-    ['students', selectedClassName, selectedSection],
-    async () => {
+  // Fetch students based on filters - using React Query v5 syntax
+  const { data: students = [], isLoading: isLoadingStudents, refetch } = useQuery({
+    queryKey: ['students', selectedClassName, selectedSection],
+    queryFn: async () => {
       const params = {};
       if (selectedClassName) params.className = selectedClassName;
       if (selectedSection) params.section = selectedSection;
       const response = await api.get('/students', { params });
       return response.data;
     },
-    {
-      enabled: false // Only fetch when "Manage Attendance" is clicked
-    }
-  );
-
-  // Filter students by class and section
-  const filteredStudents = students.filter(student => {
-    let matches = true;
-    if (selectedClassName && student.className !== selectedClassName) matches = false;
-    if (selectedSection && student.section !== selectedSection) matches = false;
-    return matches;
+    enabled: false // Only fetch when "Manage Attendance" is clicked
   });
 
+  // Filter students by class and section - memoized to prevent infinite loops
+  const filteredStudents = useMemo(() => {
+    return students.filter(student => {
+      let matches = true;
+      if (selectedClassName && student.className !== selectedClassName) matches = false;
+      if (selectedSection && student.section !== selectedSection) matches = false;
+      return matches;
+    });
+  }, [students, selectedClassName, selectedSection]);
+
   // Get unique classes and sections from all students
-  const { data: allStudents = [] } = useQuery('allStudents', async () => {
-    const response = await api.get('/students');
-    return response.data;
+  const { data: allStudents = [] } = useQuery({
+    queryKey: ['allStudents'],
+    queryFn: async () => {
+      const response = await api.get('/students');
+      return response.data;
+    }
   });
 
   const uniqueClasses = [...new Set(allStudents.map(s => s.className).filter(Boolean))].sort();
@@ -55,33 +58,38 @@ const ManualAttendance = () => {
 
   // Initialize attendance status for all students
   useEffect(() => {
-    const initialStatus = {};
-    filteredStudents.forEach(student => {
-      if (!attendanceStatus[student._id]) {
-        initialStatus[student._id] = 'present'; // Default to present
-      } else {
-        initialStatus[student._id] = attendanceStatus[student._id];
-      }
+    if (filteredStudents.length === 0) return;
+    
+    setAttendanceStatus(prev => {
+      const newStatus = { ...prev };
+      let hasChanges = false;
+      
+      filteredStudents.forEach(student => {
+        if (!newStatus[student._id]) {
+          newStatus[student._id] = 'present'; // Default to present
+          hasChanges = true;
+        }
+      });
+      
+      // Only return new object if there are changes
+      return hasChanges ? newStatus : prev;
     });
-    setAttendanceStatus(prev => ({ ...prev, ...initialStatus }));
-  }, [filteredStudents]);
+  }, [filteredStudents]); // filteredStudents is now memoized, so this is safe
 
   // Mark attendance mutation
-  const markAttendanceMutation = useMutation(
-    async (data) => {
+  const markAttendanceMutation = useMutation({
+    mutationFn: async (data) => {
       return api.post('/attendance/manual', data);
     },
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries('attendance');
-        toast.success('Attendance marked successfully!');
-        setAttendanceStatus({});
-      },
-      onError: (error) => {
-        toast.error(error.response?.data?.message || 'Failed to mark attendance');
-      }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['attendance'] });
+      toast.success('Attendance marked successfully!');
+      setAttendanceStatus({});
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to mark attendance');
     }
-  );
+  });
 
   const handleStatusChange = (studentId, status) => {
     setAttendanceStatus(prev => ({

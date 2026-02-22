@@ -29,18 +29,20 @@ const FeeManagement = () => {
   const [showAdmissionForm, setShowAdmissionForm] = useState(true); // Show by default when page loads
 
   // Fetch students
-  const { data: studentsData, error: studentsError } = useQuery('students', async () => {
-    try {
-      const response = await api.get('/students');
-      return response.data;
-    } catch (error) {
-      if (error.response?.status === 401) {
-        toast.error('Session expired. Please login again.');
-        window.location.href = '/login';
+  const { data: studentsData, error: studentsError } = useQuery({
+    queryKey: ['students'],
+    queryFn: async () => {
+      try {
+        const response = await api.get('/students');
+        return response.data;
+      } catch (error) {
+        if (error.response?.status === 401) {
+          toast.error('Session expired. Please login again.');
+          window.location.href = '/login';
+        }
+        throw error;
       }
-      throw error;
-    }
-  }, {
+    },
     retry: 1,
     onError: (error) => {
       if (error.response?.status !== 401) {
@@ -50,13 +52,16 @@ const FeeManagement = () => {
   });
 
   // Fetch courses
-  const { data: coursesData } = useQuery('courses', async () => {
-    try {
-      const response = await api.get('/courses');
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching courses:', error);
-      return [];
+  const { data: coursesData } = useQuery({
+    queryKey: ['courses'],
+    queryFn: async () => {
+      try {
+        const response = await api.get('/courses');
+        return response.data;
+      } catch (error) {
+        console.error('Error fetching courses:', error);
+        return [];
+      }
     }
   });
 
@@ -126,8 +131,8 @@ const FeeManagement = () => {
     {
       onSuccess: () => {
         toast.success('Fee invoice created successfully!');
-        queryClient.invalidateQueries('students');
-        queryClient.invalidateQueries('invoices');
+        queryClient.invalidateQueries({ queryKey: ['students'] });
+        queryClient.invalidateQueries({ queryKey: ['invoices'] });
         setShowForm(false);
         setFormData({
           courseId: '',
@@ -516,7 +521,7 @@ const FeeManagement = () => {
                 onSuccess={(studentData) => {
                   // Refresh students list
                   queryClient.invalidateQueries('students');
-                  queryClient.invalidateQueries('invoices');
+                  queryClient.invalidateQueries({ queryKey: ['invoices'] });
                   // Optionally show success message or navigate
                   toast.success('Student admitted successfully!');
                   setShowAdmissionForm(false);
@@ -534,9 +539,11 @@ const FeeManagement = () => {
 const FeeInvoicesList = () => {
   const queryClient = useQueryClient();
 
-  const { data: invoices, isLoading, error } = useQuery('invoices', async () => {
-    try {
-      const response = await api.get('/fees/invoices');
+  const { data: invoices, isLoading, error } = useQuery({
+    queryKey: ['invoices'],
+    queryFn: async () => {
+      try {
+        const response = await api.get('/fees/invoices');
       return response.data;
     } catch (error) {
       if (error.response?.status === 401) {
@@ -547,7 +554,7 @@ const FeeInvoicesList = () => {
       }
       throw error;
     }
-  }, {
+    },
     retry: 1,
     onError: (error) => {
       if (error.response?.status !== 401) {
@@ -578,8 +585,8 @@ const FeeInvoicesList = () => {
         paymentDate: new Date()
       });
       toast.success('Payment recorded successfully!');
-      queryClient.invalidateQueries('invoices');
-      queryClient.invalidateQueries('students');
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['students'] });
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to record payment');
     }
@@ -597,7 +604,7 @@ const FeeInvoicesList = () => {
     try {
       await api.delete(`/fees/invoices/${invoiceId}`);
       toast.success('Invoice deleted successfully!');
-      queryClient.invalidateQueries('invoices');
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to delete invoice');
     }

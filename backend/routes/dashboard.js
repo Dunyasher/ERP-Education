@@ -487,5 +487,152 @@ router.get('/student', authenticate, async (req, res) => {
   }
 });
 
+// @route   GET /api/dashboard/admin/class-wise
+// @desc    Get class-wise statistics (attendance and fees)
+// @access  Private (Admin)
+router.get('/admin/class-wise', authenticate, async (req, res) => {
+  try {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    
+    // Get all students grouped by class
+    const students = await Student.find({ 'academicInfo.status': 'active' })
+      .select('className section feeInfo');
+    
+    // Group students by class
+    const classGroups = {};
+    students.forEach(student => {
+      const className = student.className || 'Unassigned';
+      if (!classGroups[className]) {
+        classGroups[className] = {
+          className,
+          students: [],
+          sections: {}
+        };
+      }
+      classGroups[className].students.push(student);
+      
+      // Group by section
+      const section = student.section || 'A';
+      if (!classGroups[className].sections[section]) {
+        classGroups[className].sections[section] = 0;
+      }
+      classGroups[className].sections[section]++;
+    });
+    
+    // Get today's attendance
+    const todayAttendance = await Attendance.find({
+      date: {
+        $gte: todayStart,
+        $lte: todayEnd
+      }
+    }).select('studentId status');
+    
+    // Create attendance map
+    const attendanceMap = {};
+    todayAttendance.forEach(att => {
+      if (!attendanceMap[att.studentId]) {
+        attendanceMap[att.studentId] = { present: 0, absent: 0, onLeave: 0 };
+      }
+      if (att.status === 'present') {
+        attendanceMap[att.studentId].present = 1;
+      } else if (att.status === 'absent') {
+        attendanceMap[att.studentId].absent = 1;
+      } else if (att.status === 'excused') {
+        attendanceMap[att.studentId].onLeave = 1;
+      }
+    });
+    
+    // Calculate statistics for each class
+    const classStats = Object.values(classGroups).map(classData => {
+      const classStudents = classData.students;
+      let presentToday = 0;
+      let absentToday = 0;
+      let onLeaveToday = 0;
+      let expectedFee = 0;
+      let generatedFee = 0;
+      let paidAmount = 0;
+      let balance = 0;
+      
+      classStudents.forEach(student => {
+        const studentId = student._id.toString();
+        if (attendanceMap[studentId]) {
+          if (attendanceMap[studentId].present) presentToday++;
+          if (attendanceMap[studentId].absent) absentToday++;
+          if (attendanceMap[studentId].onLeave) onLeaveToday++;
+        }
+        
+        // Fee calculations
+        const totalFee = student.feeInfo?.totalFee || 0;
+        const paidFee = student.feeInfo?.paidFee || 0;
+        const pendingFee = totalFee - paidFee;
+        
+        expectedFee += totalFee;
+        generatedFee += totalFee;
+        paidAmount += paidFee;
+        balance += pendingFee;
+      });
+      
+      return {
+        className: classData.className,
+        sectionStrength: classData.sections,
+        totalStudents: classStudents.length,
+        presentToday,
+        absentToday,
+        onLeaveToday,
+        expected: expectedFee,
+        generated: generatedFee,
+        paidAmount,
+        balance
+      };
+    });
+    
+    // Calculate totals
+    const totals = classStats.reduce((acc, stat) => {
+      acc.sectionStrength = {}; // Will be calculated separately
+      acc.totalStudents += stat.totalStudents;
+      acc.presentToday += stat.presentToday;
+      acc.absentToday += stat.absentToday;
+      acc.onLeaveToday += stat.onLeaveToday;
+      acc.expected += stat.expected;
+      acc.generated += stat.generated;
+      acc.paidAmount += stat.paidAmount;
+      acc.balance += stat.balance;
+      return acc;
+    }, {
+      className: '* Total *',
+      sectionStrength: {},
+      totalStudents: 0,
+      presentToday: 0,
+      absentToday: 0,
+      onLeaveToday: 0,
+      expected: 0,
+      generated: 0,
+      paidAmount: 0,
+      balance: 0
+    });
+    
+    // Sort classes (One, Two, Three, etc.)
+    const classOrder = ['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
+    classStats.sort((a, b) => {
+      const aIndex = classOrder.indexOf(a.className);
+      const bIndex = classOrder.indexOf(b.className);
+      if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+      if (aIndex !== -1) return -1;
+      if (bIndex !== -1) return 1;
+      return a.className.localeCompare(b.className);
+    });
+    
+    res.json({
+      classStats,
+      totals
+    });
+  } catch (error) {
+    console.error('Class-wise stats error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 module.exports = router;
 

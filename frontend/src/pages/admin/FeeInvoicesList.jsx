@@ -6,20 +6,22 @@ import { Download, Trash2, DollarSign } from 'lucide-react';
 const FeeInvoicesList = () => {
   const queryClient = useQueryClient();
 
-  const { data: invoices, isLoading, error } = useQuery('invoices', async () => {
-    try {
-      const response = await api.get('/fees/invoices');
-      return response.data;
-    } catch (error) {
-      if (error.response?.status === 401) {
-        toast.error('Session expired. Please login again.');
-        setTimeout(() => {
-          window.location.href = '/login';
-        }, 2000);
+  const { data: invoices, isLoading, error } = useQuery({
+    queryKey: ['invoices'],
+    queryFn: async () => {
+      try {
+        const response = await api.get('/fees/invoices');
+        return response.data;
+      } catch (error) {
+        if (error.response?.status === 401) {
+          toast.error('Session expired. Please login again.');
+          setTimeout(() => {
+            window.location.href = '/login';
+          }, 2000);
+        }
+        throw error;
       }
-      throw error;
-    }
-  }, {
+    },
     retry: 1,
     onError: (error) => {
       if (error.response?.status !== 401) {
@@ -42,8 +44,8 @@ const FeeInvoicesList = () => {
         paymentDate: new Date()
       });
       toast.success('Payment recorded successfully!');
-      queryClient.invalidateQueries('invoices');
-      queryClient.invalidateQueries('students');
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['students'] });
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to record payment');
     }
@@ -62,7 +64,7 @@ const FeeInvoicesList = () => {
     try {
       await api.delete(`/fees/invoices/${invoiceId}`);
       toast.success('Invoice deleted successfully!');
-      queryClient.invalidateQueries('invoices');
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to delete invoice');
     }

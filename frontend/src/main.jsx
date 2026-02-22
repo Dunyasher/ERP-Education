@@ -48,7 +48,12 @@ if (!rootElement) {
         <ErrorBoundary>
           <QueryClientProvider client={queryClient}>
             <Provider store={store}>
-              <BrowserRouter>
+              <BrowserRouter
+                future={{
+                  v7_startTransition: true,
+                  v7_relativeSplatPath: true,
+                }}
+              >
                 <App />
                 <Toaster 
                   position="top-right" 

@@ -8,8 +8,8 @@ const { authenticate, authorize } = require('../middleware/auth');
 
 // @route   GET /api/classes
 // @desc    Get all classes with summary statistics
-// @access  Private (Admin)
-router.get('/', authenticate, authorize('admin', 'super_admin'), async (req, res) => {
+// @access  Private (Admin, Accountant)
+router.get('/', authenticate, authorize('admin', 'super_admin', 'accountant'), async (req, res) => {
   try {
     const courses = await Course.find({ status: 'published' })
       .populate('instructorId', 'personalInfo.fullName')
@@ -71,7 +71,7 @@ router.get('/:id', authenticate, authorize('admin', 'super_admin'), async (req, 
   try {
     const course = await Course.findById(req.params.id)
       .populate('instructorId', 'personalInfo.fullName personalInfo.photo contactInfo.phone contactInfo.email')
-      .populate('categoryId', 'name');
+      .populate('categoryId', 'name instituteType');
 
     if (!course) {
       return res.status(404).json({ message: 'Class not found' });
@@ -179,6 +179,12 @@ router.get('/:id', authenticate, authorize('admin', 'super_admin'), async (req, 
         srNo: course.srNo,
         description: course.description,
         category: course.categoryId?.name || 'N/A',
+        categoryId: course.categoryId ? {
+          _id: course.categoryId._id,
+          name: course.categoryId.name,
+          instituteType: course.categoryId.instituteType
+        } : null,
+        instituteType: course.instituteType || course.categoryId?.instituteType,
         schedules: course.schedules || [],
         capacity: course.capacity || 50,
         enrolledStudents: students.length,

@@ -30,9 +30,12 @@ const AttendanceReports = () => {
   const [attendanceType, setAttendanceType] = useState(''); // 'manual', 'digital', or ''
 
   // Fetch courses
-  const { data: courses = [] } = useQuery('courses', async () => {
-    const response = await api.get('/courses');
-    return response.data;
+  const { data: courses = [] } = useQuery({
+    queryKey: ['courses'],
+    queryFn: async () => {
+      const response = await api.get('/courses');
+      return response.data;
+    }
   });
 
   // Fetch attendance summary

@@ -27,9 +27,12 @@ const FaceScan = () => {
   const streamRef = useRef(null);
 
   // Fetch courses for selection
-  const { data: courses = [] } = useQuery('courses', async () => {
-    const response = await api.get('/courses');
-    return response.data;
+  const { data: courses = [] } = useQuery({
+    queryKey: ['courses'],
+    queryFn: async () => {
+      const response = await api.get('/courses');
+      return response.data;
+    }
   });
 
   // Start camera
@@ -110,38 +113,34 @@ const FaceScan = () => {
   };
 
   // Face scan mutation
-  const faceScanMutation = useMutation(
-    async (data) => {
+  const faceScanMutation = useMutation({
+    mutationFn: async (data) => {
       return api.post('/attendance/face-scan', data);
     },
-    {
-      onSuccess: (response) => {
-        const { student, time, status } = response.data;
-        toast.success(
-          `Attendance recorded for ${student.name} at ${new Date(time).toLocaleTimeString()}`,
-          {
-            icon: status === 'late' ? '⏰' : '✅',
-            duration: 3000
-          }
-        );
-      },
-      onError: (error) => {
-        toast.error(error.response?.data?.message || 'Failed to record attendance');
-      }
+    onSuccess: (response) => {
+      const { student, time, status } = response.data;
+      toast.success(
+        `Attendance recorded for ${student.name} at ${new Date(time).toLocaleTimeString()}`,
+        {
+          icon: status === 'late' ? '⏰' : '✅',
+          duration: 3000
+        }
+      );
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to record attendance');
     }
-  );
+  });
 
   // Fetch scan history
-  const { data: historyData, refetch: refetchHistory } = useQuery(
-    ['faceScanHistory'],
-    async () => {
+  const { data: historyData, refetch: refetchHistory } = useQuery({
+    queryKey: ['faceScanHistory'],
+    queryFn: async () => {
       const response = await api.get('/attendance/scan/history');
       return response.data;
     },
-    {
-      enabled: false
-    }
-  );
+    enabled: false
+  });
 
   useEffect(() => {
     if (showHistory) {

@@ -18,47 +18,46 @@ const Categories = () => {
   });
 
   // Fetch categories
-  const { data: categories = [], isLoading } = useQuery('categories', async () => {
-    const response = await api.get('/categories');
-    return response.data;
+  const { data: categories = [], isLoading } = useQuery({
+    queryKey: ['categories'],
+    queryFn: async () => {
+      const response = await api.get('/categories');
+      return response.data;
+    }
   });
 
   // Create/Update category mutation
-  const categoryMutation = useMutation(
-    async (data) => {
+  const categoryMutation = useMutation({
+    mutationFn: async (data) => {
       if (editingCategory) {
         return api.put(`/categories/${editingCategory._id}`, data);
       } else {
         return api.post('/categories', data);
       }
     },
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries('categories');
-        toast.success(editingCategory ? 'Category updated successfully!' : 'Category created successfully!');
-        setShowForm(false);
-        setEditingCategory(null);
-        resetForm();
-      },
-      onError: (error) => {
-        toast.error(error.response?.data?.message || 'Failed to save category');
-      }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      toast.success(editingCategory ? 'Category updated successfully!' : 'Category created successfully!');
+      setShowForm(false);
+      setEditingCategory(null);
+      resetForm();
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to save category');
     }
-  );
+  });
 
   // Delete category mutation
-  const deleteMutation = useMutation(
-    async (id) => api.delete(`/categories/${id}`),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries('categories');
-        toast.success('Category deleted successfully!');
-      },
-      onError: () => {
-        toast.error('Failed to delete category');
-      }
+  const deleteMutation = useMutation({
+    mutationFn: async (id) => api.delete(`/categories/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      toast.success('Category deleted successfully!');
+    },
+    onError: () => {
+      toast.error('Failed to delete category');
     }
-  );
+  });
 
   const resetForm = () => {
     setFormData({

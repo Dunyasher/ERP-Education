@@ -45,7 +45,7 @@ const IDCardSettings = () => {
     {
       onSuccess: () => {
         toast.success('Settings saved successfully!');
-        queryClient.invalidateQueries('idCardSettings');
+        queryClient.invalidateQueries({ queryKey: ['idCardSettings'] });
       },
       onError: (error) => {
         toast.error('Failed to save settings');

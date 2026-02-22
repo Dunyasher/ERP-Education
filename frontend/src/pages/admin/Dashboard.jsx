@@ -18,7 +18,12 @@ import {
   ShoppingBag,
   TrendingDown,
   BarChart3,
-  Search
+  Search,
+  CheckCircle,
+  XCircle,
+  FileText,
+  Eye,
+  User
 } from 'lucide-react';
 
 const AdminDashboard = () => {
@@ -28,6 +33,14 @@ const AdminDashboard = () => {
     queryKey: ['adminStats'],
     queryFn: async () => {
       const response = await api.get('/dashboard/admin');
+      return response.data;
+    }
+  });
+
+  const { data: classWiseStats, isLoading: isLoadingClassStats } = useQuery({
+    queryKey: ['classWiseStats'],
+    queryFn: async () => {
+      const response = await api.get('/dashboard/admin/class-wise');
       return response.data;
     }
   });
@@ -45,9 +58,16 @@ const AdminDashboard = () => {
   }
 
   const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-PK', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'PKR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount || 0);
+  };
+
+  const formatAmount = (amount) => {
+    return new Intl.NumberFormat('en-PK', {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(amount || 0);
@@ -407,6 +427,164 @@ const AdminDashboard = () => {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Class-wise Breakdown Table */}
+      <div className="card animate-slide-up">
+        <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+              <BarChart3 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            </div>
+            Class-wise Statistics
+          </h2>
+        </div>
+        
+        {isLoadingClassStats ? (
+          <div className="text-center py-12">Loading class statistics...</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-blue-600 text-white">
+                  <th className="px-4 py-3 text-left font-semibold">Class</th>
+                  <th className="px-4 py-3 text-left font-semibold">Section Strength</th>
+                  <th className="px-4 py-3 text-left font-semibold">Present Today</th>
+                  <th className="px-4 py-3 text-left font-semibold">Absent Today</th>
+                  <th className="px-4 py-3 text-left font-semibold">On Leave</th>
+                  <th className="px-4 py-3 text-left font-semibold">Expected</th>
+                  <th className="px-4 py-3 text-left font-semibold">Generated</th>
+                  <th className="px-4 py-3 text-left font-semibold">Paid Amount</th>
+                  <th className="px-4 py-3 text-left font-semibold">Balance</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white dark:bg-gray-800">
+                {classWiseStats?.classStats?.map((classStat, index) => (
+                  <tr key={index} className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                    <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white">
+                      {classStat.className}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-2">
+                        {Object.entries(classStat.sectionStrength || {}).map(([section, count]) => (
+                          <span
+                            key={section}
+                            className="px-3 py-1 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium flex items-center gap-1"
+                          >
+                            <User className="w-3 h-3" />
+                            {section}: {count}
+                          </span>
+                        ))}
+                        {Object.keys(classStat.sectionStrength || {}).length === 0 && (
+                          <span className="text-gray-500 dark:text-gray-400 text-sm">-</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-lg text-sm font-semibold flex items-center gap-1 w-fit">
+                        <CheckCircle className="w-4 h-4" />
+                        {classStat.presentToday}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-lg text-sm font-semibold flex items-center gap-1 w-fit">
+                        <XCircle className="w-4 h-4" />
+                        {classStat.absentToday}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="px-3 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 rounded-lg text-sm font-semibold flex items-center gap-1 w-fit">
+                        <FileText className="w-4 h-4" />
+                        {classStat.onLeaveToday}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-lg text-sm font-semibold flex items-center gap-1 w-fit">
+                        <Eye className="w-4 h-4" />
+                        {formatAmount(classStat.expected)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-lg text-sm font-semibold flex items-center gap-1 w-fit">
+                        <Eye className="w-4 h-4" />
+                        {formatAmount(classStat.generated)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-lg text-sm font-semibold flex items-center gap-1 w-fit">
+                        <CheckCircle className="w-4 h-4" />
+                        {formatAmount(classStat.paidAmount)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-lg text-sm font-semibold flex items-center gap-1 w-fit">
+                        <CheckCircle className="w-4 h-4" />
+                        {formatAmount(classStat.balance)}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {/* Total Row */}
+                {classWiseStats?.totals && (
+                  <tr className="border-t-2 border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700/50 font-bold">
+                    <td className="px-4 py-3 text-gray-900 dark:text-white">
+                      {classWiseStats.totals.className}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400">-</td>
+                    <td className="px-4 py-3">
+                      <span className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-lg text-sm font-semibold flex items-center gap-1 w-fit">
+                        <CheckCircle className="w-4 h-4" />
+                        {classWiseStats.totals.presentToday}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-lg text-sm font-semibold flex items-center gap-1 w-fit">
+                        <XCircle className="w-4 h-4" />
+                        {classWiseStats.totals.absentToday}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="px-3 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 rounded-lg text-sm font-semibold flex items-center gap-1 w-fit">
+                        <FileText className="w-4 h-4" />
+                        {classWiseStats.totals.onLeaveToday}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-lg text-sm font-semibold flex items-center gap-1 w-fit">
+                        <Eye className="w-4 h-4" />
+                        {formatAmount(classWiseStats.totals.expected)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-lg text-sm font-semibold flex items-center gap-1 w-fit">
+                        <Eye className="w-4 h-4" />
+                        {formatAmount(classWiseStats.totals.generated)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-lg text-sm font-semibold flex items-center gap-1 w-fit">
+                        <CheckCircle className="w-4 h-4" />
+                        {formatAmount(classWiseStats.totals.paidAmount)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-lg text-sm font-semibold flex items-center gap-1 w-fit">
+                        <CheckCircle className="w-4 h-4" />
+                        {formatAmount(classWiseStats.totals.balance)}
+                      </span>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+            {(!classWiseStats?.classStats || classWiseStats.classStats.length === 0) && (
+              <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                <p>No class data available</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
     </div>

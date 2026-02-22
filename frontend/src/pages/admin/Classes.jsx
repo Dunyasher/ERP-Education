@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams, useLocation } from 'react-router-dom';
+import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
 import { 
@@ -18,11 +18,13 @@ import {
   Plus,
   Trash2,
   Edit,
-  Save
+  Save,
+  FolderTree
 } from 'lucide-react';
 
 const Classes = () => {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [selectedClass, setSelectedClass] = useState(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
@@ -51,22 +53,63 @@ const Classes = () => {
   });
 
   // Fetch teachers for instructor selection
-  const { data: teachers = [] } = useQuery('teachers', async () => {
-    const response = await api.get('/teachers');
-    return response.data;
+  const { data: teachers = [] } = useQuery({
+    queryKey: ['teachers'],
+    queryFn: async () => {
+      const response = await api.get('/teachers');
+      return response.data;
+    }
   });
 
   // Fetch categories for class creation (only course categories)
-  const { data: categories = [] } = useQuery(['categories', 'course'], async () => {
-    const response = await api.get('/categories?categoryType=course');
-    return response.data;
+  const { data: categories = [] } = useQuery({
+    queryKey: ['categories', 'course'],
+    queryFn: async () => {
+      const response = await api.get('/categories?categoryType=course');
+      return response.data;
+    }
   });
 
+  // Get selected category's institute type
+  const selectedCategory = useMemo(() => {
+    return categories.find(cat => cat._id === newClassForm.categoryId);
+  }, [categories, newClassForm.categoryId]);
+
+  // Filter teachers based on selected category's institute type
+  const filteredTeachers = useMemo(() => {
+    if (!selectedCategory || !selectedCategory.instituteType) {
+      return teachers; // Show all teachers if no category selected
+    }
+    
+    return teachers.filter(teacher => {
+      const teacherInstituteType = teacher.employment?.instituteType;
+      return teacherInstituteType === selectedCategory.instituteType;
+    });
+  }, [teachers, selectedCategory]);
+
+  // Clear instructor selection when category changes if teacher doesn't match
+  useEffect(() => {
+    if (selectedCategory && newClassForm.instructorId) {
+      const selectedTeacher = teachers.find(t => t._id === newClassForm.instructorId);
+      const teacherInstituteType = selectedTeacher?.employment?.instituteType;
+      
+      if (teacherInstituteType !== selectedCategory.instituteType) {
+        setNewClassForm(prev => ({ ...prev, instructorId: '' }));
+        toast.info('Teacher selection cleared - please select a teacher matching the category\'s institute type', {
+          duration: 3000,
+          icon: 'ℹ️'
+        });
+      }
+    }
+  }, [selectedCategory, teachers, newClassForm.instructorId]);
+
   // Fetch all classes
-  const { data: classes = [], isLoading } = useQuery('classes', async () => {
-    const response = await api.get('/classes');
-    return response.data;
-  }, {
+  const { data: classes = [], isLoading } = useQuery({
+    queryKey: ['classes'],
+    queryFn: async () => {
+      const response = await api.get('/classes');
+      return response.data;
+    },
     refetchOnWindowFocus: false,
     staleTime: 30000 // Cache for 30 seconds
   });
@@ -115,17 +158,15 @@ const Classes = () => {
   }, [searchParams, classes, selectedClass, setSearchParams, location.state, isLoading]);
 
   // Fetch detailed class information
-  const { data: classDetails, isLoading: isLoadingDetails } = useQuery(
-    ['classDetails', selectedClass?._id],
-    async () => {
+  const { data: classDetails, isLoading: isLoadingDetails } = useQuery({
+    queryKey: ['classDetails', selectedClass?._id],
+    queryFn: async () => {
       if (!selectedClass?._id) return null;
       const response = await api.get(`/classes/${selectedClass._id}`);
       return response.data;
     },
-    {
-      enabled: !!selectedClass?._id
-    }
-  );
+    enabled: !!selectedClass?._id
+  });
 
   const formatCurrency = (amount) => {
     if (!amount && amount !== 0) return '$0.00';
@@ -148,80 +189,72 @@ const Classes = () => {
   };
 
   // Add schedule mutation
-  const addScheduleMutation = useMutation(
-    async ({ classId, scheduleData }) => {
+  const addScheduleMutation = useMutation({
+    mutationFn: async ({ classId, scheduleData }) => {
       return api.post(`/classes/${classId}/schedule`, scheduleData);
     },
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries('classes');
-        queryClient.invalidateQueries(['classDetails', selectedClass?._id]);
-        setShowScheduleForm(false);
-        setScheduleForm({ startTime: '', endTime: '', days: [], room: '' });
-        setEditingScheduleIndex(null);
-        toast.success('Schedule added successfully');
-      },
-      onError: (error) => {
-        toast.error(error.response?.data?.message || 'Failed to add schedule');
-      }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['classes'] });
+      queryClient.invalidateQueries({ queryKey: ['classDetails', selectedClass?._id] });
+      setShowScheduleForm(false);
+      setScheduleForm({ startTime: '', endTime: '', days: [], room: '' });
+      setEditingScheduleIndex(null);
+      toast.success('Schedule added successfully');
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to add schedule');
     }
-  );
+  });
 
   // Update schedule mutation
-  const updateScheduleMutation = useMutation(
-    async ({ classId, scheduleIndex, scheduleData }) => {
+  const updateScheduleMutation = useMutation({
+    mutationFn: async ({ classId, scheduleIndex, scheduleData }) => {
       return api.put(`/classes/${classId}/schedule/${scheduleIndex}`, scheduleData);
     },
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries('classes');
-        queryClient.invalidateQueries(['classDetails', selectedClass?._id]);
-        setShowScheduleForm(false);
-        setScheduleForm({ startTime: '', endTime: '', days: [], room: '' });
-        setEditingScheduleIndex(null);
-        toast.success('Schedule updated successfully');
-      },
-      onError: (error) => {
-        toast.error(error.response?.data?.message || 'Failed to update schedule');
-      }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['classes'] });
+      queryClient.invalidateQueries({ queryKey: ['classDetails', selectedClass?._id] });
+      setShowScheduleForm(false);
+      setScheduleForm({ startTime: '', endTime: '', days: [], room: '' });
+      setEditingScheduleIndex(null);
+      toast.success('Schedule updated successfully');
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to update schedule');
     }
-  );
+  });
 
   // Delete schedule mutation
-  const deleteScheduleMutation = useMutation(
-    async ({ classId, scheduleIndex }) => {
+  const deleteScheduleMutation = useMutation({
+    mutationFn: async ({ classId, scheduleIndex }) => {
       return api.delete(`/classes/${classId}/schedule/${scheduleIndex}`);
     },
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries('classes');
-        queryClient.invalidateQueries(['classDetails', selectedClass?._id]);
-        toast.success('Schedule deleted successfully');
-      },
-      onError: (error) => {
-        toast.error(error.response?.data?.message || 'Failed to delete schedule');
-      }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['classes'] });
+      queryClient.invalidateQueries({ queryKey: ['classDetails', selectedClass?._id] });
+      toast.success('Schedule deleted successfully');
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to delete schedule');
     }
-  );
+  });
 
   // Assign instructor mutation
-  const assignInstructorMutation = useMutation(
-    async ({ classId, instructorId }) => {
+  const assignInstructorMutation = useMutation({
+    mutationFn: async ({ classId, instructorId }) => {
       return api.put(`/classes/${classId}/instructor`, { instructorId });
     },
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries('classes');
-        queryClient.invalidateQueries(['classDetails', selectedClass?._id]);
-        setShowInstructorForm(false);
-        setSelectedInstructorId('');
-        toast.success('Instructor assigned successfully');
-      },
-      onError: (error) => {
-        toast.error(error.response?.data?.message || 'Failed to assign instructor');
-      }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['classes'] });
+      queryClient.invalidateQueries({ queryKey: ['classDetails', selectedClass?._id] });
+      setShowInstructorForm(false);
+      setSelectedInstructorId('');
+      toast.success('Instructor assigned successfully');
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to assign instructor');
     }
-  );
+  });
 
   const handleScheduleSubmit = (e) => {
     e.preventDefault();
@@ -291,8 +324,8 @@ const Classes = () => {
   const weekDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
   // Create new class mutation
-  const createClassMutation = useMutation(
-    async (data) => {
+  const createClassMutation = useMutation({
+    mutationFn: async (data) => {
       // First create the course
       const courseData = {
         name: data.name,
@@ -322,49 +355,75 @@ const Classes = () => {
       const response = await api.post('/courses', courseData);
       return response.data;
     },
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries('classes');
-        queryClient.invalidateQueries('courses');
-        setShowCreateClassForm(false);
-        setNewClassForm({
-          name: '',
-          categoryId: '',
-          instructorId: '',
-          startTime: '',
-          endTime: '',
-          days: [],
-          room: '',
-          capacity: 50,
-          feeAmount: 0,
-          status: 'published'
-        });
-        toast.success('Class created successfully!');
-      },
-      onError: (error) => {
-        const errorMessage = error.response?.data?.message || error.response?.data?.error || 'Failed to create class';
-        toast.error(errorMessage);
-        console.error('Create class error:', error);
-      }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['classes'] });
+      queryClient.invalidateQueries({ queryKey: ['courses'] });
+      setShowCreateClassForm(false);
+      setNewClassForm({
+        name: '',
+        categoryId: '',
+        instructorId: '',
+        startTime: '',
+        endTime: '',
+        days: [],
+        room: '',
+        capacity: 50,
+        feeAmount: 0,
+        status: 'published'
+      });
+      toast.success('Class created successfully!');
+    },
+    onError: (error) => {
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || 'Failed to create class';
+      toast.error(errorMessage);
+      console.error('Create class error:', error);
     }
-  );
+  });
 
   // Fill sample data for testing
   const fillSampleData = () => {
+    // Get first available category
+    const firstCategory = categories.length > 0 ? categories[0] : null;
+    const firstCategoryId = firstCategory?._id || '';
+    
+    // Get first teacher matching the category's institute type
+    let firstTeacher = '';
+    if (firstCategory && firstCategory.instituteType) {
+      const matchingTeacher = teachers.find(t => 
+        t.employment?.instituteType === firstCategory.instituteType
+      );
+      firstTeacher = matchingTeacher?._id || '';
+    } else if (teachers.length > 0) {
+      firstTeacher = teachers[0]._id;
+    }
+    
     const sampleData = {
-      name: 'Sample English Class',
-      categoryId: categories.length > 0 ? categories[0]._id : '',
-      instructorId: teachers.length > 0 ? teachers[0]._id : '',
+      name: 'English Language - Book 1',
+      categoryId: firstCategoryId,
+      instructorId: firstTeacher,
       startTime: '09:00',
       endTime: '11:00',
       days: ['Monday', 'Wednesday', 'Friday'],
       room: 'Room 101',
-      capacity: 30,
+      capacity: 50,
       feeAmount: 500,
       status: 'published'
     };
+    
     setNewClassForm(sampleData);
-    toast.success('Sample data filled! You can modify the values as needed.');
+    
+    // Show appropriate message based on available data
+    if (!firstCategoryId || !firstTeacher) {
+      toast.success('Sample data filled! Note: Please select a category and teacher if not auto-filled.', {
+        duration: 4000,
+        icon: 'ℹ️'
+      });
+    } else {
+      toast.success('Sample data filled! You can modify the values as needed.', {
+        duration: 3000,
+        icon: '✅'
+      });
+    }
   };
 
   const handleCreateClassSubmit = (e) => {
@@ -387,10 +446,6 @@ const Classes = () => {
     }
     if (newClassForm.days.length === 0) {
       toast.error('Please select at least one day');
-      return;
-    }
-    if (!newClassForm.feeAmount || newClassForm.feeAmount < 0) {
-      toast.error('Please provide a valid fee amount');
       return;
     }
     createClassMutation.mutate(newClassForm);
@@ -437,7 +492,7 @@ const Classes = () => {
         </div>
 
         {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
           <div className="card animate-fade-in">
             <div className="flex items-center justify-between">
               <div>
@@ -448,48 +503,6 @@ const Classes = () => {
               </div>
               <div className="icon-container bg-blue-100 dark:bg-blue-900/20">
                 <Users className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-              </div>
-            </div>
-          </div>
-
-          <div className="card animate-fade-in">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Total Fee</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                  {formatCurrency(classDetails.statistics.totalFee)}
-                </p>
-              </div>
-              <div className="icon-container bg-green-100 dark:bg-green-900/20">
-                <DollarSign className="w-6 h-6 text-green-600 dark:text-green-400" />
-              </div>
-            </div>
-          </div>
-
-          <div className="card animate-fade-in">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Paid Fee</p>
-                <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">
-                  {formatCurrency(classDetails.statistics.totalPaid)}
-                </p>
-              </div>
-              <div className="icon-container bg-emerald-100 dark:bg-emerald-900/20">
-                <TrendingUp className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
-              </div>
-            </div>
-          </div>
-
-          <div className="card animate-fade-in">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Pending Fee</p>
-                <p className="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">
-                  {formatCurrency(classDetails.statistics.totalPending)}
-                </p>
-              </div>
-              <div className="icon-container bg-red-100 dark:bg-red-900/20">
-                <DollarSign className="w-6 h-6 text-red-600 dark:text-red-400" />
               </div>
             </div>
           </div>
@@ -875,66 +888,99 @@ const Classes = () => {
         )}
 
         {/* Instructor Assignment Modal */}
-        {showInstructorForm && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Assign Instructor
-                </h3>
-                <button
-                  onClick={() => {
-                    setShowInstructorForm(false);
-                    setSelectedInstructorId('');
-                  }}
-                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              <form onSubmit={handleAssignInstructor} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                    Select Teacher *
-                  </label>
-                  <select
-                    value={selectedInstructorId}
-                    onChange={(e) => setSelectedInstructorId(e.target.value)}
-                    required
-                    className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
-                  >
-                    <option value="">Select a teacher</option>
-                    {teachers.map((teacher) => (
-                      <option key={teacher._id} value={teacher._id}>
-                        {teacher.personalInfo?.fullName || 'N/A'}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex justify-end gap-3 pt-4">
+        {showInstructorForm && (() => {
+          // Get the class's institute type from the course category
+          const classInstituteType = classDetails?.course?.categoryId?.instituteType || 
+                                     classDetails?.course?.instituteType;
+          
+          // Filter teachers based on class's institute type
+          const filteredTeachersForClass = classInstituteType
+            ? teachers.filter(teacher => 
+                teacher.employment?.instituteType === classInstituteType
+              )
+            : teachers;
+          
+          return (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+                    Assign Instructor
+                  </h3>
                   <button
-                    type="button"
                     onClick={() => {
                       setShowInstructorForm(false);
                       setSelectedInstructorId('');
                     }}
-                    className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                   >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={assignInstructorMutation.isLoading}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
-                  >
-                    <Save className="w-4 h-4" />
-                    Assign Instructor
+                    <X className="w-5 h-5" />
                   </button>
                 </div>
-              </form>
+                <form onSubmit={handleAssignInstructor} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                      Select Teacher *
+                    </label>
+                    <select
+                      value={selectedInstructorId}
+                      onChange={(e) => setSelectedInstructorId(e.target.value)}
+                      required
+                      className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+                    >
+                      <option value="">
+                        {filteredTeachersForClass.length === 0 
+                          ? classInstituteType 
+                            ? `No teachers available for ${classInstituteType.replace('_', ' ')}`
+                            : 'Select a teacher'
+                          : 'Select a teacher'}
+                      </option>
+                      {filteredTeachersForClass.length > 0 ? (
+                        filteredTeachersForClass.map((teacher) => (
+                          <option key={teacher._id} value={teacher._id}>
+                            {teacher.personalInfo?.fullName || 'N/A'}
+                          </option>
+                        ))
+                      ) : (
+                        <option value="" disabled>
+                          {classInstituteType 
+                            ? `No teachers available for ${classInstituteType.replace('_', ' ')}. Please add teachers for this institute type first.`
+                            : 'No teachers available. Please add teachers first.'}
+                        </option>
+                      )}
+                    </select>
+                    {classInstituteType && (
+                      <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                        Showing teachers for: <span className="font-semibold capitalize">{classInstituteType.replace('_', ' ')}</span>
+                        {filteredTeachersForClass.length > 0 && ` (${filteredTeachersForClass.length} available)`}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex justify-end gap-3 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowInstructorForm(false);
+                        setSelectedInstructorId('');
+                      }}
+                      className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={assignInstructorMutation.isLoading}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
+                    >
+                      <Save className="w-4 h-4" />
+                      Assign Instructor
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
     );
   }
@@ -951,13 +997,22 @@ const Classes = () => {
             View all classes, student enrollment, and fee collection details
           </p>
         </div>
-        <button
-          onClick={() => setShowCreateClassForm(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold transition-colors duration-200 shadow-lg hover:shadow-xl"
-        >
-          <Plus className="w-5 h-5" />
-          Add Class
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/admin/courses')}
+            className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold transition-colors duration-200 shadow-lg hover:shadow-xl"
+          >
+            <FolderTree className="w-5 h-5" />
+            Category
+          </button>
+          <button
+            onClick={() => setShowCreateClassForm(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold transition-colors duration-200 shadow-lg hover:shadow-xl"
+          >
+            <Plus className="w-5 h-5" />
+            Add Class
+          </button>
+        </div>
       </div>
 
       {/* Classes Grid */}
@@ -1163,22 +1218,39 @@ const Classes = () => {
                   value={newClassForm.instructorId}
                   onChange={(e) => setNewClassForm({ ...newClassForm, instructorId: e.target.value })}
                   required
-                  className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+                  disabled={!selectedCategory || filteredTeachers.length === 0}
+                  className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <option value="">Select a teacher</option>
-                  {teachers.length > 0 ? (
-                    teachers.map((teacher) => (
+                  <option value="">
+                    {!selectedCategory 
+                      ? 'Please select a category first' 
+                      : filteredTeachers.length === 0 
+                      ? `No teachers available for ${selectedCategory.instituteType?.replace('_', ' ')}` 
+                      : 'Select a teacher'}
+                  </option>
+                  {filteredTeachers.length > 0 ? (
+                    filteredTeachers.map((teacher) => (
                       <option key={teacher._id} value={teacher._id}>
                         {teacher.personalInfo?.fullName || 'N/A'}
                       </option>
                     ))
                   ) : (
-                    <option value="" disabled>No teachers available. Please add teachers first.</option>
+                    <option value="" disabled>
+                      {selectedCategory 
+                        ? `No teachers available for ${selectedCategory.instituteType?.replace('_', ' ')}. Please add teachers for this institute type first.`
+                        : 'No teachers available. Please add teachers first.'}
+                    </option>
                   )}
                 </select>
-                {teachers.length === 0 && (
-                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">
-                    No teachers found. Please add teachers before creating a class.
+                {selectedCategory && (
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    Showing teachers for: <span className="font-semibold capitalize">{selectedCategory.instituteType?.replace('_', ' ')}</span>
+                    {filteredTeachers.length > 0 && ` (${filteredTeachers.length} available)`}
+                  </p>
+                )}
+                {!selectedCategory && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                    Please select a category first to see available teachers
                   </p>
                 )}
               </div>
@@ -1250,38 +1322,6 @@ const Classes = () => {
                     value={newClassForm.room}
                     onChange={(e) => setNewClassForm({ ...newClassForm, room: e.target.value })}
                     placeholder="e.g., Room 101"
-                    className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
-                  />
-                </div>
-              </div>
-
-              {/* Capacity and Fee */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                    Class Capacity *
-                  </label>
-                  <input
-                    type="number"
-                    value={newClassForm.capacity}
-                    onChange={(e) => setNewClassForm({ ...newClassForm, capacity: parseInt(e.target.value) || 50 })}
-                    min="1"
-                    required
-                    className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                    Fee Amount (USD) *
-                  </label>
-                  <input
-                    type="number"
-                    value={newClassForm.feeAmount}
-                    onChange={(e) => setNewClassForm({ ...newClassForm, feeAmount: parseFloat(e.target.value) || 0 })}
-                    min="0"
-                    step="0.01"
-                    required
-                    placeholder="0.00"
                     className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
                   />
                 </div>

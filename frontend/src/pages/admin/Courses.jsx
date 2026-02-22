@@ -498,40 +498,6 @@ const Courses = () => {
                       ))}
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Fee Amount *</label>
-                    <input
-                      type="number"
-                      required
-                      value={formData.fee.amount}
-                      onChange={(e) => setFormData({
-                        ...formData,
-                        fee: { ...formData.fee, amount: parseFloat(e.target.value) || 0 }
-                      })}
-                      className="input-field"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Status</label>
-                    <select
-                      value={formData.status}
-                      onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                      className="input-field"
-                    >
-                      <option value="draft">Draft</option>
-                      <option value="published">Published</option>
-                      <option value="archived">Archived</option>
-                    </select>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Description</label>
-                  <textarea
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    className="input-field"
-                    rows="3"
-                  />
                 </div>
                 <div className="flex justify-end gap-4 pt-4 border-t">
                   <button

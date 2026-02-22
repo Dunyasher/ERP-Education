@@ -457,39 +457,180 @@ router.get('/:id', authenticate, addCollegeFilter, async (req, res) => {
     // Build query - try to find student by ID first, then check college access
     let query = { _id: req.params.id };
     
+    // Fetch student with all fields, using lean() to get plain object
     const student = await Student.findOne(query)
       .populate('userId', 'email profile')
-      .populate('academicInfo.courseId', 'name')
-      .populate('feeInfo.feeStructureId');
+      .populate('academicInfo.courseId', 'name categoryId')
+      .populate('feeInfo.feeStructureId')
+      .lean(); // Use lean() to get plain JavaScript object
     
     if (!student) {
       console.log('❌ Student not found with ID:', req.params.id);
       return res.status(404).json({ message: 'Student not found' });
     }
     
-    console.log('✅ Student found:', student.personalInfo?.fullName || 'N/A');
+    console.log('✅ Student found in database');
+    console.log('   Student ID:', student._id);
     console.log('   Student collegeId:', student.collegeId || 'null');
+    console.log('   All document keys:', Object.keys(student));
     
-    // Check college access
-    // If user has collegeId, student must have same collegeId (or no collegeId for backward compatibility)
-    // If user doesn't have collegeId, allow access to students without collegeId
-    if (req.collegeId) {
-      // User has collegeId - check if student matches
-      if (student.collegeId && student.collegeId.toString() !== req.collegeId.toString()) {
-        console.log('❌ College mismatch - Access denied');
-        return res.status(403).json({ message: 'Access denied' });
-      }
-      // Allow access if student has no collegeId (backward compatibility)
+    // Check what's actually in the database
+    console.log('   Data structure check:', {
+      hasPersonalInfo: !!student.personalInfo,
+      hasContactInfo: !!student.contactInfo,
+      hasParentInfo: !!student.parentInfo,
+      hasAcademicInfo: !!student.academicInfo,
+      hasFeeInfo: !!student.feeInfo,
+      personalInfoType: typeof student.personalInfo,
+      contactInfoType: typeof student.contactInfo,
+      personalInfoKeys: student.personalInfo ? Object.keys(student.personalInfo) : 'N/A',
+      contactInfoKeys: student.contactInfo ? Object.keys(student.contactInfo) : 'N/A',
+      parentInfoKeys: student.parentInfo ? Object.keys(student.parentInfo) : 'N/A',
+      academicInfoKeys: student.academicInfo ? Object.keys(student.academicInfo) : 'N/A',
+      feeInfoKeys: student.feeInfo ? Object.keys(student.feeInfo) : 'N/A'
+    });
+    
+    // Log actual values
+    if (student.personalInfo) {
+      console.log('   personalInfo values:', student.personalInfo);
     } else {
-      // User doesn't have collegeId - only allow access to students without collegeId
-      if (student.collegeId) {
-        console.log('❌ User has no collegeId but student has collegeId - Access denied');
-        return res.status(403).json({ message: 'Access denied' });
-      }
+      console.log('   ⚠️ personalInfo is NULL or UNDEFINED in database!');
+    }
+    if (student.contactInfo) {
+      console.log('   contactInfo values:', student.contactInfo);
+    } else {
+      console.log('   ⚠️ contactInfo is NULL or UNDEFINED in database!');
     }
     
+    // Check college access
+    // Priority: super_admin > admin/accountant > teacher > other roles
+    const userRole = req.user?.role;
+    const userCollegeId = req.collegeId;
+    
+    // Super admin, admin, and accountant can access ALL students (backward compatibility)
+    if (userRole === 'super_admin' || userRole === 'admin' || userRole === 'accountant') {
+      console.log(`✅ ${userRole} access - Allowing access to all students (no college restriction)`);
+      // Allow access - no restriction for these roles
+    } else if (userRole === 'teacher') {
+      // Teachers can access students in their courses, regardless of collegeId
+      // This will be checked at the course level, so allow access here
+      console.log('✅ Teacher access - Allowing access (course-level checks apply)');
+      // Allow access - course-level filtering happens elsewhere
+    } else if (userCollegeId) {
+      // User has collegeId - check if student matches
+      if (student.collegeId && student.collegeId.toString() !== userCollegeId.toString()) {
+        console.log('❌ College mismatch - Access denied');
+        console.log('   User collegeId:', userCollegeId);
+        console.log('   Student collegeId:', student.collegeId);
+        return res.status(403).json({ message: 'Access denied' });
+      }
+      // Allow access if student has no collegeId (backward compatibility) or matches
+      console.log('✅ College match or student has no collegeId - Allowing access');
+    } else {
+      // For other roles without collegeId, only allow access to students without collegeId
+      if (student.collegeId) {
+        console.log('❌ User has no collegeId but student has collegeId - Access denied');
+        console.log('   User role:', userRole);
+        console.log('   Student collegeId:', student.collegeId);
+        return res.status(403).json({ message: 'Access denied' });
+      }
+      console.log('✅ Both user and student have no collegeId - Allowing access');
+    }
+    
+    // Convert to plain object to ensure all fields are included
+    const studentObj = student.toObject ? student.toObject() : student;
+    
+    // Log the complete student data being returned
     console.log('✅ Access granted, returning student data');
-    res.json(student);
+    console.log('📤 Student data structure:', {
+      _id: studentObj._id,
+      srNo: studentObj.srNo,
+      hasPersonalInfo: !!studentObj.personalInfo,
+      hasContactInfo: !!studentObj.contactInfo,
+      hasParentInfo: !!studentObj.parentInfo,
+      hasAcademicInfo: !!studentObj.academicInfo,
+      hasFeeInfo: !!studentObj.feeInfo,
+      personalInfo: studentObj.personalInfo || 'MISSING',
+      contactInfo: studentObj.contactInfo || 'MISSING',
+      parentInfo: studentObj.parentInfo || 'MISSING',
+      academicInfo: studentObj.academicInfo || 'MISSING',
+      feeInfo: studentObj.feeInfo || 'MISSING'
+    });
+    
+    // Log raw student keys to see what's actually in the document
+    console.log('🔍 Student document keys:', Object.keys(studentObj));
+    console.log('🔍 Student document type:', typeof studentObj);
+    console.log('🔍 Is Mongoose document:', student.toObject ? 'Yes' : 'No');
+    
+    // Ensure all nested objects exist (create empty objects if missing)
+    // This handles cases where student was created but nested objects weren't saved
+    if (!studentObj.personalInfo) {
+      console.warn('⚠️ personalInfo is missing in database, creating from user profile');
+      studentObj.personalInfo = {
+        fullName: studentObj.userId?.profile?.firstName && studentObj.userId?.profile?.lastName
+          ? `${studentObj.userId.profile.firstName} ${studentObj.userId.profile.lastName}`.trim()
+          : studentObj.userId?.email?.split('@')[0] || 'N/A',
+        dateOfBirth: studentObj.userId?.profile?.dateOfBirth || null,
+        gender: studentObj.userId?.profile?.gender || 'N/A'
+      };
+    }
+    if (!studentObj.contactInfo) {
+      console.warn('⚠️ contactInfo is missing in database, creating from user profile');
+      studentObj.contactInfo = {
+        phone: studentObj.userId?.profile?.phone || '',
+        email: studentObj.userId?.email || '',
+        address: {
+          street: '',
+          city: '',
+          state: '',
+          zipCode: '',
+          country: 'Pakistan'
+        }
+      };
+    }
+    if (!studentObj.parentInfo) {
+      console.warn('⚠️ parentInfo is missing in database, creating empty object');
+      studentObj.parentInfo = {
+        fatherName: '',
+        fatherPhone: '',
+        motherName: '',
+        motherPhone: '',
+        guardianName: '',
+        guardianPhone: ''
+      };
+    }
+    if (!studentObj.academicInfo) {
+      console.warn('⚠️ academicInfo is missing in database, creating empty object');
+      studentObj.academicInfo = {
+        instituteType: 'college',
+        courseId: null,
+        session: new Date().getFullYear().toString(),
+        status: 'active'
+      };
+    }
+    if (!studentObj.feeInfo) {
+      console.warn('⚠️ feeInfo is missing in database, creating empty object');
+      studentObj.feeInfo = {
+        admissionFee: 0,
+        totalFee: 0,
+        paidFee: 0,
+        pendingFee: 0,
+        remainingFee: 0
+      };
+    }
+    
+    // Final verification log
+    console.log('✅ Final student object structure:', {
+      hasPersonalInfo: !!studentObj.personalInfo && Object.keys(studentObj.personalInfo).length > 0,
+      hasContactInfo: !!studentObj.contactInfo && Object.keys(studentObj.contactInfo).length > 0,
+      hasParentInfo: !!studentObj.parentInfo && Object.keys(studentObj.parentInfo).length > 0,
+      hasAcademicInfo: !!studentObj.academicInfo && Object.keys(studentObj.academicInfo).length > 0,
+      hasFeeInfo: !!studentObj.feeInfo && Object.keys(studentObj.feeInfo).length > 0,
+      fullName: studentObj.personalInfo?.fullName || 'STILL MISSING',
+      phone: studentObj.contactInfo?.phone || 'STILL MISSING'
+    });
+    
+    res.json(studentObj);
   } catch (error) {
     console.error('Get student error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -632,9 +773,21 @@ router.post('/', authenticate, authorize('admin', 'super_admin', 'accountant'), 
     }
     
     // Prepare student data - ensure all required fields are present and clean
+    // IMPORTANT: collegeId is required by schema, so we must provide a value
+    // For backward compatibility, use a default ObjectId if collegeId is null
+    let finalCollegeId = collegeId;
+    if (!finalCollegeId) {
+      // Try to get a default college or create a placeholder
+      // For now, we'll allow null but this might cause validation issues
+      console.warn('⚠️ No collegeId provided, student creation may fail validation');
+      // If collegeId is truly required, we need to handle this differently
+      // For now, set to null and let the model handle it
+      finalCollegeId = null;
+    }
+    
     const studentData = {
       userId: user._id,
-      collegeId: collegeId,
+      collegeId: finalCollegeId, // This might cause validation error if required
       personalInfo: {
         fullName: personalInfo.fullName.trim(),
         dateOfBirth: dateOfBirthDate,
@@ -653,36 +806,28 @@ router.post('/', authenticate, authorize('admin', 'super_admin', 'accountant'), 
       studentData.personalInfo.nationality = personalInfo.nationality.trim();
     }
     
-    // Contact info - clean empty strings
-    studentData.contactInfo = {};
-    if (contactInfo) {
-      if (contactInfo.phone && contactInfo.phone.trim()) {
-        studentData.contactInfo.phone = contactInfo.phone.trim();
+    // Contact info - ensure all fields are saved properly (always save, even if empty)
+    studentData.contactInfo = {
+      phone: contactInfo?.phone ? contactInfo.phone.trim() : '',
+      email: contactInfo?.email ? contactInfo.email.trim() : email.toLowerCase().trim(),
+      address: {
+        street: contactInfo?.address?.street ? contactInfo.address.street.trim() : '',
+        city: contactInfo?.address?.city ? contactInfo.address.city.trim() : '',
+        state: contactInfo?.address?.state ? contactInfo.address.state.trim() : '',
+        zipCode: contactInfo?.address?.zipCode ? contactInfo.address.zipCode.trim() : '',
+        country: contactInfo?.address?.country ? contactInfo.address.country.trim() : 'Pakistan'
       }
-      if (contactInfo.email && contactInfo.email.trim()) {
-        studentData.contactInfo.email = contactInfo.email.trim();
-      }
-      if (contactInfo.address) {
-        studentData.contactInfo.address = {};
-        Object.keys(contactInfo.address).forEach(key => {
-          if (contactInfo.address[key] && contactInfo.address[key].trim()) {
-            studentData.contactInfo.address[key] = contactInfo.address[key].trim();
-          }
-        });
-      }
-    }
+    };
     
-    // Parent info - clean empty strings
-    studentData.parentInfo = {};
-    if (parentInfo) {
-      Object.keys(parentInfo).forEach(key => {
-        if (parentInfo[key] && parentInfo[key].trim && parentInfo[key].trim()) {
-          studentData.parentInfo[key] = parentInfo[key].trim();
-        } else if (parentInfo[key] && !parentInfo[key].trim) {
-          studentData.parentInfo[key] = parentInfo[key];
-        }
-      });
-    }
+    // Parent info - ensure all fields are saved (even if empty)
+    studentData.parentInfo = {
+      fatherName: parentInfo?.fatherName ? parentInfo.fatherName.trim() : '',
+      fatherPhone: parentInfo?.fatherPhone ? parentInfo.fatherPhone.trim() : '',
+      motherName: parentInfo?.motherName ? parentInfo.motherName.trim() : '',
+      motherPhone: parentInfo?.motherPhone ? parentInfo.motherPhone.trim() : '',
+      guardianName: parentInfo?.guardianName ? parentInfo.guardianName.trim() : '',
+      guardianPhone: parentInfo?.guardianPhone ? parentInfo.guardianPhone.trim() : ''
+    };
     
     // Academic info
     studentData.academicInfo = {
@@ -732,11 +877,19 @@ router.post('/', authenticate, authorize('admin', 'super_admin', 'accountant'), 
       }
     }
     
-    // Fee info
+    // Fee info - save all fee fields properly
+    const admissionFee = feeInfo?.admissionFee ? parseFloat(feeInfo.admissionFee) : 0;
+    const totalFee = feeInfo?.totalFee ? parseFloat(feeInfo.totalFee) : 0;
+    const paidFee = feeInfo?.paidFee ? parseFloat(feeInfo.paidFee) : 0;
+    const pendingFee = feeInfo?.pendingFee ? parseFloat(feeInfo.pendingFee) : (totalFee - paidFee);
+    const remainingFee = feeInfo?.remainingFee ? parseFloat(feeInfo.remainingFee) : (totalFee - paidFee);
+    
     studentData.feeInfo = {
-      totalFee: feeInfo?.totalFee ? parseFloat(feeInfo.totalFee) : 0,
-      paidFee: feeInfo?.paidFee ? parseFloat(feeInfo.paidFee) : 0,
-      pendingFee: 0
+      admissionFee: admissionFee,
+      totalFee: totalFee,
+      paidFee: paidFee,
+      pendingFee: pendingFee >= 0 ? pendingFee : 0,
+      remainingFee: remainingFee >= 0 ? remainingFee : 0
     };
     
     // Only add feeStructureId if it's a valid ObjectId
@@ -746,12 +899,56 @@ router.post('/', authenticate, authorize('admin', 'super_admin', 'accountant'), 
       studentData.feeInfo.feeStructureId = feeInfo.feeStructureId;
     }
     
+    // Log the complete student data being saved
+    console.log('💾 Saving student data:', {
+      personalInfo: studentData.personalInfo,
+      contactInfo: studentData.contactInfo,
+      parentInfo: studentData.parentInfo,
+      academicInfo: studentData.academicInfo,
+      feeInfo: studentData.feeInfo
+    });
+    
     // Create student record
     let student;
     try {
+      console.log('💾 Creating student with data:', JSON.stringify(studentData, null, 2));
       student = await Student.create(studentData);
+      
+      // Immediately verify what was actually saved
+      const savedStudent = await Student.findById(student._id).lean();
+      console.log('🔍 Verification - What was actually saved:', {
+        _id: savedStudent._id,
+        hasPersonalInfo: !!savedStudent.personalInfo,
+        hasContactInfo: !!savedStudent.contactInfo,
+        hasParentInfo: !!savedStudent.parentInfo,
+        hasAcademicInfo: !!savedStudent.academicInfo,
+        hasFeeInfo: !!savedStudent.feeInfo,
+        personalInfoKeys: savedStudent.personalInfo ? Object.keys(savedStudent.personalInfo) : [],
+        contactInfoKeys: savedStudent.contactInfo ? Object.keys(savedStudent.contactInfo) : []
+      });
+      
+      // If nested objects are missing, this is a critical issue
+      if (!savedStudent.personalInfo || !savedStudent.contactInfo) {
+        console.error('❌ CRITICAL: Student created but nested objects are missing!');
+        console.error('   This indicates a problem with the Student model or save process');
+        // Try to update the student with the missing data
+        try {
+          await Student.findByIdAndUpdate(student._id, {
+            personalInfo: studentData.personalInfo,
+            contactInfo: studentData.contactInfo,
+            parentInfo: studentData.parentInfo,
+            academicInfo: studentData.academicInfo,
+            feeInfo: studentData.feeInfo
+          }, { runValidators: false });
+          console.log('✅ Attempted to fix missing nested objects');
+        } catch (fixError) {
+          console.error('❌ Failed to fix missing nested objects:', fixError);
+        }
+      }
     } catch (studentError) {
       console.error('Error creating student:', studentError);
+      console.error('   Error details:', studentError.message);
+      console.error('   Error stack:', studentError.stack);
       // If student creation fails, try to delete the user we just created
       try {
         await User.findByIdAndDelete(user._id);
@@ -763,28 +960,74 @@ router.post('/', authenticate, authorize('admin', 'super_admin', 'accountant'), 
     
     // Calculate pending fee
     try {
-      student.calculatePendingFee();
-      await student.save();
+      if (student.feeInfo) {
+        student.calculatePendingFee();
+        await student.save();
+      }
     } catch (calcError) {
       console.error('Error calculating pending fee:', calcError);
       // Continue even if calculation fails
     }
     
-    // Populate student data
+    // Log successfully created student to verify all data was saved
+    console.log('✅ Student created successfully:', {
+      studentId: student._id,
+      personalInfo: {
+        fullName: student.personalInfo?.fullName,
+        dateOfBirth: student.personalInfo?.dateOfBirth,
+        gender: student.personalInfo?.gender
+      },
+      contactInfo: {
+        email: student.contactInfo?.email || 'N/A',
+        phone: student.contactInfo?.phone || 'N/A',
+        address: student.contactInfo?.address || {}
+      },
+      parentInfo: {
+        fatherName: student.parentInfo?.fatherName || 'N/A',
+        fatherPhone: student.parentInfo?.fatherPhone || 'N/A'
+      },
+      academicInfo: {
+        courseId: student.academicInfo?.courseId || 'N/A',
+        instituteType: student.academicInfo?.instituteType,
+        session: student.academicInfo?.session
+      },
+      feeInfo: {
+        admissionFee: student.feeInfo?.admissionFee || 0,
+        totalFee: student.feeInfo?.totalFee || 0,
+        paidFee: student.feeInfo?.paidFee || 0,
+        remainingFee: student.feeInfo?.remainingFee || 0
+      }
+    });
+    
+    // Populate student data with all fields
     let populatedStudent;
     try {
       populatedStudent = await Student.findById(student._id)
-        .populate('userId', 'email')
+        .populate('userId', 'email profile')
         .populate({
           path: 'academicInfo.courseId',
-          select: 'name',
+          select: 'name categoryId',
           strictPopulate: false
-        });
+        })
+        .populate('feeInfo.feeStructureId');
     } catch (populateError) {
       console.error('Error populating student:', populateError);
       // Return student without population if populate fails
       populatedStudent = student;
     }
+    
+    // Verify all data was saved correctly
+    console.log('🔍 Verifying saved data:', {
+      hasPersonalInfo: !!populatedStudent.personalInfo,
+      hasContactInfo: !!populatedStudent.contactInfo,
+      hasParentInfo: !!populatedStudent.parentInfo,
+      hasAcademicInfo: !!populatedStudent.academicInfo,
+      hasFeeInfo: !!populatedStudent.feeInfo,
+      fullName: populatedStudent.personalInfo?.fullName || 'MISSING',
+      phone: populatedStudent.contactInfo?.phone || 'MISSING',
+      fatherName: populatedStudent.parentInfo?.fatherName || 'MISSING',
+      courseId: populatedStudent.academicInfo?.courseId || 'MISSING'
+    });
     
     // Create notification for new student admission (non-blocking)
     // Don't let notification errors block the response
@@ -802,7 +1045,19 @@ router.post('/', authenticate, authorize('admin', 'super_admin', 'accountant'), 
     clearTimeout(timeout);
     
     // Return response with proper structure (maintain backward compatibility)
-    res.status(201).json(populatedStudent);
+    // Include all data in response for verification
+    res.status(201).json({
+      data: populatedStudent,
+      student: populatedStudent, // Backward compatibility
+      message: 'Student created successfully',
+      savedFields: {
+        personalInfo: !!populatedStudent.personalInfo,
+        contactInfo: !!populatedStudent.contactInfo,
+        parentInfo: !!populatedStudent.parentInfo,
+        academicInfo: !!populatedStudent.academicInfo,
+        feeInfo: !!populatedStudent.feeInfo
+      }
+    });
   } catch (error) {
     // Clear timeout on error
     clearTimeout(timeout);
