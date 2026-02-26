@@ -38,7 +38,7 @@ const FingerprintScan = () => {
     setIsScanning(true);
     // In a real implementation, this would initialize the fingerprint scanner hardware
     // For web-based implementation, we'll use manual input or WebUSB API if available
-    toast.info('Fingerprint scanner ready. Place finger on scanner or enter fingerprint ID.');
+    toast('Fingerprint scanner ready. Place finger on scanner or enter fingerprint ID.');
     inputRef.current?.focus();
   };
 

@@ -24,7 +24,7 @@ const courseSchema = new mongoose.Schema({
   categoryId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Category',
-    required: true
+    required: false
   },
   instituteType: {
     type: String,

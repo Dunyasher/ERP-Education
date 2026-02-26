@@ -10,6 +10,7 @@ import {
   DollarSign,
   BarChart3,
   Settings,
+  UserCircle,
   LogOut,
   Menu,
   X,
@@ -31,7 +32,8 @@ import {
   Fingerprint,
   Camera,
   Scan,
-  Circle
+  Circle,
+  TrendingUp
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
@@ -56,12 +58,11 @@ const Layout = () => {
     ],
     'Student Management': [
       { name: 'All Students', path: '/admin/students', icon: Users },
-      { name: 'Add Student', path: '/admin/students/add', icon: UserPlus },
+      { name: 'Student Promotion', path: '/admin/students/promotion', icon: TrendingUp },
       { name: 'Student Reports', path: '/admin/students/reports', icon: BarChart3 },
     ],
-    'Classes': [
-      { name: 'All Classes', path: '/admin/classes', icon: School },
-      { name: 'Add Class', path: '/admin/classes/add', icon: UserPlus },
+    'Admission Management': [
+      { name: 'Admit Student', path: '/admin/students/new', icon: UserCheck },
     ],
     'Manage Attendance': [
       { name: 'Students Attendance', path: '/admin/attendance/manual', icon: Circle },
@@ -72,10 +73,12 @@ const Layout = () => {
   const adminMenu = [
     { name: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard, hasSubmenu: false },
     { name: 'Student Management', path: '/admin/students', icon: Users, hasSubmenu: true },
-    { name: 'Staff Management', path: '/admin/teachers', icon: GraduationCap, hasSubmenu: false },
+    { name: 'Admission Management', path: '/admin/students/new', icon: UserCheck, hasSubmenu: true },
+    { name: 'Fee Payment', path: '/admin/fee-payment', icon: DollarSign, hasSubmenu: false },
+    { name: 'Staff Management', path: '/admin/staff', icon: GraduationCap, hasSubmenu: false },
+    { name: 'Accountant Management', path: '/admin/accountants', icon: DollarSign, hasSubmenu: false },
     { name: 'ID Card Printing', path: '/admin/id-card-menu', icon: CreditCard, hasSubmenu: true },
     { name: 'Public Messages', path: '/admin/messages', icon: MessageSquare, hasSubmenu: false, badge: 3 },
-    { name: 'Classes', path: '/admin/classes', icon: School, hasSubmenu: true },
     { name: 'Subjects', path: '/admin/courses', icon: BookOpen, hasSubmenu: false },
     { name: 'Manage Attendance', path: '/admin/attendance/manual', icon: BarChart3, hasSubmenu: true },
     { name: 'Online Classes', path: '/admin/online-classes', icon: Monitor, hasSubmenu: false },

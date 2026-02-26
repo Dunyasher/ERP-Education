@@ -20,9 +20,13 @@ import Students from './pages/admin/Students';
 import StudentFeeHistory from './pages/admin/StudentFeeHistory';
 import StudentDetails from './pages/admin/StudentDetails';
 import NewAdmission from './pages/admin/NewAdmission';
+import StudentPromotion from './pages/admin/StudentPromotion';
 import Teachers from './pages/admin/Teachers';
+import StaffManagement from './pages/admin/StaffManagement';
+import AccountantManagement from './pages/admin/AccountantManagement';
 import Courses from './pages/admin/Courses';
 import Reports from './pages/admin/Reports';
+import AccountsSummaryReport from './pages/admin/AccountsSummaryReport';
 import Classes from './pages/admin/Classes';
 import ManualAttendance from './pages/admin/ManualAttendance';
 import StaffAttendance from './pages/admin/StaffAttendance';
@@ -35,6 +39,8 @@ import IDCardMenu from './pages/admin/IDCardMenu';
 import PrintIDCards from './pages/admin/PrintIDCards';
 import PrintStaffCards from './pages/admin/PrintStaffCards';
 import IDCardSettings from './pages/admin/IDCardSettings';
+import PublicMessages from './pages/admin/PublicMessages';
+import StudentFeePayment from './pages/admin/StudentFeePayment';
 import Settings from './pages/admin/Settings';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -64,9 +70,13 @@ function AppRoutes() {
         <Route path="/admin/dashboard" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><AdminDashboard /></ProtectedRoute>} />
         <Route path="/admin/students" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><Students /></ProtectedRoute>} />
         <Route path="/admin/students/new" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><NewAdmission /></ProtectedRoute>} />
+        <Route path="/admin/students/promotion" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><StudentPromotion /></ProtectedRoute>} />
         <Route path="/admin/students/:id/details" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><StudentDetails /></ProtectedRoute>} />
         <Route path="/admin/students/:id/fee-history" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><StudentFeeHistory /></ProtectedRoute>} />
+        <Route path="/admin/fee-payment" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><StudentFeePayment /></ProtectedRoute>} />
         <Route path="/admin/teachers" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Teachers /></ProtectedRoute>} />
+        <Route path="/admin/staff" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><StaffManagement /></ProtectedRoute>} />
+        <Route path="/admin/accountants" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><AccountantManagement /></ProtectedRoute>} />
         <Route path="/admin/courses" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Courses /></ProtectedRoute>} />
         <Route path="/admin/classes" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Classes /></ProtectedRoute>} />
         <Route path="/admin/attendance/manual" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'teacher']}><ManualAttendance /></ProtectedRoute>} />
@@ -80,10 +90,12 @@ function AppRoutes() {
         <Route path="/admin/print-id-cards" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><PrintIDCards /></ProtectedRoute>} />
         <Route path="/admin/print-staff-cards" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><PrintStaffCards /></ProtectedRoute>} />
         <Route path="/admin/id-card-settings" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><IDCardSettings /></ProtectedRoute>} />
+        <Route path="/admin/messages" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><PublicMessages /></ProtectedRoute>} />
         <Route path="/admin/fees" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><FeeManagement /></ProtectedRoute>} />
         <Route path="/admin/expenses" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><ExpenseManagement /></ProtectedRoute>} />
         <Route path="/admin/expenses/report" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><DailyExpenseReport /></ProtectedRoute>} />
         <Route path="/admin/reports" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><Reports /></ProtectedRoute>} />
+        <Route path="/admin/reports/accounts-summary" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><AccountsSummaryReport /></ProtectedRoute>} />
         <Route path="/admin/settings" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Settings /></ProtectedRoute>} />
         <Route path="/teacher/dashboard" element={<ProtectedRoute allowedRoles={['teacher']}><TeacherDashboard /></ProtectedRoute>} />
         <Route path="/accountant/dashboard" element={<ProtectedRoute allowedRoles={['accountant']}><AccountantDashboard /></ProtectedRoute>} />

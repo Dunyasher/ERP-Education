@@ -44,6 +44,7 @@ const NewAdmission = () => {
     
     // Fee Information
     admissionFee: '',
+    monthlyFee: '',
     totalFee: '',
     paidFee: '',
     pendingFee: '',
@@ -77,28 +78,50 @@ const NewAdmission = () => {
   });
 
   // Filter courses by institute type
-  const filteredCourses = courses.filter(course => 
-    course.instituteType === formData.instituteType
-  );
+  const filteredCourses = courses
+    .filter(course => course.instituteType === formData.instituteType)
+    .sort((a, b) => {
+      // For school courses, sort by class number (class 5, 6, 7, 8, etc.)
+      if (formData.instituteType === 'school') {
+        const getClassNumber = (name) => {
+          const match = name.match(/class\s*(\d+)/i) || name.match(/(\d+)(?:th|st|nd|rd)?\s*class/i);
+          return match ? parseInt(match[1]) : Infinity;
+        };
+        const classA = getClassNumber(a.name);
+        const classB = getClassNumber(b.name);
+        if (classA !== Infinity && classB !== Infinity) {
+          return classA - classB;
+        }
+        if (classA !== Infinity) return -1;
+        if (classB !== Infinity) return 1;
+      }
+      // For other institute types, sort alphabetically
+      return a.name.localeCompare(b.name);
+    });
 
-  // Calculate fees
+  // Calculate fees - Total Fee = Admission Fee + Monthly Fee
   useEffect(() => {
     const admissionFee = parseFloat(formData.admissionFee) || 0;
-    const totalFee = parseFloat(formData.totalFee) || 0;
+    const monthlyFee = parseFloat(formData.monthlyFee) || 0;
+    const totalFee = admissionFee + monthlyFee;
     const paidFee = parseFloat(formData.paidFee) || 0;
     const pendingFee = totalFee - paidFee;
     const remainingFee = totalFee - paidFee;
 
     setFormData(prev => ({
       ...prev,
+      totalFee: totalFee > 0 ? totalFee.toFixed(2) : '',
       pendingFee: pendingFee >= 0 ? pendingFee.toFixed(2) : '0.00',
       remainingFee: remainingFee >= 0 ? remainingFee.toFixed(2) : '0.00'
     }));
-  }, [formData.admissionFee, formData.totalFee, formData.paidFee]);
+  }, [formData.admissionFee, formData.monthlyFee, formData.paidFee]);
 
   // Reset course when institute type changes
   useEffect(() => {
-    setFormData(prev => ({ ...prev, courseId: '' }));
+    setFormData(prev => ({ 
+      ...prev, 
+      courseId: '' // Clear course selection when institute type changes
+    }));
   }, [formData.instituteType]);
 
   // Create student mutation
@@ -259,6 +282,7 @@ const NewAdmission = () => {
       },
       feeInfo: {
         admissionFee: parseFloat(formData.admissionFee) || 0,
+        monthlyFee: parseFloat(formData.monthlyFee) || 0,
         totalFee: parseFloat(formData.totalFee) || 0,
         paidFee: parseFloat(formData.paidFee) || 0,
         pendingFee: parseFloat(formData.pendingFee) || (parseFloat(formData.totalFee) || 0) - (parseFloat(formData.paidFee) || 0),
@@ -738,18 +762,34 @@ const NewAdmission = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Total Fee
+                  Monthly Fee
                 </label>
                 <input
                   type="number"
-                  name="totalFee"
-                  value={formData.totalFee}
+                  name="monthlyFee"
+                  value={formData.monthlyFee}
                   onChange={handleInputChange}
                   className="input-field"
                   placeholder="0.00"
                   min="0"
                   step="0.01"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Total Fee
+                </label>
+                <input
+                  type="text"
+                  name="totalFee"
+                  value={formData.totalFee || '0.00'}
+                  className="input-field bg-gray-50 dark:bg-gray-700 font-semibold"
+                  readOnly
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  (Admission Fee + Monthly Fee)
+                </p>
               </div>
 
               <div>
@@ -767,7 +807,9 @@ const NewAdmission = () => {
                   step="0.01"
                 />
               </div>
+            </div>
 
+            <div className="mt-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Remaining Fee
@@ -775,7 +817,7 @@ const NewAdmission = () => {
                 <input
                   type="text"
                   value={formData.remainingFee || '0.00'}
-                  className="input-field bg-gray-50 dark:bg-gray-700"
+                  className="input-field bg-gray-50 dark:bg-gray-700 font-semibold"
                   readOnly
                 />
               </div>

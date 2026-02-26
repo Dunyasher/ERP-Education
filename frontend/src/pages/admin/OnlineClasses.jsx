@@ -251,7 +251,7 @@ const OnlineClasses = () => {
   };
 
   const handleExport = (format) => {
-    toast.info(`Exporting to ${format.toUpperCase()}...`);
+    toast(`Exporting to ${format.toUpperCase()}...`);
     // Implement export functionality
   };
 

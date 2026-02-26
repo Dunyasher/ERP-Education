@@ -3,8 +3,11 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    dedupe: ['react', 'react-dom'],
+  },
   optimizeDeps: {
-    include: ['react-redux', '@reduxjs/toolkit'],
+    include: ['react', 'react-dom', 'react-redux', '@reduxjs/toolkit'],
     force: true, // Force re-optimization
   },
   server: {

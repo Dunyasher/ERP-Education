@@ -178,19 +178,38 @@ const Students = () => {
     }
   });
 
-  // Filter courses based on selected category and institute type
-  const filteredCourses = courses.filter(course => {
-    // Filter by category if selected
-    if (selectedCategoryId) {
-      const courseCategoryId = course.categoryId?._id || course.categoryId;
-      if (courseCategoryId !== selectedCategoryId) return false;
-    }
-    // Filter by institute type
-    if (formData.academicInfo.instituteType && course.instituteType !== formData.academicInfo.instituteType) {
-      return false;
-    }
-    return true;
-  });
+  // Filter courses based on selected category and institute type, then sort them
+  const filteredCourses = courses
+    .filter(course => {
+      // Filter by category if selected
+      if (selectedCategoryId) {
+        const courseCategoryId = course.categoryId?._id || course.categoryId;
+        if (courseCategoryId !== selectedCategoryId) return false;
+      }
+      // Filter by institute type
+      if (formData.academicInfo.instituteType && course.instituteType !== formData.academicInfo.instituteType) {
+        return false;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      // For school courses, sort by class number (class 5, 6, 7, 8, etc.)
+      if (formData.academicInfo.instituteType === 'school') {
+        const getClassNumber = (name) => {
+          const match = name.match(/class\s*(\d+)/i) || name.match(/(\d+)(?:th|st|nd|rd)?\s*class/i);
+          return match ? parseInt(match[1]) : Infinity;
+        };
+        const classA = getClassNumber(a.name);
+        const classB = getClassNumber(b.name);
+        if (classA !== Infinity && classB !== Infinity) {
+          return classA - classB;
+        }
+        if (classA !== Infinity) return -1;
+        if (classB !== Infinity) return 1;
+      }
+      // For other institute types, sort alphabetically
+      return a.name.localeCompare(b.name);
+    });
 
   // Create/Update student mutation
   const studentMutation = useMutation({

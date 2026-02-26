@@ -593,7 +593,7 @@ const FeeInvoicesList = () => {
   };
 
   const handleDownloadInvoice = (invoiceId) => {
-    toast.info('Invoice download feature coming soon!');
+    toast('Invoice download feature coming soon!');
   };
 
   const handleDeleteInvoice = async (invoiceId) => {

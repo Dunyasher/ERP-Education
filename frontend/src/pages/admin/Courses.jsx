@@ -39,16 +39,28 @@ const Courses = () => {
   });
 
   // Fetch courses
-  const { data: courses = [], isLoading } = useQuery({
+  const { data: courses = [], isLoading, refetch: refetchCourses } = useQuery({
     queryKey: ['courses'],
     queryFn: async () => {
-      const response = await api.get('/courses');
-      return response.data;
-    }
+      try {
+        const response = await api.get('/courses');
+        const coursesData = response.data || [];
+        console.log('Fetched courses:', coursesData.length);
+        return Array.isArray(coursesData) ? coursesData : [];
+      } catch (error) {
+        console.error('Error fetching courses:', error);
+        toast.error('Failed to fetch courses');
+        return [];
+      }
+    },
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    staleTime: 0,
+    cacheTime: 0
   });
 
-  // Fetch categories (only course categories)
-  const { data: categories = [], isLoading: categoriesLoading, error: categoriesError } = useQuery({
+  // Fetch categories filtered by instituteType
+  const { data: allCategories = [], isLoading: categoriesLoading, error: categoriesError } = useQuery({
     queryKey: ['categories', 'course'],
     queryFn: async () => {
       try {
@@ -68,6 +80,12 @@ const Courses = () => {
     refetchOnWindowFocus: false
   });
 
+  // Filter categories based on selected instituteType
+  const categories = allCategories.filter(category => {
+    if (!formData.instituteType) return true; // Show all if no institute type selected
+    return category.instituteType === formData.instituteType;
+  });
+
   // Fetch teachers
   const { data: teachers = [] } = useQuery({
     queryKey: ['teachers'],
@@ -80,29 +98,47 @@ const Courses = () => {
   // Create/Update course mutation
   const courseMutation = useMutation({
     mutationFn: async (data) => {
+      console.log('Creating/updating course with data:', data);
       if (editingCourse) {
-        return api.put(`/courses/${editingCourse._id}`, data);
+        const response = await api.put(`/courses/${editingCourse._id}`, data);
+        console.log('Course updated:', response.data);
+        return response;
       } else {
-        return api.post('/courses', data);
+        const response = await api.post('/courses', data);
+        console.log('Course created:', response.data);
+        return response;
       }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['courses'] });
+    onSuccess: async (response) => {
+      console.log('Course mutation success:', response.data);
+      // Remove the old cache and refetch
+      queryClient.removeQueries({ queryKey: ['courses'] });
+      // Invalidate and refetch courses immediately
+      await queryClient.invalidateQueries({ queryKey: ['courses'] });
+      // Force a refetch to ensure the new course appears
+      const refetchedData = await refetchCourses();
+      console.log('Refetched courses after mutation:', refetchedData.data?.length);
       toast.success(editingCourse ? 'Course updated successfully!' : 'Course created successfully!');
       setShowForm(false);
       setEditingCourse(null);
       resetForm();
     },
     onError: (error) => {
-      toast.error(error.response?.data?.message || 'Failed to save course');
+      console.error('Course mutation error:', error);
+      console.error('Error response:', error.response?.data);
+      const errorMessage = error.response?.data?.message || 
+                          error.response?.data?.error || 
+                          'Failed to save course';
+      toast.error(errorMessage);
     }
   });
 
   // Delete course mutation
   const deleteMutation = useMutation({
     mutationFn: async (id) => api.delete(`/courses/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['courses'] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['courses'] });
+      await refetchCourses();
       toast.success('Course deleted successfully!');
     },
     onError: () => {
@@ -441,13 +477,24 @@ const Courses = () => {
                         value={formData.categoryId}
                         onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
                         className="input-field flex-1"
+                        disabled={!formData.instituteType}
                       >
-                        <option value="">Select a category</option>
-                        {categories.map((category) => (
-                          <option key={category._id} value={category._id}>
-                            {category.name}
+                        <option value="">
+                          {formData.instituteType 
+                            ? `Select a ${formData.instituteType.replace('_', ' ')} category` 
+                            : 'Select Institute Type first'}
+                        </option>
+                        {categories.length === 0 && formData.instituteType ? (
+                          <option value="" disabled>
+                            No categories found for {formData.instituteType.replace('_', ' ')}
                           </option>
-                        ))}
+                        ) : (
+                          categories.map((category) => (
+                            <option key={category._id} value={category._id}>
+                              {category.name}
+                            </option>
+                          ))
+                        )}
                       </select>
                       <button
                         type="button"
@@ -474,7 +521,15 @@ const Courses = () => {
                     <select
                       required
                       value={formData.instituteType}
-                      onChange={(e) => setFormData({ ...formData, instituteType: e.target.value })}
+                      onChange={(e) => {
+                        const newInstituteType = e.target.value;
+                        // Clear category selection when institute type changes
+                        setFormData({ 
+                          ...formData, 
+                          instituteType: newInstituteType,
+                          categoryId: '' // Clear category when institute type changes
+                        });
+                      }}
                       className="input-field"
                     >
                       <option value="school">School</option>
@@ -612,9 +667,9 @@ const Courses = () => {
                         className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                       >
                         <option value="">Select a category to edit or delete</option>
-                        {categories.map((category) => (
+                        {allCategories.map((category) => (
                           <option key={category._id} value={category._id}>
-                            {category.name} ({category.instituteType?.replace('_', ' ')})
+                            {category.name} ({category.instituteType?.replace('_', ' ') || 'N/A'})
                           </option>
                         ))}
                       </select>
@@ -623,7 +678,7 @@ const Courses = () => {
                           type="button"
                           onClick={() => {
                             if (selectedCategoryId) {
-                              const category = categories.find(cat => cat._id === selectedCategoryId);
+                              const category = allCategories.find(cat => cat._id === selectedCategoryId);
                               if (category) {
                                 handleCategoryEdit(category);
                               }

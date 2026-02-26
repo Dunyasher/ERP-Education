@@ -5,21 +5,24 @@ const { authenticate, authorize } = require('../middleware/auth');
 
 // @route   GET /api/courses
 // @desc    Get all courses
-// @access  Public
+// @access  Public (with optional college filtering)
 router.get('/', async (req, res) => {
   try {
-    const { instituteType, categoryId, status } = req.query;
+    const { instituteType, categoryId, status, collegeId } = req.query;
     const query = {};
     
     if (instituteType) query.instituteType = instituteType;
     if (categoryId) query.categoryId = categoryId;
     if (status) query.status = status;
+    // Filter by collegeId if provided (for multi-tenant support)
+    if (collegeId) query.collegeId = collegeId;
     
     const courses = await Course.find(query)
       .populate('categoryId', 'name instituteType')
       .populate('instructorId', 'personalInfo.fullName srNo')
       .sort({ createdAt: -1 });
     
+    console.log(`Fetched ${courses.length} courses`);
     res.json(courses);
   } catch (error) {
     console.error('Get courses error:', error);
@@ -52,7 +55,13 @@ router.get('/:id', async (req, res) => {
 // @access  Private (Admin)
 router.post('/', authenticate, authorize('admin', 'super_admin'), async (req, res) => {
   try {
-    const course = await Course.create(req.body);
+    // Automatically set collegeId from authenticated user if not provided
+    const courseData = {
+      ...req.body,
+      collegeId: req.body.collegeId || req.collegeId || req.user?.collegeId?._id || req.user?.collegeId
+    };
+
+    const course = await Course.create(courseData);
     
     const populatedCourse = await Course.findById(course._id)
       .populate('categoryId', 'name')
@@ -64,7 +73,14 @@ router.post('/', authenticate, authorize('admin', 'super_admin'), async (req, re
     if (error.code === 11000) {
       return res.status(400).json({ message: 'Course already exists' });
     }
-    res.status(500).json({ message: 'Server error' });
+    // Return more detailed error message
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ 
+        message: 'Validation error', 
+        errors: Object.values(error.errors).map(e => e.message) 
+      });
+    }
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 });
 

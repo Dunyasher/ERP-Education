@@ -41,7 +41,7 @@ const Classes = () => {
   });
   const [newClassForm, setNewClassForm] = useState({
     name: '',
-    categoryId: '',
+    instituteType: '',
     instructorId: '',
     startTime: '',
     endTime: '',
@@ -61,47 +61,43 @@ const Classes = () => {
     }
   });
 
-  // Fetch categories for class creation (only course categories)
-  const { data: categories = [] } = useQuery({
-    queryKey: ['categories', 'course'],
-    queryFn: async () => {
-      const response = await api.get('/categories?categoryType=course');
-      return response.data;
-    }
-  });
-
-  // Get selected category's institute type
-  const selectedCategory = useMemo(() => {
-    return categories.find(cat => cat._id === newClassForm.categoryId);
-  }, [categories, newClassForm.categoryId]);
-
-  // Filter teachers based on selected category's institute type
+  // Filter teachers based on selected institute type
+  // If no teachers match, show all teachers to allow assignment
   const filteredTeachers = useMemo(() => {
-    if (!selectedCategory || !selectedCategory.instituteType) {
-      return teachers; // Show all teachers if no category selected
+    if (!newClassForm.instituteType) {
+      return teachers; // Show all teachers if no institute type selected
     }
     
-    return teachers.filter(teacher => {
+    const matchedTeachers = teachers.filter(teacher => {
       const teacherInstituteType = teacher.employment?.instituteType;
-      return teacherInstituteType === selectedCategory.instituteType;
+      return teacherInstituteType === newClassForm.instituteType;
     });
-  }, [teachers, selectedCategory]);
+    
+    // If no teachers match the institute type, show all teachers
+    // This allows assignment even if teacher's institute type isn't set
+    return matchedTeachers.length > 0 ? matchedTeachers : teachers;
+  }, [teachers, newClassForm.instituteType]);
 
-  // Clear instructor selection when category changes if teacher doesn't match
+  // Clear instructor selection when institute type changes if teacher doesn't match
+  // Only clear if there are matching teachers available
   useEffect(() => {
-    if (selectedCategory && newClassForm.instructorId) {
+    if (newClassForm.instituteType && newClassForm.instructorId) {
       const selectedTeacher = teachers.find(t => t._id === newClassForm.instructorId);
       const teacherInstituteType = selectedTeacher?.employment?.instituteType;
       
-      if (teacherInstituteType !== selectedCategory.instituteType) {
+      // Only clear if there are other matching teachers available
+      const hasMatchingTeachers = filteredTeachers.length > 0 && 
+                                   filteredTeachers.some(t => t._id !== newClassForm.instructorId);
+      
+      if (teacherInstituteType !== newClassForm.instituteType && hasMatchingTeachers) {
         setNewClassForm(prev => ({ ...prev, instructorId: '' }));
-        toast.info('Teacher selection cleared - please select a teacher matching the category\'s institute type', {
+        toast('Teacher selection cleared - please select a teacher matching the institute type', {
           duration: 3000,
           icon: 'ℹ️'
         });
       }
     }
-  }, [selectedCategory, teachers, newClassForm.instructorId]);
+  }, [newClassForm.instituteType, teachers, newClassForm.instructorId, filteredTeachers]);
 
   // Fetch all classes
   const { data: classes = [], isLoading } = useQuery({
@@ -329,8 +325,7 @@ const Classes = () => {
       // First create the course
       const courseData = {
         name: data.name,
-        categoryId: data.categoryId,
-        instituteType: 'academy', // Default, can be changed
+        instituteType: data.instituteType,
         instructorId: data.instructorId || null,
         capacity: data.capacity || 50,
         status: data.status || 'published',
@@ -361,7 +356,7 @@ const Classes = () => {
       setShowCreateClassForm(false);
       setNewClassForm({
         name: '',
-        categoryId: '',
+        instituteType: '',
         instructorId: '',
         startTime: '',
         endTime: '',
@@ -382,28 +377,19 @@ const Classes = () => {
 
   // Fill sample data for testing
   const fillSampleData = () => {
-    // Get first available category
-    const firstCategory = categories.length > 0 ? categories[0] : null;
-    const firstCategoryId = firstCategory?._id || '';
-    
-    // Get first teacher matching the category's institute type
+    // Get first available teacher
     let firstTeacher = '';
-    if (firstCategory && firstCategory.instituteType) {
-      const matchingTeacher = teachers.find(t => 
-        t.employment?.instituteType === firstCategory.instituteType
-      );
-      firstTeacher = matchingTeacher?._id || '';
-    } else if (teachers.length > 0) {
+    if (teachers.length > 0) {
       firstTeacher = teachers[0]._id;
     }
     
     const sampleData = {
-      name: 'English Language - Book 1',
-      categoryId: firstCategoryId,
+      name: 'book 5',
+      instituteType: 'school',
       instructorId: firstTeacher,
       startTime: '09:00',
       endTime: '11:00',
-      days: ['Monday', 'Wednesday', 'Friday'],
+      days: ['Monday'],
       room: 'Room 101',
       capacity: 50,
       feeAmount: 500,
@@ -413,8 +399,8 @@ const Classes = () => {
     setNewClassForm(sampleData);
     
     // Show appropriate message based on available data
-    if (!firstCategoryId || !firstTeacher) {
-      toast.success('Sample data filled! Note: Please select a category and teacher if not auto-filled.', {
+    if (!firstTeacher) {
+      toast.success('Sample data filled! Note: Please select a teacher if not auto-filled.', {
         duration: 4000,
         icon: 'ℹ️'
       });
@@ -432,8 +418,8 @@ const Classes = () => {
       toast.error('Please provide class name');
       return;
     }
-    if (!newClassForm.categoryId) {
-      toast.error('Please select a category');
+    if (!newClassForm.instituteType) {
+      toast.error('Please select an institute type');
       return;
     }
     if (!newClassForm.instructorId) {
@@ -889,16 +875,19 @@ const Classes = () => {
 
         {/* Instructor Assignment Modal */}
         {showInstructorForm && (() => {
-          // Get the class's institute type from the course category
-          const classInstituteType = classDetails?.course?.categoryId?.instituteType || 
-                                     classDetails?.course?.instituteType;
+          // Get the class's institute type from the course
+          const classInstituteType = classDetails?.course?.instituteType;
           
           // Filter teachers based on class's institute type
-          const filteredTeachersForClass = classInstituteType
+          // If no teachers match, show all teachers to allow assignment
+          const matchedTeachers = classInstituteType
             ? teachers.filter(teacher => 
                 teacher.employment?.instituteType === classInstituteType
               )
             : teachers;
+          
+          // If no teachers match the institute type, show all teachers
+          const filteredTeachersForClass = matchedTeachers.length > 0 ? matchedTeachers : teachers;
           
           return (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -951,8 +940,11 @@ const Classes = () => {
                     </select>
                     {classInstituteType && (
                       <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                        Showing teachers for: <span className="font-semibold capitalize">{classInstituteType.replace('_', ' ')}</span>
-                        {filteredTeachersForClass.length > 0 && ` (${filteredTeachersForClass.length} available)`}
+                        {filteredTeachersForClass.length === teachers.length ? (
+                          <>Showing all teachers (no specific filter for {classInstituteType.replace('_', ' ')})</>
+                        ) : (
+                          <>Showing teachers for: <span className="font-semibold capitalize">{classInstituteType.replace('_', ' ')}</span> ({filteredTeachersForClass.length} available)</>
+                        )}
                       </p>
                     )}
                   </div>
@@ -1155,7 +1147,7 @@ const Classes = () => {
                     setShowCreateClassForm(false);
                     setNewClassForm({
                       name: '',
-                      categoryId: '',
+                      instituteType: '',
                       instructorId: '',
                       startTime: '',
                       endTime: '',
@@ -1173,10 +1165,10 @@ const Classes = () => {
               </div>
             </div>
             <form onSubmit={handleCreateClassSubmit} className="space-y-6">
-              {/* Class Name and Category */}
+              {/* Class Name and Institute Type */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Class Name *
                   </label>
                   <input
@@ -1185,47 +1177,51 @@ const Classes = () => {
                     onChange={(e) => setNewClassForm({ ...newClassForm, name: e.target.value })}
                     required
                     placeholder="e.g., Book 1, DIT, English Language"
-                    className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                    Category *
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Institute Type *
                   </label>
                   <select
-                    value={newClassForm.categoryId}
-                    onChange={(e) => setNewClassForm({ ...newClassForm, categoryId: e.target.value })}
+                    value={newClassForm.instituteType}
+                    onChange={(e) => {
+                      setNewClassForm({ 
+                        ...newClassForm, 
+                        instituteType: e.target.value,
+                        instructorId: '' // Reset instructor when institute type changes
+                      });
+                    }}
                     required
-                    className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
                   >
-                    <option value="">Select a category</option>
-                    {categories.map((category) => (
-                      <option key={category._id} value={category._id}>
-                        {category.name}
-                      </option>
-                    ))}
+                    <option value="">Select an institute type</option>
+                    <option value="school">School</option>
+                    <option value="college">College</option>
+                    <option value="academy">Academy</option>
+                    <option value="short_course">Short Course</option>
                   </select>
                 </div>
               </div>
 
               {/* Teacher Assignment */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
-                  <GraduationCap className="w-4 h-4 text-indigo-600" />
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Assign Teacher *
                 </label>
                 <select
                   value={newClassForm.instructorId}
                   onChange={(e) => setNewClassForm({ ...newClassForm, instructorId: e.target.value })}
                   required
-                  disabled={!selectedCategory || filteredTeachers.length === 0}
-                  className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!newClassForm.instituteType || filteredTeachers.length === 0}
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <option value="">
-                    {!selectedCategory 
-                      ? 'Please select a category first' 
+                    {!newClassForm.instituteType 
+                      ? 'Please select institute type first' 
                       : filteredTeachers.length === 0 
-                      ? `No teachers available for ${selectedCategory.instituteType?.replace('_', ' ')}` 
+                      ? `No teachers available for ${newClassForm.instituteType.replace('_', ' ')}` 
                       : 'Select a teacher'}
                   </option>
                   {filteredTeachers.length > 0 ? (
@@ -1236,34 +1232,36 @@ const Classes = () => {
                     ))
                   ) : (
                     <option value="" disabled>
-                      {selectedCategory 
-                        ? `No teachers available for ${selectedCategory.instituteType?.replace('_', ' ')}. Please add teachers for this institute type first.`
+                      {newClassForm.instituteType 
+                        ? `No teachers available for ${newClassForm.instituteType.replace('_', ' ')}. Please add teachers for this institute type first.`
                         : 'No teachers available. Please add teachers first.'}
                     </option>
                   )}
                 </select>
-                {selectedCategory && (
+                {newClassForm.instituteType && (
                   <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                    Showing teachers for: <span className="font-semibold capitalize">{selectedCategory.instituteType?.replace('_', ' ')}</span>
-                    {filteredTeachers.length > 0 && ` (${filteredTeachers.length} available)`}
+                    {filteredTeachers.length === teachers.length ? (
+                      <>Showing all teachers (no specific filter for {newClassForm.instituteType.replace('_', ' ')})</>
+                    ) : (
+                      <>Showing teachers for: <span className="font-semibold capitalize">{newClassForm.instituteType.replace('_', ' ')}</span> ({filteredTeachers.length} available)</>
+                    )}
                   </p>
                 )}
-                {!selectedCategory && (
+                {!newClassForm.instituteType && (
                   <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                    Please select a category first to see available teachers
+                    Please select institute type first to see available teachers
                   </p>
                 )}
               </div>
 
               {/* Class Schedule */}
-              <div className="border-2 border-indigo-200 dark:border-indigo-800 rounded-lg p-4 bg-indigo-50 dark:bg-indigo-900/20">
-                <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                  <Clock className="w-5 h-5 text-indigo-600" />
+              <div className="space-y-4">
+                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
                   Class Schedule *
                 </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       Start Time *
                     </label>
                     <input
@@ -1271,11 +1269,11 @@ const Classes = () => {
                       value={newClassForm.startTime}
                       onChange={(e) => setNewClassForm({ ...newClassForm, startTime: e.target.value })}
                       required
-                      className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+                      className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       End Time *
                     </label>
                     <input
@@ -1283,12 +1281,12 @@ const Classes = () => {
                       value={newClassForm.endTime}
                       onChange={(e) => setNewClassForm({ ...newClassForm, endTime: e.target.value })}
                       required
-                      className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+                      className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
                     />
                   </div>
                 </div>
-                <div className="mb-4">
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Days of the Week *
                   </label>
                   <div className="flex flex-wrap gap-2">
@@ -1297,10 +1295,10 @@ const Classes = () => {
                         key={day}
                         type="button"
                         onClick={() => toggleDayForNewClass(day)}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        className={`px-3 py-1.5 rounded text-sm font-medium ${
                           newClassForm.days.includes(day)
                             ? 'bg-indigo-600 text-white'
-                            : 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                            : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                         }`}
                       >
                         {day}
@@ -1308,13 +1306,13 @@ const Classes = () => {
                     ))}
                   </div>
                   {newClassForm.days.length === 0 && (
-                    <p className="text-xs text-red-600 dark:text-red-400 mt-2">
+                    <p className="text-xs text-red-600 dark:text-red-400 mt-1">
                       Please select at least one day
                     </p>
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Room (Optional)
                   </label>
                   <input
@@ -1322,7 +1320,7 @@ const Classes = () => {
                     value={newClassForm.room}
                     onChange={(e) => setNewClassForm({ ...newClassForm, room: e.target.value })}
                     placeholder="e.g., Room 101"
-                    className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
                   />
                 </div>
               </div>
@@ -1334,7 +1332,7 @@ const Classes = () => {
                     setShowCreateClassForm(false);
                     setNewClassForm({
                       name: '',
-                      categoryId: '',
+                      instituteType: '',
                       instructorId: '',
                       startTime: '',
                       endTime: '',

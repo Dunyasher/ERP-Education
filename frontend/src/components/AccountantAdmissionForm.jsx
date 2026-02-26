@@ -48,10 +48,27 @@ const AccountantAdmissionForm = ({ onClose, onSuccess, editingStudent = null, sh
     }
   });
 
-  // Filter courses based on selected institute type
-  const filteredCourses = courses.filter(course => 
-    course.instituteType === formData.instituteType
-  );
+  // Filter courses based on selected institute type and sort them
+  const filteredCourses = courses
+    .filter(course => course.instituteType === formData.instituteType)
+    .sort((a, b) => {
+      // For school courses, sort by class number (class 5, 6, 7, 8, etc.)
+      if (formData.instituteType === 'school') {
+        const getClassNumber = (name) => {
+          const match = name.match(/class\s*(\d+)/i) || name.match(/(\d+)(?:th|st|nd|rd)?\s*class/i);
+          return match ? parseInt(match[1]) : Infinity;
+        };
+        const classA = getClassNumber(a.name);
+        const classB = getClassNumber(b.name);
+        if (classA !== Infinity && classB !== Infinity) {
+          return classA - classB;
+        }
+        if (classA !== Infinity) return -1;
+        if (classB !== Infinity) return 1;
+      }
+      // For other institute types, sort alphabetically
+      return a.name.localeCompare(b.name);
+    });
 
   // Fetch next serial number
   const { data: serialData } = useQuery({

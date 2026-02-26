@@ -45,12 +45,12 @@ const DailyExpenseReport = () => {
 
   const handleExportPDF = () => {
     // TODO: Implement PDF export
-    toast.info('PDF export feature coming soon');
+    toast('PDF export feature coming soon');
   };
 
   const handleExportExcel = () => {
     // TODO: Implement Excel export
-    toast.info('Excel export feature coming soon');
+    toast('Excel export feature coming soon');
   };
 
   const handlePrint = () => {

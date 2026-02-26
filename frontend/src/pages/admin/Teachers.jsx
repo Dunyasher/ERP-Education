@@ -525,7 +525,7 @@ const Teachers = () => {
       const selectedCategory = staffCategories.find(cat => cat._id === formData.staffCategoryId);
       if (selectedCategory && selectedCategory.instituteType !== formData.employment.instituteType) {
         setFormData(prev => ({ ...prev, staffCategoryId: '' }));
-        toast.info('Category selection cleared - please select a category matching the institute type', {
+        toast('Category selection cleared - please select a category matching the institute type', {
           duration: 3000,
           icon: 'ℹ️'
         });
