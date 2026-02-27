@@ -42,20 +42,23 @@ router.get('/', async (req, res) => {
     // Execute query
     const categories = await Category.find(query).sort({ createdAt: -1 });
     
-    // Return results
-    return res.json(categories);
+    // Ensure we always return an array
+    return res.json(Array.isArray(categories) ? categories : []);
   } catch (error) {
-    console.error('Get categories error:', error);
-    console.error('Error name:', error.name);
-    console.error('Error message:', error.message);
+    console.error('❌ Get categories error:', error);
+    console.error('   Error name:', error.name);
+    console.error('   Error message:', error.message);
+    console.error('   Error stack:', error.stack);
     
     if (error.name === 'CastError') {
       return res.status(400).json({ message: 'Invalid query parameters' });
     }
     
+    // Return empty array on error to prevent frontend crashes
     return res.status(500).json({ 
-      message: 'Server error', 
-      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+      message: 'Server error while fetching categories',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error',
+      categories: [] // Provide empty array as fallback
     });
   }
 });

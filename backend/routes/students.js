@@ -5,6 +5,7 @@ const Student = require('../models/Student');
 const User = require('../models/User');
 const Teacher = require('../models/Teacher');
 const Counter = require('../models/Counter');
+const College = require('../models/College');
 const { Invoice } = require('../models/Fee');
 let PaymentTransaction;
 try {
@@ -38,14 +39,25 @@ router.get('/', authenticate, addCollegeFilter, async (req, res) => {
         populate: {
           path: 'categoryId',
           select: 'name'
-        }
+        },
+        strictPopulate: false // Don't throw error if courseId is invalid
       })
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean(); // Use lean() for better performance
     
-    res.json(students);
+    // Ensure we always return an array
+    res.json(Array.isArray(students) ? students : []);
   } catch (error) {
-    console.error('Get students error:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('❌ Get students error:', error);
+    console.error('   Error name:', error.name);
+    console.error('   Error message:', error.message);
+    console.error('   Error stack:', error.stack);
+    
+    // Provide more detailed error information
+    res.status(500).json({ 
+      message: 'Server error while fetching students',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'An unexpected error occurred'
+    });
   }
 });
 
@@ -716,23 +728,53 @@ router.post('/', authenticate, authorize('admin', 'super_admin', 'accountant'), 
     }
     
     // Get collegeId from authenticated user
-    // Allow admins/accountants without collegeId for backward compatibility
-    const collegeId = req.collegeId || req.body.collegeId || null;
+    // IMPORTANT: collegeId is required by Student schema, so we must ensure it's always set
+    let collegeId = req.collegeId || req.body.collegeId || null;
     
-    // Only require collegeId for super_admin if explicitly provided
-    // For regular admins/accountants, allow null collegeId (backward compatibility)
-    
-    // Check if email already exists in this college (or globally if no collegeId)
-    const emailQuery = { email: email.toLowerCase().trim() };
-    if (collegeId) {
-      emailQuery.collegeId = collegeId;
-    } else {
-      // For backward compatibility, check if email exists without collegeId
-      emailQuery.$or = [
-        { collegeId: { $exists: false } },
-        { collegeId: null }
-      ];
+    // If no collegeId is provided, try to get or create a default college
+    // This ensures backward compatibility while maintaining data integrity
+    if (!collegeId) {
+      try {
+        // Try to find any active college
+        let defaultCollege = await College.findOne({ isActive: true }).sort({ createdAt: 1 });
+        
+        // If no college exists, create a default one for backward compatibility
+        if (!defaultCollege) {
+          console.log('⚠️ No college found, creating default college for backward compatibility');
+          defaultCollege = await College.create({
+            name: 'Default College',
+            email: 'default@college.local',
+            password: 'default123',
+            instituteType: 'college',
+            contactInfo: {
+              phone: '0000000000',
+              address: {
+                country: 'Pakistan'
+              }
+            },
+            isActive: true
+          });
+          console.log('✅ Default college created:', defaultCollege._id);
+        }
+        
+        collegeId = defaultCollege._id;
+        console.log('✅ Using collegeId:', collegeId);
+      } catch (collegeError) {
+        console.error('❌ Error getting/creating default college:', collegeError);
+        clearTimeout(timeout);
+        return res.status(500).json({ 
+          message: 'Unable to determine college. Please contact administrator.',
+          error: 'College assignment failed'
+        });
+      }
     }
+    
+    // Check if email already exists in this college
+    const emailQuery = { 
+      email: email.toLowerCase().trim(),
+      collegeId: collegeId
+    };
+    
     const existingUser = await User.findOne(emailQuery);
     if (existingUser) {
       clearTimeout(timeout);
@@ -773,21 +815,12 @@ router.post('/', authenticate, authorize('admin', 'super_admin', 'accountant'), 
     }
     
     // Prepare student data - ensure all required fields are present and clean
-    // IMPORTANT: collegeId is required by schema, so we must provide a value
-    // For backward compatibility, use a default ObjectId if collegeId is null
-    let finalCollegeId = collegeId;
-    if (!finalCollegeId) {
-      // Try to get a default college or create a placeholder
-      // For now, we'll allow null but this might cause validation issues
-      console.warn('⚠️ No collegeId provided, student creation may fail validation');
-      // If collegeId is truly required, we need to handle this differently
-      // For now, set to null and let the model handle it
-      finalCollegeId = null;
-    }
+    // collegeId is now guaranteed to be set
+    const finalCollegeId = collegeId;
     
     const studentData = {
       userId: user._id,
-      collegeId: finalCollegeId, // This might cause validation error if required
+      collegeId: finalCollegeId, // Now guaranteed to be set
       personalInfo: {
         fullName: personalInfo.fullName.trim(),
         dateOfBirth: dateOfBirthDate,
@@ -912,49 +945,98 @@ router.post('/', authenticate, authorize('admin', 'super_admin', 'accountant'), 
     let student;
     try {
       console.log('💾 Creating student with data:', JSON.stringify(studentData, null, 2));
+      console.log('🔍 Verifying collegeId before save:', finalCollegeId);
+      
+      // Validate that all required nested objects are present
+      if (!studentData.personalInfo || !studentData.contactInfo || !studentData.academicInfo) {
+        throw new Error('Missing required nested objects in student data');
+      }
+      
       student = await Student.create(studentData);
+      console.log('✅ Student created with ID:', student._id);
       
       // Immediately verify what was actually saved
       const savedStudent = await Student.findById(student._id).lean();
       console.log('🔍 Verification - What was actually saved:', {
         _id: savedStudent._id,
+        collegeId: savedStudent.collegeId,
         hasPersonalInfo: !!savedStudent.personalInfo,
         hasContactInfo: !!savedStudent.contactInfo,
         hasParentInfo: !!savedStudent.parentInfo,
         hasAcademicInfo: !!savedStudent.academicInfo,
         hasFeeInfo: !!savedStudent.feeInfo,
         personalInfoKeys: savedStudent.personalInfo ? Object.keys(savedStudent.personalInfo) : [],
-        contactInfoKeys: savedStudent.contactInfo ? Object.keys(savedStudent.contactInfo) : []
+        contactInfoKeys: savedStudent.contactInfo ? Object.keys(savedStudent.contactInfo) : [],
+        parentInfoKeys: savedStudent.parentInfo ? Object.keys(savedStudent.parentInfo) : [],
+        academicInfoKeys: savedStudent.academicInfo ? Object.keys(savedStudent.academicInfo) : [],
+        feeInfoKeys: savedStudent.feeInfo ? Object.keys(savedStudent.feeInfo) : []
       });
       
-      // If nested objects are missing, this is a critical issue
-      if (!savedStudent.personalInfo || !savedStudent.contactInfo) {
-        console.error('❌ CRITICAL: Student created but nested objects are missing!');
-        console.error('   This indicates a problem with the Student model or save process');
+      // Verify critical data was saved
+      const verificationChecks = {
+        collegeId: !!savedStudent.collegeId,
+        personalInfo: !!savedStudent.personalInfo && !!savedStudent.personalInfo.fullName,
+        contactInfo: !!savedStudent.contactInfo && !!savedStudent.contactInfo.phone,
+        academicInfo: !!savedStudent.academicInfo && !!savedStudent.academicInfo.instituteType,
+        feeInfo: !!savedStudent.feeInfo
+      };
+      
+      const failedChecks = Object.entries(verificationChecks)
+        .filter(([_, passed]) => !passed)
+        .map(([field, _]) => field);
+      
+      if (failedChecks.length > 0) {
+        console.error('❌ CRITICAL: Some required data was not saved:', failedChecks);
+        console.error('   Attempting to fix by updating student record...');
+        
         // Try to update the student with the missing data
         try {
-          await Student.findByIdAndUpdate(student._id, {
-            personalInfo: studentData.personalInfo,
-            contactInfo: studentData.contactInfo,
-            parentInfo: studentData.parentInfo,
-            academicInfo: studentData.academicInfo,
-            feeInfo: studentData.feeInfo
-          }, { runValidators: false });
-          console.log('✅ Attempted to fix missing nested objects');
+          const updateData = {};
+          if (!savedStudent.personalInfo) updateData.personalInfo = studentData.personalInfo;
+          if (!savedStudent.contactInfo) updateData.contactInfo = studentData.contactInfo;
+          if (!savedStudent.parentInfo) updateData.parentInfo = studentData.parentInfo;
+          if (!savedStudent.academicInfo) updateData.academicInfo = studentData.academicInfo;
+          if (!savedStudent.feeInfo) updateData.feeInfo = studentData.feeInfo;
+          
+          if (Object.keys(updateData).length > 0) {
+            await Student.findByIdAndUpdate(student._id, updateData, { 
+              runValidators: true,
+              new: true 
+            });
+            console.log('✅ Successfully fixed missing data');
+          }
         } catch (fixError) {
-          console.error('❌ Failed to fix missing nested objects:', fixError);
+          console.error('❌ Failed to fix missing data:', fixError);
+          // Don't throw - student was created, just log the issue
         }
+      } else {
+        console.log('✅ All verification checks passed - data saved correctly');
       }
     } catch (studentError) {
-      console.error('Error creating student:', studentError);
-      console.error('   Error details:', studentError.message);
+      console.error('❌ Error creating student:', studentError);
+      console.error('   Error name:', studentError.name);
+      console.error('   Error message:', studentError.message);
       console.error('   Error stack:', studentError.stack);
+      
       // If student creation fails, try to delete the user we just created
       try {
         await User.findByIdAndDelete(user._id);
+        console.log('✅ Cleaned up user after student creation failure');
       } catch (deleteError) {
-        console.error('Error deleting user after student creation failure:', deleteError);
+        console.error('❌ Error deleting user after student creation failure:', deleteError);
       }
+      
+      // Provide more specific error messages
+      if (studentError.name === 'ValidationError') {
+        const validationErrors = Object.values(studentError.errors || {}).map(err => err.message);
+        clearTimeout(timeout);
+        return res.status(400).json({ 
+          message: 'Student validation failed',
+          errors: validationErrors,
+          details: studentError.message
+        });
+      }
+      
       throw studentError; // Re-throw to be caught by outer catch
     }
     

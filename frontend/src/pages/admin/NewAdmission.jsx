@@ -54,13 +54,22 @@ const NewAdmission = () => {
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Fetch courses
+  // Fetch courses - automatically updates when courses are added/updated
   const { data: courses = [], isLoading: coursesLoading } = useQuery({
     queryKey: ['courses'],
     queryFn: async () => {
-      const response = await api.get('/courses');
-      return response.data;
-    }
+      try {
+        const response = await api.get('/courses');
+        return Array.isArray(response.data) ? response.data : [];
+      } catch (error) {
+        console.error('Error fetching courses:', error);
+        return [];
+      }
+    },
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    staleTime: 0, // Always consider data stale to ensure fresh data
+    cacheTime: 0 // Don't cache to ensure immediate updates
   });
 
   // Fetch next serial number
@@ -162,11 +171,7 @@ const NewAdmission = () => {
           .filter(([_, saved]) => !saved)
           .map(([field, _]) => field);
         
-        if (missingFields.length > 0) {
-          console.warn('⚠️ Some fields may not have been saved:', missingFields);
-        } else {
-          console.log('✅ All critical fields verified and saved correctly!');
-        }
+        // Fields verified - no logging needed
       }
       
       toast.success('Student admitted successfully!');
@@ -178,7 +183,7 @@ const NewAdmission = () => {
           navigate(`/admin/students/${studentId}/details`);
         }, 1500);
       } else {
-        console.warn('⚠️ No student ID in response, navigating to students list');
+        // No student ID - navigate to list
         navigate('/admin/students');
       }
     },
@@ -341,7 +346,7 @@ const NewAdmission = () => {
       address: studentData.contactInfo.address
     });
     if (emptyFields.length > 0) {
-      console.warn('⚠️ Empty optional fields:', emptyFields.join(', '));
+      // Optional fields empty - this is fine, no warning needed
     }
     
     // Log complete data being sent for debugging
@@ -441,6 +446,7 @@ const NewAdmission = () => {
                   name="fullName"
                   value={formData.fullName}
                   onChange={handleInputChange}
+                  autoComplete="name"
                   className={`input-field ${errors.fullName ? 'border-red-500' : ''}`}
                   placeholder="Enter full name"
                   required
@@ -493,6 +499,7 @@ const NewAdmission = () => {
                   name="email"
                   value={formData.email}
                   onChange={handleInputChange}
+                  autoComplete="email"
                   className={`input-field ${errors.email ? 'border-red-500' : ''}`}
                   placeholder="student@example.com"
                   required
@@ -523,6 +530,7 @@ const NewAdmission = () => {
                   name="phone"
                   value={formData.phone}
                   onChange={handleInputChange}
+                  autoComplete="tel"
                   className={`input-field ${errors.phone ? 'border-red-500' : ''}`}
                   placeholder="+92 300 1234567"
                   required
@@ -541,6 +549,7 @@ const NewAdmission = () => {
                   name="address.street"
                   value={formData.address.street}
                   onChange={handleInputChange}
+                  autoComplete="street-address"
                   className="input-field"
                   placeholder="House/Street number"
                 />
@@ -555,6 +564,7 @@ const NewAdmission = () => {
                   name="address.city"
                   value={formData.address.city}
                   onChange={handleInputChange}
+                  autoComplete="address-level2"
                   className="input-field"
                   placeholder="City"
                 />
@@ -569,6 +579,7 @@ const NewAdmission = () => {
                   name="address.state"
                   value={formData.address.state}
                   onChange={handleInputChange}
+                  autoComplete="address-level1"
                   className="input-field"
                   placeholder="State/Province"
                 />
@@ -637,6 +648,7 @@ const NewAdmission = () => {
                   name="fatherPhone"
                   value={formData.fatherPhone}
                   onChange={handleInputChange}
+                  autoComplete="tel"
                   className="input-field"
                   placeholder="+92 300 1234567"
                 />

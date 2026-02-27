@@ -66,32 +66,38 @@ const OnlineClasses = () => {
   });
 
   // Fetch students to get unique classes and sections
-  const { data: students = [] } = useQuery({
+  const { data: studentsData = [] } = useQuery({
     queryKey: ['allStudents'],
     queryFn: async () => {
       try {
         const response = await api.get('/students');
-        return response.data;
+        return Array.isArray(response.data) ? response.data : [];
       } catch (error) {
+        console.error('Error fetching students:', error);
         return [];
       }
     }
   });
 
+  // Ensure students is always an array
+  const students = Array.isArray(studentsData) ? studentsData : [];
   const uniqueClasses = [...new Set(students.map(s => s.className).filter(Boolean))].sort();
   const uniqueSections = [...new Set(students.map(s => s.section).filter(Boolean))].sort();
 
-  // Fetch categories
+  // Fetch categories - automatically updates when categories are added/updated
   const { data: categories = [] } = useQuery({
     queryKey: ['categories'],
     queryFn: async () => {
       try {
         const response = await api.get('/categories?categoryType=course');
-        return response.data;
+        return Array.isArray(response.data) ? response.data : [];
       } catch (error) {
+        console.error('Error fetching categories:', error);
         return [];
       }
-    }
+    },
+    staleTime: 2 * 60 * 1000, // 2 minutes - data is fresh for 2 minutes
+    gcTime: 5 * 60 * 1000 // Keep cache for 5 minutes
   });
 
   // Create category mutation
@@ -104,9 +110,14 @@ const OnlineClasses = () => {
       delete categoryData.collegeId;
       return api.post('/categories', categoryData);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['categories'] });
-      toast.success('Category created successfully!');
+    onSuccess: async () => {
+      // Invalidate ALL category queries (both ['categories'] and ['categories', 'course'])
+      await queryClient.invalidateQueries({ queryKey: ['categories'] });
+      await queryClient.invalidateQueries({ queryKey: ['categories', 'course'] });
+      // Refetch all category queries to ensure immediate update
+      await queryClient.refetchQueries({ queryKey: ['categories'] });
+      await queryClient.refetchQueries({ queryKey: ['categories', 'course'] });
+      toast.success('Category created successfully! All forms will refresh automatically.');
       setShowCategoryModal(false);
       setCategoryFormData({
         name: '',

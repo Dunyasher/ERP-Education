@@ -25,36 +25,16 @@ const StudentDetails = () => {
     queryKey: ['studentDetail', id],
     queryFn: async () => {
       if (!id) return null;
-      console.log('📥 Fetching student details for ID:', id);
       try {
         const response = await api.get(`/students/${id}`);
         
         // Check if response contains an error message
         if (response.data?.message === 'Access denied') {
-          console.error('❌ Access denied by server');
           throw new Error('Access denied: You do not have permission to view this student');
         }
         
-        console.log('✅ Student data received:', response.data);
-        console.log('📋 Complete data structure:', {
-          _id: response.data?._id,
-          srNo: response.data?.srNo,
-          personalInfo: response.data?.personalInfo,
-          contactInfo: response.data?.contactInfo,
-          parentInfo: response.data?.parentInfo,
-          academicInfo: response.data?.academicInfo,
-          feeInfo: response.data?.feeInfo,
-          userId: response.data?.userId
-        });
-        console.log('   Student name:', response.data?.personalInfo?.fullName || 'N/A');
-        console.log('   Student email:', response.data?.userId?.email || response.data?.contactInfo?.email || 'N/A');
-        console.log('   Student phone:', response.data?.contactInfo?.phone || 'N/A');
-        console.log('   Father name:', response.data?.parentInfo?.fatherName || 'N/A');
-        console.log('   Course:', response.data?.academicInfo?.courseId?.name || response.data?.academicInfo?.courseId || 'N/A');
-        
         // Verify data exists
         if (!response.data) {
-          console.error('❌ No data in response!');
           throw new Error('No student data received');
         }
         
@@ -322,19 +302,6 @@ const StudentDetails = () => {
     return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
-  // Debug: Log studentDetail state
-  useEffect(() => {
-    if (studentDetail) {
-      console.log('🔍 StudentDetail in component:', studentDetail);
-      console.log('   Has personalInfo:', !!studentDetail.personalInfo);
-      console.log('   Has contactInfo:', !!studentDetail.contactInfo);
-      console.log('   Has parentInfo:', !!studentDetail.parentInfo);
-      console.log('   Has academicInfo:', !!studentDetail.academicInfo);
-      console.log('   Has feeInfo:', !!studentDetail.feeInfo);
-    } else {
-      console.log('⚠️ studentDetail is null/undefined');
-    }
-  }, [studentDetail]);
 
   if (isLoadingDetail) {
     return (

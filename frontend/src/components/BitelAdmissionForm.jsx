@@ -25,13 +25,22 @@ const BitelAdmissionForm = ({ onClose, onSuccess, editingStudent = null, showOve
     remainingBalance: ''
   });
 
-  // Fetch courses
+  // Fetch courses - automatically updates when courses are added/updated
   const { data: courses = [], isLoading: coursesLoading } = useQuery({
     queryKey: ['courses'],
     queryFn: async () => {
-      const response = await api.get('/courses');
-      return response.data;
-    }
+      try {
+        const response = await api.get('/courses');
+        return Array.isArray(response.data) ? response.data : [];
+      } catch (error) {
+        console.error('Error fetching courses:', error);
+        return [];
+      }
+    },
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    staleTime: 0, // Always consider data stale to ensure fresh data
+    cacheTime: 0 // Don't cache to ensure immediate updates
   });
 
   // Fetch next serial number
@@ -324,6 +333,7 @@ const BitelAdmissionForm = ({ onClose, onSuccess, editingStudent = null, showOve
                       name="name"
                       value={formData.name}
                       onChange={handleInputChange}
+                      autoComplete="name"
                       required
                       className="w-full border-2 border-gray-600 rounded-lg px-3 py-2.5 bg-gray-800 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all placeholder-gray-500"
                       placeholder="Enter full name"
@@ -357,6 +367,7 @@ const BitelAdmissionForm = ({ onClose, onSuccess, editingStudent = null, showOve
                       name="contact"
                       value={formData.contact}
                       onChange={handleInputChange}
+                      autoComplete="tel"
                       required
                       className="w-full border-2 border-gray-600 rounded-lg px-3 py-2.5 bg-gray-800 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all placeholder-gray-500"
                       placeholder="0333-1234567"
@@ -373,6 +384,7 @@ const BitelAdmissionForm = ({ onClose, onSuccess, editingStudent = null, showOve
                       name="address"
                       value={formData.address}
                       onChange={handleInputChange}
+                      autoComplete="street-address"
                       required
                       rows="3"
                       className="w-full border-2 border-gray-600 rounded-lg px-3 py-2.5 bg-gray-800 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all resize-none placeholder-gray-500"

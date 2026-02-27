@@ -91,12 +91,25 @@ const Students = () => {
   });
 
   // Fetch students
-  const { data: students = [], isLoading } = useQuery({
+  const { data: students = [], isLoading, error: studentsError } = useQuery({
     queryKey: ['students'],
     queryFn: async () => {
-      const response = await api.get('/students');
-      return response.data;
-    }
+      try {
+        const response = await api.get('/students');
+        // Ensure we always return an array
+        if (Array.isArray(response.data)) {
+          return response.data;
+        }
+        console.error('⚠️ API returned non-array data:', response.data);
+        return [];
+      } catch (error) {
+        console.error('❌ Error fetching students:', error);
+        // Return empty array on error to prevent crashes
+        return [];
+      }
+    },
+    retry: 1, // Only retry once
+    staleTime: 30000 // Cache for 30 seconds
   });
 
   // Fetch invoices for all students
@@ -147,35 +160,38 @@ const Students = () => {
     return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
-  // Calculate age from date of birth
-  const calculateAge = (dateOfBirth) => {
-    if (!dateOfBirth) return '';
-    const today = new Date();
-    const birthDate = new Date(dateOfBirth);
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const monthDiff = today.getMonth() - birthDate.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-      age--;
-    }
-    return age;
-  };
 
-  // Fetch categories for dropdown
+  // Fetch categories for dropdown - automatically updates when categories are added/updated
   const { data: categories = [] } = useQuery({
     queryKey: ['categories'],
     queryFn: async () => {
-      const response = await api.get('/categories');
-      return response.data;
-    }
+      try {
+        const response = await api.get('/categories?categoryType=course');
+        return Array.isArray(response.data) ? response.data : [];
+      } catch (error) {
+        console.error('Error fetching categories:', error);
+        return [];
+      }
+    },
+    staleTime: 2 * 60 * 1000, // 2 minutes - data is fresh for 2 minutes
+    gcTime: 5 * 60 * 1000 // Keep cache for 5 minutes
   });
 
   // Fetch courses for dropdown
+  // Fetch courses - optimized for performance
   const { data: courses = [] } = useQuery({
     queryKey: ['courses'],
     queryFn: async () => {
-      const response = await api.get('/courses');
-      return response.data;
-    }
+      try {
+        const response = await api.get('/courses');
+        return Array.isArray(response.data) ? response.data : [];
+      } catch (error) {
+        console.error('Error fetching courses:', error);
+        return [];
+      }
+    },
+    staleTime: 2 * 60 * 1000, // 2 minutes - data is fresh for 2 minutes
+    gcTime: 5 * 60 * 1000 // Keep cache for 5 minutes
   });
 
   // Filter courses based on selected category and institute type, then sort them
@@ -506,7 +522,8 @@ const Students = () => {
   };
 
   // Filter students based on search (only by name, father name, or serial number)
-  const filteredStudents = students.filter(student => {
+  // Ensure students is always an array before filtering
+  const filteredStudents = (Array.isArray(students) ? students : []).filter(student => {
     if (!searchTerm) return true;
     const searchLower = searchTerm.toLowerCase();
     return (
@@ -538,6 +555,29 @@ const Students = () => {
 
   if (isLoading) {
     return <div className="text-center py-12">Loading students...</div>;
+  }
+
+  // Show error message if there's an error
+  if (studentsError) {
+    return (
+      <div className="text-center py-12">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6 max-w-md mx-auto">
+          <AlertTriangle className="w-12 h-12 text-red-600 dark:text-red-400 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-red-900 dark:text-red-200 mb-2">
+            Error Loading Students
+          </h2>
+          <p className="text-red-700 dark:text-red-300 mb-4">
+            {studentsError.response?.data?.message || studentsError.message || 'Failed to load students'}
+          </p>
+          <button
+            onClick={() => queryClient.invalidateQueries({ queryKey: ['students'] })}
+            className="btn-primary"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -837,18 +877,6 @@ const Students = () => {
                           personalInfo: { ...formData.personalInfo, dateOfBirth: e.target.value }
                         })}
                         className="input-field"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Age
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.personalInfo.dateOfBirth ? calculateAge(formData.personalInfo.dateOfBirth) + ' years' : ''}
-                        className="input-field bg-gray-50 dark:bg-gray-700"
-                        readOnly
-                        placeholder="Auto-calculated from date of birth"
                       />
                     </div>
                     <div>

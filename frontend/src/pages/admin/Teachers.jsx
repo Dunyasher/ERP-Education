@@ -60,34 +60,48 @@ const Teachers = () => {
     }
   });
 
-  // Fetch teachers
-  const { data: teachers = [], isLoading } = useQuery({
+  // Fetch teachers - optimized for performance
+  const { data: teachers = [], isLoading, error: teachersError, refetch: refetchTeachers } = useQuery({
     queryKey: ['teachers'],
     queryFn: async () => {
-      const response = await api.get('/teachers');
-      return response.data;
-    }
+      try {
+        // Fetch all teachers including inactive ones
+        const response = await api.get('/teachers?includeInactive=true');
+        const teachersArray = Array.isArray(response.data) ? response.data : [];
+        return teachersArray;
+      } catch (error) {
+        // Only log errors in development
+        if (import.meta.env.MODE === 'development') {
+          console.error('❌ Error fetching teachers:', error);
+        }
+        toast.error('Failed to load teachers. Please check your connection and try again.');
+        return [];
+      }
+    },
+    staleTime: 2 * 60 * 1000, // 2 minutes - data is fresh for 2 minutes
+    retry: 1, // Retry once on failure
+    gcTime: 5 * 60 * 1000 // Keep cache for 5 minutes
   });
 
-  // Fetch courses for assignment
+  // Fetch courses for assignment - optimized for performance
   const { data: courses = [] } = useQuery({
     queryKey: ['courses'],
     queryFn: async () => {
       try {
         const response = await api.get('/courses');
-        return response.data;
+        return Array.isArray(response.data) ? response.data : [];
       } catch (error) {
         console.error('Error fetching courses:', error);
         // Return empty array if endpoint doesn't exist or fails
         if (error.response?.status === 404) {
-          console.warn('Courses endpoint not found. Make sure backend server is running.');
+          // Silently handle missing endpoint
           return [];
         }
         return [];
       }
     },
-    retry: 1,
-    refetchOnWindowFocus: false
+    staleTime: 2 * 60 * 1000, // 2 minutes - data is fresh for 2 minutes
+    gcTime: 5 * 60 * 1000 // Keep cache for 5 minutes
   });
 
   // Fetch staff categories
@@ -101,12 +115,12 @@ const Teachers = () => {
         console.error('Error fetching staff categories:', error);
         // Return empty array if endpoint doesn't exist or fails
         if (error.response?.status === 404) {
-          console.warn('Staff categories endpoint not found. Please restart the backend server.');
+          // Silently handle missing endpoint
           toast.error('Staff categories endpoint not found. Please restart the backend server to load the new route.');
           return [];
         }
         if (error.response?.status === 401) {
-          console.warn('Unauthorized. Please log in again.');
+          // Silently handle unauthorized - will redirect to login
           return [];
         }
         // Don't show error for network errors (handled by interceptor)
@@ -152,7 +166,6 @@ const Teachers = () => {
           };
           
           // Log the data being sent for debugging
-          console.log('Sending teacher data:', teacherData);
           
           return api.post('/teachers', teacherData);
         }
@@ -176,8 +189,10 @@ const Teachers = () => {
       resetForm();
     },
     onError: (error) => {
-      console.error('Teacher mutation error:', error);
-      console.error('Error response:', error.response?.data);
+      // Only log errors in development
+      if (import.meta.env.MODE === 'development') {
+        console.error('Teacher mutation error:', error);
+      }
       
       // Handle network errors
       if (!error.response) {
@@ -534,18 +549,53 @@ const Teachers = () => {
   }, [formData.employment?.instituteType, staffCategories, formData.staffCategoryId]);
 
   // Filter teachers
-  const filteredTeachers = teachers.filter(teacher => {
+  const filteredTeachers = useMemo(() => {
+    const teachersArray = Array.isArray(teachers) ? teachers : [];
+    if (!searchTerm.trim()) {
+      return teachersArray;
+    }
     const searchLower = searchTerm.toLowerCase();
-    return (
-      teacher.personalInfo?.fullName?.toLowerCase().includes(searchLower) ||
-      teacher.srNo?.toLowerCase().includes(searchLower) ||
-      teacher.userId?.email?.toLowerCase().includes(searchLower) ||
-      teacher.userId?.uniqueId?.toLowerCase().includes(searchLower)
-    );
-  });
+    return teachersArray.filter(teacher => {
+      return (
+        teacher.personalInfo?.fullName?.toLowerCase().includes(searchLower) ||
+        teacher.srNo?.toLowerCase().includes(searchLower) ||
+        teacher.userId?.email?.toLowerCase().includes(searchLower) ||
+        teacher.userId?.uniqueId?.toLowerCase().includes(searchLower)
+      );
+    });
+  }, [teachers, searchTerm]);
 
   if (isLoading) {
-    return <div className="text-center py-12">Loading teachers...</div>;
+    return (
+      <div className="text-center py-12">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
+        <p className="text-gray-600 dark:text-gray-400">Loading teachers...</p>
+      </div>
+    );
+  }
+
+  if (teachersError) {
+    return (
+      <div className="space-y-6">
+        <div className="card p-8 text-center">
+          <div className="text-red-500 mb-4">
+            <GraduationCap className="w-16 h-16 mx-auto" />
+          </div>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+            Error Loading Teachers
+          </h2>
+          <p className="text-gray-600 dark:text-gray-400 mb-4">
+            {teachersError.message || 'Failed to load teachers. Please check your connection.'}
+          </p>
+          <button
+            onClick={() => refetchTeachers()}
+            className="btn-primary"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (

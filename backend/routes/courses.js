@@ -5,27 +5,69 @@ const { authenticate, authorize } = require('../middleware/auth');
 
 // @route   GET /api/courses
 // @desc    Get all courses
-// @access  Public (with optional college filtering)
+// @access  Public (with optional authentication for college filtering)
 router.get('/', async (req, res) => {
   try {
+    // Try to authenticate if token is provided (optional)
+    let userCollegeId = null;
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    if (token) {
+      try {
+        const jwt = require('jsonwebtoken');
+        const User = require('../models/User');
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_secret_key');
+        const user = await User.findById(decoded.id)
+          .select('-password')
+          .populate('collegeId', 'name email isActive');
+        
+        if (user && user.isActive && user.collegeId) {
+          userCollegeId = user.collegeId._id || user.collegeId;
+          console.log('🔍 Authenticated user - filtering by collegeId:', userCollegeId);
+        }
+      } catch (authError) {
+        // If authentication fails, continue without filtering (for backward compatibility)
+        console.log('⚠️ Authentication failed, continuing without college filter');
+      }
+    }
+    
     const { instituteType, categoryId, status, collegeId } = req.query;
     const query = {};
+    
+    // CRITICAL: Automatically filter by authenticated user's collegeId if available
+    // This ensures users only see courses from their college
+    if (userCollegeId) {
+      query.collegeId = userCollegeId;
+      console.log('🔍 Filtering courses by authenticated user collegeId:', userCollegeId);
+    } else if (collegeId) {
+      // Fallback to query parameter if provided
+      query.collegeId = collegeId;
+      console.log('🔍 Filtering courses by query collegeId:', collegeId);
+    } else {
+      // If no collegeId filter, show all courses (for backward compatibility)
+      console.log('⚠️ No collegeId filter - returning all courses');
+    }
     
     if (instituteType) query.instituteType = instituteType;
     if (categoryId) query.categoryId = categoryId;
     if (status) query.status = status;
-    // Filter by collegeId if provided (for multi-tenant support)
-    if (collegeId) query.collegeId = collegeId;
+    
+    console.log('📋 Course query:', JSON.stringify(query, null, 2));
     
     const courses = await Course.find(query)
       .populate('categoryId', 'name instituteType')
       .populate('instructorId', 'personalInfo.fullName srNo')
       .sort({ createdAt: -1 });
     
-    console.log(`Fetched ${courses.length} courses`);
+    console.log(`✅ Fetched ${courses.length} courses`);
+    if (courses.length > 0) {
+      console.log('📋 Course names:', courses.map(c => c.name));
+      console.log('📋 Course IDs:', courses.map(c => c._id));
+      console.log('📋 Course collegeIds:', courses.map(c => c.collegeId?.toString() || 'N/A'));
+    }
+    
     res.json(courses);
   } catch (error) {
-    console.error('Get courses error:', error);
+    console.error('❌ Get courses error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -56,16 +98,41 @@ router.get('/:id', async (req, res) => {
 router.post('/', authenticate, authorize('admin', 'super_admin'), async (req, res) => {
   try {
     // Automatically set collegeId from authenticated user if not provided
+    const finalCollegeId = req.body.collegeId || req.collegeId || req.user?.collegeId?._id || req.user?.collegeId;
+    console.log('🔍 Setting course collegeId:', {
+      fromBody: req.body.collegeId,
+      fromReq: req.collegeId,
+      fromUser: req.user?.collegeId?._id || req.user?.collegeId,
+      final: finalCollegeId
+    });
+    
     const courseData = {
       ...req.body,
-      collegeId: req.body.collegeId || req.collegeId || req.user?.collegeId?._id || req.user?.collegeId
+      collegeId: finalCollegeId
     };
 
     const course = await Course.create(courseData);
+    console.log('✅ Course created in database:', {
+      _id: course._id,
+      name: course.name,
+      srNo: course.srNo,
+      categoryId: course.categoryId,
+      instituteType: course.instituteType,
+      collegeId: course.collegeId?.toString() || course.collegeId
+    });
     
     const populatedCourse = await Course.findById(course._id)
-      .populate('categoryId', 'name')
+      .populate('categoryId', 'name instituteType')
       .populate('instructorId', 'personalInfo.fullName');
+    
+    console.log('✅ Populated course to return:', {
+      _id: populatedCourse._id,
+      name: populatedCourse.name,
+      srNo: populatedCourse.srNo,
+      category: populatedCourse.categoryId?.name || 'N/A',
+      instituteType: populatedCourse.instituteType,
+      collegeId: populatedCourse.collegeId?.toString() || populatedCourse.collegeId
+    });
     
     res.status(201).json(populatedCourse);
   } catch (error) {

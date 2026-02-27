@@ -33,19 +33,27 @@ const ExpenseManagement = () => {
   });
 
   // Fetch expenses
-  const { data: expenses = [], isLoading } = useQuery(
+  const { data: expensesData = [], isLoading } = useQuery(
     ['expenses', filters],
     async () => {
-      const params = new URLSearchParams();
-      if (filters.startDate) params.append('startDate', filters.startDate);
-      if (filters.endDate) params.append('endDate', filters.endDate);
-      if (filters.category) params.append('category', filters.category);
-      if (filters.department) params.append('department', filters.department);
-      
-      const response = await api.get(`/expenses?${params.toString()}`);
-      return response.data;
+      try {
+        const params = new URLSearchParams();
+        if (filters.startDate) params.append('startDate', filters.startDate);
+        if (filters.endDate) params.append('endDate', filters.endDate);
+        if (filters.category) params.append('category', filters.category);
+        if (filters.department) params.append('department', filters.department);
+        
+        const response = await api.get(`/expenses?${params.toString()}`);
+        return Array.isArray(response.data) ? response.data : [];
+      } catch (error) {
+        console.error('Error fetching expenses:', error);
+        return [];
+      }
     }
   );
+
+  // Ensure expenses is always an array
+  const expenses = Array.isArray(expensesData) ? expensesData : [];
 
   // Create/Update expense mutation
   const expenseMutation = useMutation({
@@ -140,7 +148,8 @@ const ExpenseManagement = () => {
   };
 
   // Filter expenses based on search
-  const filteredExpenses = expenses.filter(expense => {
+  const expensesArray = Array.isArray(expenses) ? expenses : [];
+  const filteredExpenses = expensesArray.filter(expense => {
     const searchLower = searchTerm.toLowerCase();
     return (
       expense.description?.toLowerCase().includes(searchLower) ||

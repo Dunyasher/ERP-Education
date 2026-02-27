@@ -24,13 +24,21 @@ const PrintIDCards = () => {
   const [qrCodes, setQrCodes] = useState({}); // Store QR codes by student ID
 
   // Fetch students
-  const { data: students = [], isLoading } = useQuery({
+  const { data: studentsData = [], isLoading } = useQuery({
     queryKey: ['allStudents'],
     queryFn: async () => {
-      const response = await api.get('/students');
-      return response.data;
+      try {
+        const response = await api.get('/students');
+        return Array.isArray(response.data) ? response.data : [];
+      } catch (error) {
+        console.error('Error fetching students:', error);
+        return [];
+      }
     }
   });
+
+  // Ensure students is always an array
+  const students = Array.isArray(studentsData) ? studentsData : [];
 
   // Get unique campuses, classes, and sections
   const campuses = ['Main Campus', 'Branch Campus', 'Online Campus'];

@@ -60,9 +60,11 @@ app.use((req, res, next) => {
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Request timeout middleware (30 seconds)
+// Request timeout middleware (60 seconds for login/auth operations)
 app.use((req, res, next) => {
-  req.setTimeout(30000, () => {
+  // Longer timeout for auth endpoints
+  const timeout = req.path.includes('/auth/') ? 60000 : 30000;
+  req.setTimeout(timeout, () => {
     res.status(408).json({ message: 'Request timeout' });
   });
   next();

@@ -19,7 +19,9 @@ import {
   Trash2,
   Edit,
   Save,
-  FolderTree
+  FolderTree,
+  Search,
+  Settings
 } from 'lucide-react';
 
 const Classes = () => {
@@ -28,11 +30,22 @@ const Classes = () => {
   const [selectedClass, setSelectedClass] = useState(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
+  const [searchTerm, setSearchTerm] = useState('');
   const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [showInstructorForm, setShowInstructorForm] = useState(false);
   const [showCreateClassForm, setShowCreateClassForm] = useState(false);
+  const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [editingScheduleIndex, setEditingScheduleIndex] = useState(null);
   const [selectedInstructorId, setSelectedInstructorId] = useState('');
+  const [editingCategory, setEditingCategory] = useState(null);
+  const [selectedCategoryId, setSelectedCategoryId] = useState('');
+  const [categoryFilterType, setCategoryFilterType] = useState('');
+  const [categoryFormData, setCategoryFormData] = useState({
+    name: '',
+    instituteType: 'college',
+    categoryType: 'course',
+    description: ''
+  });
   const [scheduleForm, setScheduleForm] = useState({
     startTime: '',
     endTime: '',
@@ -42,73 +55,120 @@ const Classes = () => {
   const [newClassForm, setNewClassForm] = useState({
     name: '',
     instituteType: '',
+    categoryId: '',
     instructorId: '',
-    startTime: '',
-    endTime: '',
-    days: [],
     room: '',
     capacity: 50,
     feeAmount: 0,
     status: 'published'
   });
 
-  // Fetch teachers for instructor selection
-  const { data: teachers = [] } = useQuery({
-    queryKey: ['teachers'],
+  // Fetch categories filtered by instituteType
+  const { data: allCategories = [], isLoading: categoriesLoading, error: categoriesError } = useQuery({
+    queryKey: ['categories', 'course'],
     queryFn: async () => {
-      const response = await api.get('/teachers');
-      return response.data;
-    }
+      try {
+        const response = await api.get('/categories?categoryType=course');
+        return Array.isArray(response.data) ? response.data : [];
+      } catch (error) {
+        console.error('Error fetching categories:', error);
+        // Don't show error toast here - it's handled gracefully in the form
+        return [];
+      }
+    },
+    staleTime: 2 * 60 * 1000, // 2 minutes - data is fresh for 2 minutes
+    retry: 1 // Only retry once on failure
   });
 
-  // Filter teachers based on selected institute type
-  // If no teachers match, show all teachers to allow assignment
-  const filteredTeachers = useMemo(() => {
-    if (!newClassForm.instituteType) {
-      return teachers; // Show all teachers if no institute type selected
-    }
-    
-    const matchedTeachers = teachers.filter(teacher => {
-      const teacherInstituteType = teacher.employment?.instituteType;
-      return teacherInstituteType === newClassForm.instituteType;
-    });
-    
-    // If no teachers match the institute type, show all teachers
-    // This allows assignment even if teacher's institute type isn't set
-    return matchedTeachers.length > 0 ? matchedTeachers : teachers;
-  }, [teachers, newClassForm.instituteType]);
+  // Filter categories based on selected instituteType
+  const filteredCategories = useMemo(() => {
+    if (!newClassForm.instituteType) return [];
+    return allCategories.filter(category => 
+      category.instituteType === newClassForm.instituteType
+    );
+  }, [allCategories, newClassForm.instituteType]);
 
-  // Clear instructor selection when institute type changes if teacher doesn't match
-  // Only clear if there are matching teachers available
-  useEffect(() => {
-    if (newClassForm.instituteType && newClassForm.instructorId) {
-      const selectedTeacher = teachers.find(t => t._id === newClassForm.instructorId);
-      const teacherInstituteType = selectedTeacher?.employment?.instituteType;
-      
-      // Only clear if there are other matching teachers available
-      const hasMatchingTeachers = filteredTeachers.length > 0 && 
-                                   filteredTeachers.some(t => t._id !== newClassForm.instructorId);
-      
-      if (teacherInstituteType !== newClassForm.instituteType && hasMatchingTeachers) {
-        setNewClassForm(prev => ({ ...prev, instructorId: '' }));
-        toast('Teacher selection cleared - please select a teacher matching the institute type', {
-          duration: 3000,
-          icon: 'ℹ️'
-        });
+  // Fetch teachers for instructor selection
+  const { data: teachers = [], error: teachersError, isLoading: teachersLoading } = useQuery({
+    queryKey: ['teachers'],
+    queryFn: async () => {
+      try {
+        // Fetch all teachers including inactive ones
+        const response = await api.get('/teachers?includeInactive=true');
+        const teachersArray = Array.isArray(response.data) ? response.data : [];
+        return teachersArray;
+      } catch (error) {
+        console.error('❌ Error fetching teachers:', error);
+        console.error('❌ Error response:', error.response?.data);
+        toast.error('Failed to load teachers. Please refresh the page.');
+        return [];
       }
+    },
+    staleTime: 2 * 60 * 1000, // 2 minutes - data is fresh for 2 minutes
+    retry: 1, // Retry once on failure
+    gcTime: 5 * 60 * 1000 // Keep cache for 5 minutes
+  });
+
+  // Always show all available teachers - allow assignment regardless of institute type
+  const filteredTeachers = useMemo(() => {
+    // Ensure teachers is always an array
+    const teachersArray = Array.isArray(teachers) ? teachers : [];
+    // Always return all teachers to allow flexible assignment
+    return teachersArray;
+  }, [teachers]);
+
+  // Clear category and instructor selection when institute type changes
+  useEffect(() => {
+    if (newClassForm.instituteType) {
+      // Clear category if it doesn't match the new institute type
+      if (newClassForm.categoryId && Array.isArray(allCategories)) {
+        const selectedCategory = allCategories.find(cat => cat._id === newClassForm.categoryId);
+        if (selectedCategory && selectedCategory.instituteType !== newClassForm.instituteType) {
+          setNewClassForm(prev => ({ ...prev, categoryId: '' }));
+        }
+      }
+      
     }
-  }, [newClassForm.instituteType, teachers, newClassForm.instructorId, filteredTeachers]);
+  }, [newClassForm.instituteType, teachers, newClassForm.categoryId, filteredTeachers, allCategories]);
 
   // Fetch all classes
-  const { data: classes = [], isLoading } = useQuery({
+  const { data: classesData = [], isLoading, error: classesError } = useQuery({
     queryKey: ['classes'],
     queryFn: async () => {
-      const response = await api.get('/classes');
-      return response.data;
+      try {
+        const response = await api.get('/classes');
+        // Ensure we always return an array
+        const classesArray = Array.isArray(response.data) ? response.data : [];
+        // Sort alphabetically A-Z by name
+        return classesArray.sort((a, b) => {
+          const nameA = (a.name || '').toLowerCase().trim();
+          const nameB = (b.name || '').toLowerCase().trim();
+          return nameA.localeCompare(nameB);
+        });
+      } catch (error) {
+        console.error('Error fetching classes:', error);
+        toast.error('Failed to load classes. Please try again.');
+        return []; // Return empty array on error
+      }
     },
     refetchOnWindowFocus: false,
     staleTime: 30000 // Cache for 30 seconds
   });
+
+  // Use sorted classes
+  const classes = classesData;
+
+  // Filter classes based on search term
+  const filteredClasses = useMemo(() => {
+    if (!searchTerm.trim()) return classes;
+    const searchLower = searchTerm.toLowerCase();
+    return classes.filter(classItem => 
+      classItem.name?.toLowerCase().includes(searchLower) ||
+      classItem.category?.toLowerCase().includes(searchLower) ||
+      classItem.srNo?.toLowerCase().includes(searchLower) ||
+      classItem.instructor?.toLowerCase().includes(searchLower)
+    );
+  }, [classes, searchTerm]);
 
   // Auto-select class from URL parameter or location state
   useEffect(() => {
@@ -143,13 +203,7 @@ const Classes = () => {
           duration: 3000,
           icon: '✅'
         });
-      } else if (courseId && classes.length > 0) {
-        // Course ID provided but class not found - log for debugging
-        console.warn(`Class with ID ${courseId} not found in classes list. Available classes:`, classes.map(c => ({ id: c._id, name: c.name })));
       }
-    } else if (courseId && classes.length === 0 && !isLoading) {
-      // If we have a courseId but no classes loaded, refetch
-      console.log('Course ID provided but classes not loaded, will retry...');
     }
   }, [searchParams, classes, selectedClass, setSearchParams, location.state, isLoading]);
 
@@ -252,6 +306,100 @@ const Classes = () => {
     }
   });
 
+  // Delete class mutation
+  const deleteClassMutation = useMutation({
+    mutationFn: async (id) => api.delete(`/courses/${id}`),
+    onSuccess: async (response, deletedId) => {
+      // Optimistically remove class from cache immediately
+      queryClient.setQueryData(['classes'], (oldClasses = []) => {
+        const filtered = oldClasses.filter(classItem => classItem._id !== deletedId);
+        return filtered;
+      });
+      
+      // Invalidate and refetch classes
+      queryClient.invalidateQueries({ queryKey: ['classes'] });
+      
+      toast.success('Class deleted successfully!');
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to delete class');
+    }
+  });
+
+  const handleDelete = (id, className) => {
+    if (window.confirm(`Are you sure you want to delete "${className}"? This action cannot be undone.`)) {
+      deleteClassMutation.mutate(id);
+    }
+  };
+
+  // Category mutations
+  const categoryMutation = useMutation({
+    mutationFn: async (data) => {
+      if (editingCategory) {
+        return api.put(`/categories/${editingCategory._id}`, data);
+      } else {
+        return api.post('/categories', data);
+      }
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['categories'] });
+      await queryClient.invalidateQueries({ queryKey: ['categories', 'course'] });
+      await queryClient.refetchQueries({ queryKey: ['categories'] });
+      await queryClient.refetchQueries({ queryKey: ['categories', 'course'] });
+      toast.success(editingCategory ? 'Category updated successfully!' : 'Category created successfully!');
+      setShowCategoryForm(false);
+      setEditingCategory(null);
+      setSelectedCategoryId('');
+      setCategoryFormData({
+        name: '',
+        instituteType: 'college',
+        categoryType: 'course',
+        description: ''
+      });
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to save category');
+    }
+  });
+
+  const deleteCategoryMutation = useMutation({
+    mutationFn: async (id) => api.delete(`/categories/${id}`),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['categories'] });
+      await queryClient.invalidateQueries({ queryKey: ['categories', 'course'] });
+      await queryClient.refetchQueries({ queryKey: ['categories'] });
+      await queryClient.refetchQueries({ queryKey: ['categories', 'course'] });
+      toast.success('Category deleted successfully!');
+      setSelectedCategoryId('');
+    },
+    onError: () => {
+      toast.error('Failed to delete category');
+    }
+  });
+
+  const handleCategoryEdit = (category) => {
+    setEditingCategory(category);
+    setSelectedCategoryId(category._id);
+    setCategoryFormData({
+      name: category.name || '',
+      instituteType: category.instituteType || 'college',
+      categoryType: category.categoryType || 'course',
+      description: category.description || ''
+    });
+    setShowCategoryForm(true);
+  };
+
+  const handleCategorySubmit = (e) => {
+    e.preventDefault();
+    categoryMutation.mutate(categoryFormData);
+  };
+
+  const handleCategoryDelete = (id) => {
+    if (window.confirm('Are you sure you want to delete this category?')) {
+      deleteCategoryMutation.mutate(id);
+    }
+  };
+
   const handleScheduleSubmit = (e) => {
     e.preventDefault();
     if (!scheduleForm.startTime || !scheduleForm.endTime) {
@@ -326,6 +474,7 @@ const Classes = () => {
       const courseData = {
         name: data.name,
         instituteType: data.instituteType,
+        categoryId: data.categoryId || null,
         instructorId: data.instructorId || null,
         capacity: data.capacity || 50,
         status: data.status || 'published',
@@ -335,17 +484,6 @@ const Classes = () => {
         },
         schedules: []
       };
-
-      // Add schedule if provided
-      if (data.startTime && data.endTime) {
-        courseData.schedules = [{
-          startTime: data.startTime,
-          endTime: data.endTime,
-          days: data.days || [],
-          room: data.room || '',
-          isActive: true
-        }];
-      }
 
       const response = await api.post('/courses', courseData);
       return response.data;
@@ -357,10 +495,8 @@ const Classes = () => {
       setNewClassForm({
         name: '',
         instituteType: '',
+        categoryId: '',
         instructorId: '',
-        startTime: '',
-        endTime: '',
-        days: [],
         room: '',
         capacity: 50,
         feeAmount: 0,
@@ -377,19 +513,9 @@ const Classes = () => {
 
   // Fill sample data for testing
   const fillSampleData = () => {
-    // Get first available teacher
-    let firstTeacher = '';
-    if (teachers.length > 0) {
-      firstTeacher = teachers[0]._id;
-    }
-    
     const sampleData = {
       name: 'book 5',
       instituteType: 'school',
-      instructorId: firstTeacher,
-      startTime: '09:00',
-      endTime: '11:00',
-      days: ['Monday'],
       room: 'Room 101',
       capacity: 50,
       feeAmount: 500,
@@ -397,19 +523,10 @@ const Classes = () => {
     };
     
     setNewClassForm(sampleData);
-    
-    // Show appropriate message based on available data
-    if (!firstTeacher) {
-      toast.success('Sample data filled! Note: Please select a teacher if not auto-filled.', {
-        duration: 4000,
-        icon: 'ℹ️'
-      });
-    } else {
-      toast.success('Sample data filled! You can modify the values as needed.', {
-        duration: 3000,
-        icon: '✅'
-      });
-    }
+    toast.success('Sample data filled! You can modify the values as needed.', {
+      duration: 3000,
+      icon: '✅'
+    });
   };
 
   const handleCreateClassSubmit = (e) => {
@@ -422,29 +539,17 @@ const Classes = () => {
       toast.error('Please select an institute type');
       return;
     }
-    if (!newClassForm.instructorId) {
-      toast.error('Please select a teacher');
+    if (!newClassForm.categoryId) {
+      toast.error('Please select a category');
       return;
     }
-    if (!newClassForm.startTime || !newClassForm.endTime) {
-      toast.error('Please provide start time and end time');
-      return;
-    }
-    if (newClassForm.days.length === 0) {
+    if (false) {
       toast.error('Please select at least one day');
       return;
     }
     createClassMutation.mutate(newClassForm);
   };
 
-  const toggleDayForNewClass = (day) => {
-    setNewClassForm(prev => ({
-      ...prev,
-      days: prev.days.includes(day)
-        ? prev.days.filter(d => d !== day)
-        : [...prev.days, day]
-    }));
-  };
 
   if (isLoading) {
     return (
@@ -880,14 +985,15 @@ const Classes = () => {
           
           // Filter teachers based on class's institute type
           // If no teachers match, show all teachers to allow assignment
+          const teachersArray = Array.isArray(teachers) ? teachers : [];
           const matchedTeachers = classInstituteType
-            ? teachers.filter(teacher => 
-                teacher.employment?.instituteType === classInstituteType
+            ? teachersArray.filter(teacher => 
+                teacher?.employment?.instituteType === classInstituteType
               )
-            : teachers;
+            : teachersArray;
           
           // If no teachers match the institute type, show all teachers
-          const filteredTeachersForClass = matchedTeachers.length > 0 ? matchedTeachers : teachers;
+          const filteredTeachersForClass = matchedTeachers.length > 0 ? matchedTeachers : teachersArray;
           
           return (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -917,36 +1023,15 @@ const Classes = () => {
                       required
                       className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
                     >
-                      <option value="">
-                        {filteredTeachersForClass.length === 0 
-                          ? classInstituteType 
-                            ? `No teachers available for ${classInstituteType.replace('_', ' ')}`
-                            : 'Select a teacher'
-                          : 'Select a teacher'}
-                      </option>
-                      {filteredTeachersForClass.length > 0 ? (
+                      <option value="">Select a teacher</option>
+                      {filteredTeachersForClass.length > 0 && (
                         filteredTeachersForClass.map((teacher) => (
                           <option key={teacher._id} value={teacher._id}>
                             {teacher.personalInfo?.fullName || 'N/A'}
                           </option>
                         ))
-                      ) : (
-                        <option value="" disabled>
-                          {classInstituteType 
-                            ? `No teachers available for ${classInstituteType.replace('_', ' ')}. Please add teachers for this institute type first.`
-                            : 'No teachers available. Please add teachers first.'}
-                        </option>
                       )}
                     </select>
-                    {classInstituteType && (
-                      <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                        {filteredTeachersForClass.length === teachers.length ? (
-                          <>Showing all teachers (no specific filter for {classInstituteType.replace('_', ' ')})</>
-                        ) : (
-                          <>Showing teachers for: <span className="font-semibold capitalize">{classInstituteType.replace('_', ' ')}</span> ({filteredTeachersForClass.length} available)</>
-                        )}
-                      </p>
-                    )}
                   </div>
                   <div className="flex justify-end gap-3 pt-4">
                     <button
@@ -982,20 +1067,43 @@ const Classes = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            Classes
-          </h1>
+          <div className="flex items-center gap-3 mb-2">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+              Classes
+            </h1>
+            <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-2 py-1 rounded-full font-medium">
+              A-Z
+            </span>
+          </div>
           <p className="text-gray-600 dark:text-gray-400">
-            View all classes, student enrollment, and fee collection details
+            View all classes, student enrollment, and fee collection details (sorted alphabetically)
           </p>
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate('/admin/courses')}
+            onClick={() => {
+              setShowCategoryForm(true);
+              setEditingCategory(null);
+              setSelectedCategoryId('');
+              setCategoryFilterType('');
+              setCategoryFormData({
+                name: '',
+                instituteType: 'college',
+                categoryType: 'course',
+                description: ''
+              });
+            }}
             className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold transition-colors duration-200 shadow-lg hover:shadow-xl"
           >
             <FolderTree className="w-5 h-5" />
             Category
+          </button>
+          <button
+            onClick={() => navigate('/admin/categories')}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors duration-200 shadow-lg hover:shadow-xl"
+          >
+            <Settings className="w-5 h-5" />
+            Manage Category
           </button>
           <button
             onClick={() => setShowCreateClassForm(true)}
@@ -1007,122 +1115,130 @@ const Classes = () => {
         </div>
       </div>
 
-      {/* Classes Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {classes.map((classItem) => (
-          <div
-            key={classItem._id}
-            onClick={() => setSelectedClass(classItem)}
-            className="card animate-fade-in cursor-pointer hover:shadow-xl transition-all duration-300 hover:scale-105"
-          >
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="icon-container bg-gradient-to-br from-primary-500 to-purple-600">
-                  <BookOpen className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-                    {classItem.name}
-                  </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    {classItem.category}
-                  </p>
-                </div>
-              </div>
-              <ChevronRight className="w-5 h-5 text-gray-400" />
-            </div>
-
-            {/* Teacher and Time Info - Prominently Displayed */}
-            <div className="mb-4 p-3 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-lg border border-indigo-200 dark:border-indigo-800">
-              <div className="space-y-2">
-                {/* Teacher */}
-                <div className="flex items-center gap-2">
-                  <GraduationCap className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                  <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">Teacher:</span>
-                  <span className="text-sm font-bold text-gray-900 dark:text-white">
-                    {classItem.instructor || 'Not Assigned'}
-                  </span>
-                </div>
-                {/* Class Times */}
-                {classItem.schedules && classItem.schedules.length > 0 ? (
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                      <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">Class Time:</span>
-                    </div>
-                    <div className="flex flex-wrap gap-2 ml-6">
-                      {classItem.schedules.map((schedule, index) => (
-                        <span key={index} className="badge-info text-xs font-semibold">
-                          {formatTime(schedule.startTime)} - {formatTime(schedule.endTime)}
-                          {schedule.days && schedule.days.length > 0 && (
-                            <span className="ml-1">({schedule.days.map(d => d.substring(0, 3)).join(', ')})</span>
-                          )}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-gray-400" />
-                    <span className="text-xs text-gray-500 dark:text-gray-400">No schedule set</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Statistics */}
-            <div className="space-y-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                  <Users className="w-4 h-4" />
-                  <span className="text-sm">Students</span>
-                </div>
-                <span className="font-semibold text-gray-900 dark:text-white">
-                  {classItem.studentCount} / {classItem.capacity}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                  <DollarSign className="w-4 h-4" />
-                  <span className="text-sm">Total Fee</span>
-                </div>
-                <span className="font-semibold text-gray-900 dark:text-white">
-                  {formatCurrency(classItem.totalFee)}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
-                  <TrendingUp className="w-4 h-4" />
-                  <span className="text-sm">Paid</span>
-                </div>
-                <span className="font-semibold text-green-600 dark:text-green-400">
-                  {formatCurrency(classItem.totalPaid)}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
-                  <DollarSign className="w-4 h-4" />
-                  <span className="text-sm">Pending</span>
-                </div>
-                <span className="font-semibold text-red-600 dark:text-red-400">
-                  {formatCurrency(classItem.totalPending)}
-                </span>
-              </div>
-
-            </div>
-          </div>
-        ))}
+      {/* Search Bar */}
+      <div className="card">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+          <input
+            type="text"
+            placeholder="Search by name, category, or serial number..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+          />
+        </div>
       </div>
 
-      {classes.length === 0 && (
-        <div className="card text-center py-12">
-          <BookOpen className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-          <p className="text-gray-600 dark:text-gray-400">No classes found</p>
-        </div>
-      )}
+      {/* Classes Table */}
+      <div className="card overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+          <thead className="bg-gray-50 dark:bg-gray-800">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Serial No
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Class Name
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Category
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Institute Type
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Instructor
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Students
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Fee
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Status
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+            {filteredClasses.length === 0 ? (
+              <tr>
+                <td colSpan="9" className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                  <BookOpen className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                  <p>{isLoading ? 'Loading classes...' : 'No classes found'}</p>
+                </td>
+              </tr>
+            ) : (
+              filteredClasses.map((classItem) => (
+                <tr 
+                  key={classItem._id} 
+                  className="hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
+                  onClick={() => setSelectedClass(classItem)}
+                >
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                    {classItem.srNo || 'N/A'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
+                    {classItem.name || 'N/A'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                    {classItem.category || 'N/A'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                    {classItem.instituteType 
+                      ? classItem.instituteType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())
+                      : 'N/A'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                    {classItem.instructor || 'Not Assigned'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                    <span className="font-medium">
+                      {classItem.studentCount || 0} / {classItem.capacity || 50}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                    {formatCurrency(classItem.totalFee || 0)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                      classItem.status === 'published' 
+                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                        : classItem.status === 'draft'
+                        ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                        : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
+                    }`}>
+                      {classItem.status || 'published'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setSelectedClass(classItem)}
+                        className="text-blue-600 hover:text-blue-900 dark:text-blue-400"
+                        title="View Details"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(classItem._id, classItem.name)}
+                        className="text-red-600 hover:text-red-900 dark:text-red-400"
+                        title="Delete"
+                        disabled={deleteClassMutation.isLoading}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
 
       {/* Create New Class Modal */}
       {showCreateClassForm && (
@@ -1148,10 +1264,8 @@ const Classes = () => {
                     setNewClassForm({
                       name: '',
                       instituteType: '',
+                      categoryId: '',
                       instructorId: '',
-                      startTime: '',
-                      endTime: '',
-                      days: [],
                       room: '',
                       capacity: 50,
                       feeAmount: 0,
@@ -1165,164 +1279,149 @@ const Classes = () => {
               </div>
             </div>
             <form onSubmit={handleCreateClassSubmit} className="space-y-6">
-              {/* Class Name and Institute Type */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Institute Type */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Institute Type *
+                </label>
+                <select
+                  value={newClassForm.instituteType}
+                  onChange={(e) => {
+                    setNewClassForm({ 
+                      ...newClassForm, 
+                      instituteType: e.target.value,
+                      categoryId: '' // Reset category when institute type changes
+                    });
+                  }}
+                  required
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+                >
+                  <option value="">Select an institute type</option>
+                  <option value="school">School</option>
+                  <option value="college">College</option>
+                  <option value="academy">Academy</option>
+                  <option value="short_course">Short Course</option>
+                </select>
+                {newClassForm.instituteType && (
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    {newClassForm.instituteType === 'school' && 'Categories: Class 1, Class 2, Class 3, etc.'}
+                    {newClassForm.instituteType === 'college' && 'Categories: First Year, Second Year, Third Year, etc.'}
+                    {newClassForm.instituteType === 'academy' && 'Categories: Book 1, Book 2, Book 3, etc.'}
+                    {newClassForm.instituteType === 'short_course' && 'Categories: Any course category'}
+                  </p>
+                )}
+              </div>
+
+              {/* Category Selection */}
+              {newClassForm.instituteType && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Class Name *
+                    Category *
+                  </label>
+                  <div className="flex gap-2">
+                    <select
+                      value={newClassForm.categoryId}
+                      onChange={(e) => setNewClassForm({ ...newClassForm, categoryId: e.target.value })}
+                      required
+                      disabled={!newClassForm.instituteType || categoriesLoading}
+                      className="flex-1 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <option value="">
+                        {!newClassForm.instituteType 
+                          ? 'Select Institute Type first'
+                          : categoriesLoading
+                          ? 'Loading categories...'
+                          : filteredCategories.length === 0
+                          ? `No categories found for ${newClassForm.instituteType.replace('_', ' ')} - Click "Category" button to add`
+                          : 'Select a category'
+                        }
+                      </option>
+                      {filteredCategories.map((category) => (
+                        <option key={category._id} value={category._id}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/admin/courses')}
+                      className="px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
+                      title="Manage Categories"
+                    >
+                      <FileText className="w-4 h-4" />
+                    </button>
+                  </div>
+                  {filteredCategories.length === 0 && newClassForm.instituteType && !categoriesLoading && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                      No categories available. Click the folder icon to manage categories.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Class Name */}
+              {newClassForm.categoryId && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Class/Subject Name *
                   </label>
                   <input
                     type="text"
                     value={newClassForm.name}
                     onChange={(e) => setNewClassForm({ ...newClassForm, name: e.target.value })}
                     required
-                    placeholder="e.g., Book 1, DIT, English Language"
+                    placeholder="e.g., Class 6, Class 7, Book 1, DIT, English Language"
                     className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
                   />
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    Enter the class or subject name (e.g., Class 6, Class 7, Book 1, etc.)
+                  </p>
                 </div>
+              )}
+
+              {/* Teacher (Optional) */}
+              {newClassForm.categoryId && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Institute Type *
+                    Teacher (Optional)
                   </label>
                   <select
-                    value={newClassForm.instituteType}
-                    onChange={(e) => {
-                      setNewClassForm({ 
-                        ...newClassForm, 
-                        instituteType: e.target.value,
-                        instructorId: '' // Reset instructor when institute type changes
-                      });
-                    }}
-                    required
+                    value={newClassForm.instructorId}
+                    onChange={(e) => setNewClassForm({ ...newClassForm, instructorId: e.target.value })}
                     className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
                   >
-                    <option value="">Select an institute type</option>
-                    <option value="school">School</option>
-                    <option value="college">College</option>
-                    <option value="academy">Academy</option>
-                    <option value="short_course">Short Course</option>
+                    <option value="">Select a teacher (optional)</option>
+                    {filteredTeachers.length > 0 ? (
+                      filteredTeachers.map((teacher) => {
+                        const teacherName = teacher.personalInfo?.fullName || teacher.name || 'N/A';
+                        return (
+                          <option key={teacher._id} value={teacher._id}>
+                            {teacherName}
+                          </option>
+                        );
+                      })
+                    ) : (
+                      teachersLoading ? (
+                        <option value="" disabled>Loading teachers...</option>
+                      ) : (
+                        <option value="" disabled>No teachers available</option>
+                      )
+                    )}
                   </select>
                 </div>
-              </div>
+              )}
 
-              {/* Teacher Assignment */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Assign Teacher *
+                  Room (Optional)
                 </label>
-                <select
-                  value={newClassForm.instructorId}
-                  onChange={(e) => setNewClassForm({ ...newClassForm, instructorId: e.target.value })}
-                  required
-                  disabled={!newClassForm.instituteType || filteredTeachers.length === 0}
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <option value="">
-                    {!newClassForm.instituteType 
-                      ? 'Please select institute type first' 
-                      : filteredTeachers.length === 0 
-                      ? `No teachers available for ${newClassForm.instituteType.replace('_', ' ')}` 
-                      : 'Select a teacher'}
-                  </option>
-                  {filteredTeachers.length > 0 ? (
-                    filteredTeachers.map((teacher) => (
-                      <option key={teacher._id} value={teacher._id}>
-                        {teacher.personalInfo?.fullName || 'N/A'}
-                      </option>
-                    ))
-                  ) : (
-                    <option value="" disabled>
-                      {newClassForm.instituteType 
-                        ? `No teachers available for ${newClassForm.instituteType.replace('_', ' ')}. Please add teachers for this institute type first.`
-                        : 'No teachers available. Please add teachers first.'}
-                    </option>
-                  )}
-                </select>
-                {newClassForm.instituteType && (
-                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                    {filteredTeachers.length === teachers.length ? (
-                      <>Showing all teachers (no specific filter for {newClassForm.instituteType.replace('_', ' ')})</>
-                    ) : (
-                      <>Showing teachers for: <span className="font-semibold capitalize">{newClassForm.instituteType.replace('_', ' ')}</span> ({filteredTeachers.length} available)</>
-                    )}
-                  </p>
-                )}
-                {!newClassForm.instituteType && (
-                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                    Please select institute type first to see available teachers
-                  </p>
-                )}
-              </div>
-
-              {/* Class Schedule */}
-              <div className="space-y-4">
-                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                  Class Schedule *
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Start Time *
-                    </label>
-                    <input
-                      type="time"
-                      value={newClassForm.startTime}
-                      onChange={(e) => setNewClassForm({ ...newClassForm, startTime: e.target.value })}
-                      required
-                      className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      End Time *
-                    </label>
-                    <input
-                      type="time"
-                      value={newClassForm.endTime}
-                      onChange={(e) => setNewClassForm({ ...newClassForm, endTime: e.target.value })}
-                      required
-                      className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Days of the Week *
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {weekDays.map((day) => (
-                      <button
-                        key={day}
-                        type="button"
-                        onClick={() => toggleDayForNewClass(day)}
-                        className={`px-3 py-1.5 rounded text-sm font-medium ${
-                          newClassForm.days.includes(day)
-                            ? 'bg-indigo-600 text-white'
-                            : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                        }`}
-                      >
-                        {day}
-                      </button>
-                    ))}
-                  </div>
-                  {newClassForm.days.length === 0 && (
-                    <p className="text-xs text-red-600 dark:text-red-400 mt-1">
-                      Please select at least one day
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Room (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={newClassForm.room}
-                    onChange={(e) => setNewClassForm({ ...newClassForm, room: e.target.value })}
-                    placeholder="e.g., Room 101"
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
-                  />
-                </div>
+                <input
+                  type="text"
+                  value={newClassForm.room}
+                  onChange={(e) => setNewClassForm({ ...newClassForm, room: e.target.value })}
+                  placeholder="e.g., Room 101"
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+                />
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
@@ -1333,10 +1432,8 @@ const Classes = () => {
                     setNewClassForm({
                       name: '',
                       instituteType: '',
+                      categoryId: '',
                       instructorId: '',
-                      startTime: '',
-                      endTime: '',
-                      days: [],
                       room: '',
                       capacity: 50,
                       feeAmount: 0,

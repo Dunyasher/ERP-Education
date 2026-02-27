@@ -33,13 +33,23 @@ const authenticate = async (req, res, next) => {
     }
     next();
   } catch (error) {
+    console.error('Authentication error:', error);
     if (error.name === 'JsonWebTokenError') {
       return res.status(401).json({ message: 'Invalid token' });
     }
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({ message: 'Token expired' });
     }
-    res.status(401).json({ message: 'Token is not valid' });
+    // Check if it's a MongoDB connection error
+    if (error.message?.includes('MongoServerError') || error.message?.includes('connection')) {
+      console.error('MongoDB connection error in auth middleware:', error.message);
+      return res.status(503).json({ message: 'Database connection error. Please try again.' });
+    }
+    console.error('Unexpected auth error:', error.stack);
+    res.status(500).json({ 
+      message: 'Authentication error',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
   }
 };
 

@@ -9,17 +9,17 @@ import { store } from './store';
 import './index.css';
 import { Toaster } from 'react-hot-toast';
 
-// Create a QueryClient instance with optimized settings
+// Create a QueryClient instance with optimized settings for performance
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      refetchOnWindowFocus: false,
-      refetchOnMount: true,
-      refetchOnReconnect: true,
-      retry: 1,
-      retryDelay: 1000,
-      staleTime: 5 * 60 * 1000, // 5 minutes - data is fresh for 5 minutes
-      gcTime: 10 * 60 * 1000, // 10 minutes - cache garbage collection time
+      refetchOnWindowFocus: false, // Don't refetch when window regains focus - faster UX
+      refetchOnMount: false, // Use cached data on mount - only refetch if stale
+      refetchOnReconnect: true, // Refetch when network reconnects
+      retry: 1, // Retry once on failure
+      retryDelay: 500, // Faster retry delay
+      staleTime: 2 * 60 * 1000, // 2 minutes - data is fresh for 2 minutes (reduced from 5)
+      gcTime: 5 * 60 * 1000, // 5 minutes - cache garbage collection time (reduced from 10)
     },
     mutations: {
       retry: 0, // Don't retry mutations
@@ -43,7 +43,13 @@ if (!rootElement) {
     console.log('🌐 Router configured');
     console.log('='.repeat(60) + '\n');
     
-    ReactDOM.createRoot(rootElement).render(
+    // Ensure root element is still in the DOM before rendering
+    if (!document.body.contains(rootElement)) {
+      console.error('❌ Root element was removed from DOM');
+    } else {
+      const root = ReactDOM.createRoot(rootElement);
+    
+    root.render(
       <React.StrictMode>
         <ErrorBoundary>
           <QueryClientProvider client={queryClient}>
@@ -67,8 +73,9 @@ if (!rootElement) {
           </QueryClientProvider>
         </ErrorBoundary>
       </React.StrictMode>
-    );
-    console.log('✅ React application rendered successfully\n');
+      );
+      console.log('✅ React application rendered successfully\n');
+    }
   } catch (error) {
     console.error('❌ Error rendering React app:', error);
     rootElement.innerHTML = `

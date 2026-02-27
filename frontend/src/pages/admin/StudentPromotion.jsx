@@ -20,12 +20,22 @@ const StudentPromotion = () => {
   const [showToClassDropdown, setShowToClassDropdown] = useState(false);
 
   // Fetch courses/classes
+  // Fetch courses - automatically updates when courses are added/updated
   const { data: courses = [] } = useQuery({
     queryKey: ['courses'],
     queryFn: async () => {
-      const response = await api.get('/courses');
-      return response.data;
-    }
+      try {
+        const response = await api.get('/courses');
+        return Array.isArray(response.data) ? response.data : [];
+      } catch (error) {
+        console.error('Error fetching courses:', error);
+        return [];
+      }
+    },
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    staleTime: 0, // Always consider data stale to ensure fresh data
+    cacheTime: 0 // Don't cache to ensure immediate updates
   });
 
   // Fetch students for filtering

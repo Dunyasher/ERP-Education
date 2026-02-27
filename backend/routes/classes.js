@@ -12,8 +12,8 @@ const { authenticate, authorize } = require('../middleware/auth');
 router.get('/', authenticate, authorize('admin', 'super_admin', 'accountant'), async (req, res) => {
   try {
     const courses = await Course.find({ status: 'published' })
+      .populate('categoryId', 'name instituteType')
       .populate('instructorId', 'personalInfo.fullName')
-      .populate('categoryId', 'name')
       .sort({ name: 1 });
 
     // Get statistics for each course
@@ -45,6 +45,8 @@ router.get('/', authenticate, authorize('admin', 'super_admin', 'accountant'), a
           name: course.name,
           srNo: course.srNo,
           category: course.categoryId?.name || 'N/A',
+          categoryId: course.categoryId?._id || null,
+          instituteType: course.instituteType || 'N/A',
           instructor: course.instructorId?.personalInfo?.fullName || 'Not Assigned',
           schedules: course.schedules || [],
           studentCount: students.length,

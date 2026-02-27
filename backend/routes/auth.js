@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 const College = require('../models/College');
@@ -249,29 +250,33 @@ router.post('/login', [
       return res.status(400).json({ message: 'Email and password are required' });
     }
 
-    // Find user (email is unique per college)
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    // Check MongoDB connection
+    if (mongoose.connection.readyState !== 1) {
+      console.error('❌ MongoDB not connected. Connection state:', mongoose.connection.readyState);
+      return res.status(503).json({ message: 'Database connection unavailable. Please try again in a moment.' });
+    }
+
+    // Find user (email is unique per college) - optimized query
+    const user = await User.findOne({ email: email.toLowerCase().trim() }).select('+password');
     if (!user) {
       console.log(`❌ Login failed: User not found for email: "${email}"`);
-      // Check if any users exist with similar email
-      const similarUsers = await User.find({ email: { $regex: email.split('@')[0], $options: 'i' } }).select('email');
-      if (similarUsers.length > 0) {
-        console.log(`   Similar emails found: ${similarUsers.map(u => u.email).join(', ')}`);
-      }
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
     console.log(`✅ User found: ${user.email}, Role: ${user.role}, Active: ${user.isActive}`);
 
-    // Populate collegeId if it exists
+    // Populate collegeId if it exists (optimized - only if needed)
     let college = null;
+    let collegeName = null;
     if (user.collegeId) {
       try {
-        college = await College.findById(user.collegeId).select('name email isActive');
+        // Use lean() for faster query, only get what we need
+        college = await College.findById(user.collegeId).select('name isActive').lean();
         // Check if college is active
         if (college && !college.isActive) {
           return res.status(403).json({ message: 'College account is inactive. Please contact administrator.' });
         }
+        collegeName = college?.name || null;
       } catch (collegeError) {
         console.error('Error populating college:', collegeError);
         // Continue even if college lookup fails (might be deleted)
@@ -326,8 +331,8 @@ router.post('/login', [
         email: user.email,
         role: user.role,
         srNo: user.srNo,
-        collegeId: college?._id || user.collegeId || null,
-        collegeName: college?.name || null,
+        collegeId: user.collegeId || null,
+        collegeName: collegeName,
         profile: user.profile || {}
       }
     });
@@ -346,13 +351,26 @@ router.post('/login', [
 // @access  Private
 router.get('/me', authenticate, async (req, res) => {
   try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
     const user = await User.findById(req.user.id)
       .select('-password')
       .populate('collegeId', 'name email instituteType settings');
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
     res.json(user);
   } catch (error) {
     console.error('Get user error:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
   }
 });
 

@@ -17,13 +17,20 @@ const Categories = () => {
     isActive: true
   });
 
-  // Fetch categories
+  // Fetch categories - automatically updates when categories are added/updated
   const { data: categories = [], isLoading } = useQuery({
     queryKey: ['categories'],
     queryFn: async () => {
-      const response = await api.get('/categories');
-      return response.data;
-    }
+      try {
+        const response = await api.get('/categories');
+        return Array.isArray(response.data) ? response.data : [];
+      } catch (error) {
+        console.error('Error fetching categories:', error);
+        return [];
+      }
+    },
+    staleTime: 2 * 60 * 1000, // 2 minutes - data is fresh for 2 minutes
+    gcTime: 5 * 60 * 1000 // Keep cache for 5 minutes
   });
 
   // Create/Update category mutation
@@ -35,9 +42,14 @@ const Categories = () => {
         return api.post('/categories', data);
       }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['categories'] });
-      toast.success(editingCategory ? 'Category updated successfully!' : 'Category created successfully!');
+    onSuccess: async () => {
+      // Invalidate ALL category queries (both ['categories'] and ['categories', 'course'])
+      await queryClient.invalidateQueries({ queryKey: ['categories'] });
+      await queryClient.invalidateQueries({ queryKey: ['categories', 'course'] });
+      // Refetch all category queries to ensure immediate update
+      await queryClient.refetchQueries({ queryKey: ['categories'] });
+      await queryClient.refetchQueries({ queryKey: ['categories', 'course'] });
+      toast.success(editingCategory ? 'Category updated successfully! All forms will refresh automatically.' : 'Category created successfully! All forms will refresh automatically.');
       setShowForm(false);
       setEditingCategory(null);
       resetForm();
@@ -50,9 +62,14 @@ const Categories = () => {
   // Delete category mutation
   const deleteMutation = useMutation({
     mutationFn: async (id) => api.delete(`/categories/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['categories'] });
-      toast.success('Category deleted successfully!');
+    onSuccess: async () => {
+      // Invalidate ALL category queries (both ['categories'] and ['categories', 'course'])
+      await queryClient.invalidateQueries({ queryKey: ['categories'] });
+      await queryClient.invalidateQueries({ queryKey: ['categories', 'course'] });
+      // Refetch all category queries to ensure immediate update
+      await queryClient.refetchQueries({ queryKey: ['categories'] });
+      await queryClient.refetchQueries({ queryKey: ['categories', 'course'] });
+      toast.success('Category deleted successfully! All forms will refresh automatically.');
     },
     onError: () => {
       toast.error('Failed to delete category');

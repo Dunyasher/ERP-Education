@@ -655,8 +655,10 @@ const Settings = () => {
                       </label>
                       <input
                         type="tel"
+                        name="phone"
                         value={profileForm.phone}
                         onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                        autoComplete="tel"
                         className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
                       />
                     </div>
@@ -666,8 +668,10 @@ const Settings = () => {
                       </label>
                       <input
                         type="text"
+                        name="firstName"
                         value={profileForm.firstName}
                         onChange={(e) => setProfileForm({ ...profileForm, firstName: e.target.value })}
+                        autoComplete="given-name"
                         className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
                       />
                     </div>
@@ -677,8 +681,10 @@ const Settings = () => {
                       </label>
                       <input
                         type="text"
+                        name="lastName"
                         value={profileForm.lastName}
                         onChange={(e) => setProfileForm({ ...profileForm, lastName: e.target.value })}
+                        autoComplete="family-name"
                         className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
                       />
                     </div>

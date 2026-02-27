@@ -10,8 +10,25 @@ const { authenticate, authorize } = require('../middleware/auth');
 // @access  Private
 router.get('/', authenticate, async (req, res) => {
   try {
-    const { instituteType, status, includeInactive } = req.query;
+    const { instituteType, status, includeInactive, collegeId } = req.query;
     const query = {};
+    
+    // Apply collegeId filter from authenticated user if available
+    // For super_admin, don't filter by collegeId to show all teachers
+    const userRole = req.user?.role;
+    if (userRole === 'super_admin') {
+      // Super admin can see all teachers
+      console.log('👑 Super admin access - showing all teachers from all colleges');
+    } else if (req.user && req.user.collegeId) {
+      query.collegeId = req.user.collegeId;
+      console.log(`🔒 Filtering teachers by authenticated user's collegeId: ${req.user.collegeId}`);
+    } else if (collegeId) {
+      // Allow collegeId as query param if no user collegeId (e.g., for public access)
+      query.collegeId = collegeId;
+      console.log(`🌐 Filtering teachers by query param collegeId: ${collegeId}`);
+    } else {
+      console.log('⚠️ No collegeId filter applied. Returning teachers from all colleges (if allowed by auth).');
+    }
     
     if (instituteType) query['employment.instituteType'] = instituteType;
     
@@ -22,6 +39,8 @@ router.get('/', authenticate, async (req, res) => {
       // Default: only show active teachers
       query['employment.status'] = { $ne: 'inactive' };
     }
+    
+    console.log('📋 Teacher query:', JSON.stringify(query, null, 2));
     
     const teachers = await Teacher.find(query)
       .populate('userId', 'email profile uniqueId')
@@ -35,6 +54,13 @@ router.get('/', authenticate, async (req, res) => {
         }
       })
       .sort({ createdAt: -1 });
+    
+    console.log(`✅ Fetched ${teachers.length} teachers`);
+    if (teachers.length > 0) {
+      console.log('📋 Teacher names:', teachers.map(t => t.personalInfo?.fullName || 'N/A'));
+      console.log('📋 Teacher IDs:', teachers.map(t => t._id));
+      console.log('📋 Teacher collegeIds:', teachers.map(t => t.collegeId?.toString() || 'N/A'));
+    }
     
     res.json(teachers);
   } catch (error) {

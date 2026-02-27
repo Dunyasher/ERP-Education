@@ -51,10 +51,10 @@ router.post('/structures', authenticate, authorize('admin', 'super_admin'), asyn
 // @route   GET /api/fees/invoices
 // @desc    Get all invoices
 // @access  Private
-router.get('/invoices', authenticate, async (req, res) => {
+router.get('/invoices', authenticate, addCollegeFilter, async (req, res) => {
   try {
     const { studentId, status } = req.query;
-    const query = {};
+    const query = buildCollegeQuery(req);
     
     if (studentId) query.studentId = studentId;
     if (status) query.status = status;
@@ -65,16 +65,32 @@ router.get('/invoices', authenticate, async (req, res) => {
         select: 'srNo personalInfo parentInfo academicInfo',
         populate: {
           path: 'academicInfo.courseId',
-          select: 'name'
-        }
+          select: 'name',
+          strictPopulate: false // Don't throw error if courseId is invalid
+        },
+        strictPopulate: false // Don't throw error if studentId is invalid
       })
-      .populate('feeStructureId')
-      .sort({ createdAt: -1 });
+      .populate({
+        path: 'feeStructureId',
+        strictPopulate: false // Don't throw error if feeStructureId is invalid
+      })
+      .sort({ createdAt: -1 })
+      .lean(); // Use lean() for better performance
     
-    res.json(invoices);
+    // Ensure we always return an array
+    res.json(Array.isArray(invoices) ? invoices : []);
   } catch (error) {
-    console.error('Get invoices error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('❌ Get invoices error:', error);
+    console.error('   Error name:', error.name);
+    console.error('   Error message:', error.message);
+    console.error('   Error stack:', error.stack);
+    
+    // Return empty array on error to prevent frontend crashes
+    res.status(500).json({ 
+      message: 'Server error while fetching invoices',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error',
+      invoices: [] // Provide empty array as fallback
+    });
   }
 });
 

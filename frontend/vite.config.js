@@ -11,7 +11,7 @@ export default defineConfig({
     force: true, // Force re-optimization
   },
   server: {
-    port: 3000,
+    port: 5173,
     host: '0.0.0.0',
     strictPort: false,
     proxy: {
@@ -24,6 +24,8 @@ export default defineConfig({
         configure: (proxy, _options) => {
           proxy.on('error', (err, _req, _res) => {
             console.error('❌ Proxy error:', err.message);
+            console.error('❌ Backend server may not be running on http://localhost:5000');
+            console.error('❌ Please start the backend: npm run start:backend');
           });
           proxy.on('proxyReq', (proxyReq, req, _res) => {
             // Log only in development for cleaner output

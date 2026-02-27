@@ -24,13 +24,21 @@ const PrintStaffCards = () => {
   const [qrCodes, setQrCodes] = useState({});
 
   // Fetch teachers/staff
-  const { data: teachers = [], isLoading } = useQuery({
+  const { data: teachersData = [], isLoading } = useQuery({
     queryKey: ['teachers'],
     queryFn: async () => {
-      const response = await api.get('/teachers');
-      return response.data;
+      try {
+        const response = await api.get('/teachers');
+        return Array.isArray(response.data) ? response.data : [];
+      } catch (error) {
+        console.error('Error fetching teachers:', error);
+        return [];
+      }
     }
   });
+
+  // Ensure teachers is always an array
+  const teachers = Array.isArray(teachersData) ? teachersData : [];
 
   // Get unique departments
   const campuses = ['Main Campus', 'Branch Campus', 'Online Campus'];

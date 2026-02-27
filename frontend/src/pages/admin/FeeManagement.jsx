@@ -51,18 +51,22 @@ const FeeManagement = () => {
     }
   });
 
-  // Fetch courses
+  // Fetch courses - automatically updates when courses are added/updated
   const { data: coursesData } = useQuery({
     queryKey: ['courses'],
     queryFn: async () => {
       try {
         const response = await api.get('/courses');
-        return response.data;
+        return Array.isArray(response.data) ? response.data : [];
       } catch (error) {
         console.error('Error fetching courses:', error);
         return [];
       }
-    }
+    },
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    staleTime: 0, // Always consider data stale to ensure fresh data
+    cacheTime: 0 // Don't cache to ensure immediate updates
   });
 
   useEffect(() => {

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAppDispatch } from '../store/hooks';
 import { login } from '../store/slices/authSlice';
 import { GraduationCap } from 'lucide-react';
@@ -8,18 +9,55 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const dispatch = useAppDispatch();
+  const navigate = useNavigate();
+  const timeoutRef = useRef(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    
+    // Clear any existing timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    
+    // Safety timeout: clear loading after 25 seconds max (axios timeout is 20s)
+    timeoutRef.current = setTimeout(() => {
+      setLoading(false);
+    }, 25000);
+    
     try {
-      await dispatch(login({ email, password })).unwrap();
+      const result = await dispatch(login({ email, password })).unwrap();
+      
+      // Clear timeout on success
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      
+      // Navigate using React Router instead of window.location
+      if (result?.user?.role) {
+        navigate(`/${result.user.role}/dashboard`, { replace: true });
+      } else {
+        navigate('/login', { replace: true });
+      }
     } catch (error) {
       // Error handled in authSlice
-    } finally {
+      // Clear timeout on error
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
       setLoading(false);
     }
   };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-500 to-primary-700 px-4">
@@ -44,9 +82,11 @@ const Login = () => {
               </label>
               <input
                 id="email"
+                name="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
                 required
                 className="input-field"
                 placeholder="admin@example.com"
@@ -59,9 +99,11 @@ const Login = () => {
               </label>
               <input
                 id="password"
+                name="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
                 required
                 className="input-field"
                 placeholder="••••••••"

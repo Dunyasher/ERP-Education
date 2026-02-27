@@ -39,13 +39,22 @@ const AccountantAdmissionForm = ({ onClose, onSuccess, editingStudent = null, sh
     { value: 'short_course', label: 'Institute / Short Course' }
   ];
 
-  // Fetch courses
+  // Fetch courses - automatically updates when courses are added/updated
   const { data: courses = [], isLoading: coursesLoading } = useQuery({
     queryKey: ['courses'],
     queryFn: async () => {
-      const response = await api.get('/courses');
-      return response.data;
-    }
+      try {
+        const response = await api.get('/courses');
+        return Array.isArray(response.data) ? response.data : [];
+      } catch (error) {
+        console.error('Error fetching courses:', error);
+        return [];
+      }
+    },
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    staleTime: 0, // Always consider data stale to ensure fresh data
+    cacheTime: 0 // Don't cache to ensure immediate updates
   });
 
   // Filter courses based on selected institute type and sort them
@@ -532,6 +541,7 @@ const AccountantAdmissionForm = ({ onClose, onSuccess, editingStudent = null, sh
                         name="contact"
                         value={formData.contact}
                         onChange={handleInputChange}
+                        autoComplete="tel"
                         required
                         className="w-full border-2 border-gray-300 rounded-lg px-2 xs:px-3 py-1.5 xs:py-2.5 text-gray-900 text-sm xs:text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all form-input"
                         placeholder="0333-1234567"
@@ -548,6 +558,7 @@ const AccountantAdmissionForm = ({ onClose, onSuccess, editingStudent = null, sh
                         name="address"
                         value={formData.address}
                         onChange={handleInputChange}
+                        autoComplete="street-address"
                         required
                         rows="2"
                         className="w-full border-2 border-gray-300 rounded-lg px-2 xs:px-3 py-1.5 xs:py-2.5 text-gray-900 text-sm xs:text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all resize-none form-input"

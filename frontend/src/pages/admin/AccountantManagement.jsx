@@ -295,7 +295,7 @@ const AccountantManagement = () => {
 
   return (
     <div className="space-y-6">
-      {/* Breadcrumb and Add Button */}
+      {/* Breadcrumb */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
           <Link to="/admin/dashboard" className="hover:text-blue-600 dark:hover:text-blue-400">
@@ -304,13 +304,6 @@ const AccountantManagement = () => {
           <span>/</span>
           <span className="text-gray-900 dark:text-white font-medium">Accountant Management</span>
         </div>
-        <Link
-          to="/admin/teachers"
-          className="btn-primary flex items-center gap-2 bg-green-600 hover:bg-green-700"
-        >
-          <Plus className="w-5 h-5" />
-          Add Accountant
-        </Link>
       </div>
 
       {/* Section Title */}
