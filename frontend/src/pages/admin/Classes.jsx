@@ -296,7 +296,7 @@ const Classes = () => {
     }
   });
 
-  // Assign instructor mutation
+  // Assign instructor mutatio
   const assignInstructorMutation = useMutation({
     mutationFn: async ({ classId, instructorId }) => {
       return api.put(`/classes/${classId}/instructor`, { instructorId });
