@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
+import InstituteTypeSelect from '../../components/InstituteTypeSelect';
 import { 
   BookOpen, 
   Users, 
@@ -132,13 +133,15 @@ const Classes = () => {
   }, [newClassForm.instituteType, teachers, newClassForm.categoryId, filteredTeachers, allCategories]);
 
   // Fetch all classes
-  const { data: classesData = [], isLoading, error: classesError } = useQuery({
+  const { data: classesData = [], isLoading, error: classesError, refetch: refetchClasses } = useQuery({
     queryKey: ['classes'],
     queryFn: async () => {
       try {
         const response = await api.get('/classes');
+        console.log('📋 Classes API Response:', response.data);
         // Ensure we always return an array
         const classesArray = Array.isArray(response.data) ? response.data : [];
+        console.log('📋 Processed Classes Count:', classesArray.length);
         // Sort alphabetically A-Z by name
         return classesArray.sort((a, b) => {
           const nameA = (a.name || '').toLowerCase().trim();
@@ -146,11 +149,15 @@ const Classes = () => {
           return nameA.localeCompare(nameB);
         });
       } catch (error) {
-        console.error('Error fetching classes:', error);
+        console.error('❌ Error fetching classes:', error);
         toast.error('Failed to load classes. Please try again.');
         return []; // Return empty array on error
       }
     },
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
+    staleTime: 0,
+    cacheTime: 0,
     refetchOnWindowFocus: false,
     staleTime: 30000 // Cache for 30 seconds
   });
@@ -341,12 +348,22 @@ const Classes = () => {
         return api.post('/categories', data);
       }
     },
-    onSuccess: async () => {
+    onSuccess: async (response) => {
       await queryClient.invalidateQueries({ queryKey: ['categories'] });
       await queryClient.invalidateQueries({ queryKey: ['categories', 'course'] });
       await queryClient.refetchQueries({ queryKey: ['categories'] });
       await queryClient.refetchQueries({ queryKey: ['categories', 'course'] });
-      toast.success(editingCategory ? 'Category updated successfully!' : 'Category created successfully!');
+      
+      const newCategory = response.data?.data || response.data;
+      
+      // If creating a new category and class form is open with matching institute type, auto-select it
+      if (!editingCategory && newCategory && newCategory._id && showCreateClassForm && newClassForm.instituteType === categoryFormData.instituteType) {
+        setNewClassForm(prev => ({ ...prev, categoryId: newCategory._id }));
+        toast.success('Category created and automatically selected! You can now create your class.');
+      } else {
+        toast.success(editingCategory ? 'Category updated successfully!' : 'Category created successfully!');
+      }
+      
       setShowCategoryForm(false);
       setEditingCategory(null);
       setSelectedCategoryId('');
@@ -474,7 +491,7 @@ const Classes = () => {
       const courseData = {
         name: data.name,
         instituteType: data.instituteType,
-        categoryId: data.categoryId || null,
+        categoryId: data.categoryId || undefined,
         instructorId: data.instructorId || null,
         capacity: data.capacity || 50,
         status: data.status || 'published',
@@ -485,12 +502,25 @@ const Classes = () => {
         schedules: []
       };
 
+      console.log('📤 Creating class with data:', courseData);
       const response = await api.post('/courses', courseData);
+      console.log('📥 Class creation response status:', response.status);
+      console.log('📥 Class creation response data:', response.data);
+      
+      // Explicitly check for error status codes
+      if (response.status >= 400) {
+        const error = new Error(response.data?.message || 'Failed to create class');
+        error.response = response;
+        throw error;
+      }
+      
       return response.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['classes'] });
-      queryClient.invalidateQueries({ queryKey: ['courses'] });
+    onSuccess: async (response) => {
+      console.log('✅ Class created successfully:', response);
+      console.log('📋 Created class data:', response);
+      
+      // Close the form first
       setShowCreateClassForm(false);
       setNewClassForm({
         name: '',
@@ -502,12 +532,57 @@ const Classes = () => {
         feeAmount: 0,
         status: 'published'
       });
+      
+      // Invalidate and refetch queries
+      await queryClient.invalidateQueries({ queryKey: ['classes'] });
+      await queryClient.invalidateQueries({ queryKey: ['courses'] });
+      
+      // Force immediate refetch with a small delay to ensure backend has processed
+      setTimeout(async () => {
+        try {
+          await queryClient.refetchQueries({ queryKey: ['classes'] });
+          console.log('✅ Classes refetched after creation');
+          
+          // Also try to refetch using the direct refetch function if available
+          if (refetchClasses) {
+            await refetchClasses();
+          }
+        } catch (refetchError) {
+          console.error('❌ Error refetching classes:', refetchError);
+        }
+      }, 500);
+      
       toast.success('Class created successfully!');
     },
     onError: (error) => {
-      const errorMessage = error.response?.data?.message || error.response?.data?.error || 'Failed to create class';
-      toast.error(errorMessage);
-      console.error('Create class error:', error);
+      console.error('❌ Create class error:', error);
+      console.error('❌ Error response:', error.response?.data);
+      console.error('❌ Error status:', error.response?.status);
+      
+      // Log the full error details including the errors array
+      if (error.response?.data?.errors && Array.isArray(error.response.data.errors)) {
+        console.error('❌ Validation errors:', error.response.data.errors);
+        error.response.data.errors.forEach((err, index) => {
+          console.error(`   Error ${index + 1}:`, err);
+        });
+      }
+      
+      let errorMessage = 'Failed to create class';
+      if (error.response?.data) {
+        if (error.response.data.errors && Array.isArray(error.response.data.errors) && error.response.data.errors.length > 0) {
+          // Show the first validation error in detail
+          const firstError = error.response.data.errors[0];
+          errorMessage = typeof firstError === 'string' ? firstError : firstError.message || 'Validation error';
+        } else if (error.response.data.message) {
+          errorMessage = error.response.data.message;
+        } else if (typeof error.response.data === 'string') {
+          errorMessage = error.response.data;
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      toast.error(errorMessage, { duration: 5000 });
     }
   });
 
@@ -537,10 +612,6 @@ const Classes = () => {
     }
     if (!newClassForm.instituteType) {
       toast.error('Please select an institute type');
-      return;
-    }
-    if (!newClassForm.categoryId) {
-      toast.error('Please select a category');
       return;
     }
     if (false) {
@@ -1084,8 +1155,6 @@ const Classes = () => {
             onClick={() => {
               setShowCategoryForm(true);
               setEditingCategory(null);
-              setSelectedCategoryId('');
-              setCategoryFilterType('');
               setCategoryFormData({
                 name: '',
                 instituteType: 'college',
@@ -1097,13 +1166,6 @@ const Classes = () => {
           >
             <FolderTree className="w-5 h-5" />
             Category
-          </button>
-          <button
-            onClick={() => navigate('/admin/categories')}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors duration-200 shadow-lg hover:shadow-xl"
-          >
-            <Settings className="w-5 h-5" />
-            Manage Category
           </button>
           <button
             onClick={() => setShowCreateClassForm(true)}
@@ -1246,64 +1308,62 @@ const Classes = () => {
           <div className="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full my-8 p-6">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
-                Create New Class
+                Add New Class
               </h3>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={fillSampleData}
-                  type="button"
-                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors duration-200"
-                  title="Fill form with sample data"
-                >
-                  <FileText className="w-4 h-4" />
-                  Fill Sample
-                </button>
-                <button
-                  onClick={() => {
-                    setShowCreateClassForm(false);
-                    setNewClassForm({
-                      name: '',
-                      instituteType: '',
-                      categoryId: '',
-                      instructorId: '',
-                      room: '',
-                      capacity: 50,
-                      feeAmount: 0,
-                      status: 'published'
-                    });
-                  }}
-                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
+              <button
+                onClick={() => {
+                  setShowCreateClassForm(false);
+                  setNewClassForm({
+                    name: '',
+                    instituteType: '',
+                    categoryId: '',
+                    instructorId: '',
+                    room: '',
+                    capacity: 50,
+                    feeAmount: 0,
+                    status: 'published'
+                  });
+                }}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <X className="w-6 h-6" />
+              </button>
             </div>
             <form onSubmit={handleCreateClassSubmit} className="space-y-6">
+              {/* Class Name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Class Name *
+                </label>
+                <input
+                  type="text"
+                  value={newClassForm.name}
+                  onChange={(e) => setNewClassForm({ ...newClassForm, name: e.target.value })}
+                  required
+                  placeholder="e.g., Class 7, Class 8, First Year, Book 1"
+                  className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+                />
+              </div>
+
               {/* Institute Type */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Institute Type *
                 </label>
-                <select
+                <InstituteTypeSelect
                   value={newClassForm.instituteType}
-                  onChange={(e) => {
+                  onChange={(value) => {
                     setNewClassForm({ 
                       ...newClassForm, 
-                      instituteType: e.target.value,
-                      categoryId: '' // Reset category when institute type changes
+                      instituteType: value
                     });
                   }}
                   required
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
-                >
-                  <option value="">Select an institute type</option>
-                  <option value="school">School</option>
-                  <option value="college">College</option>
-                  <option value="academy">Academy</option>
-                  <option value="short_course">Short Course</option>
-                </select>
+                  className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+                  placeholder="Select Institute Type"
+                />
                 {newClassForm.instituteType && (
-                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     {newClassForm.instituteType === 'school' && 'Categories: Class 1, Class 2, Class 3, etc.'}
                     {newClassForm.instituteType === 'college' && 'Categories: First Year, Second Year, Third Year, etc.'}
                     {newClassForm.instituteType === 'academy' && 'Categories: Book 1, Book 2, Book 3, etc.'}
@@ -1312,75 +1372,8 @@ const Classes = () => {
                 )}
               </div>
 
-              {/* Category Selection */}
-              {newClassForm.instituteType && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Category *
-                  </label>
-                  <div className="flex gap-2">
-                    <select
-                      value={newClassForm.categoryId}
-                      onChange={(e) => setNewClassForm({ ...newClassForm, categoryId: e.target.value })}
-                      required
-                      disabled={!newClassForm.instituteType || categoriesLoading}
-                      className="flex-1 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <option value="">
-                        {!newClassForm.instituteType 
-                          ? 'Select Institute Type first'
-                          : categoriesLoading
-                          ? 'Loading categories...'
-                          : filteredCategories.length === 0
-                          ? `No categories found for ${newClassForm.instituteType.replace('_', ' ')} - Click "Category" button to add`
-                          : 'Select a category'
-                        }
-                      </option>
-                      {filteredCategories.map((category) => (
-                        <option key={category._id} value={category._id}>
-                          {category.name}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => navigate('/admin/courses')}
-                      className="px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
-                      title="Manage Categories"
-                    >
-                      <FileText className="w-4 h-4" />
-                    </button>
-                  </div>
-                  {filteredCategories.length === 0 && newClassForm.instituteType && !categoriesLoading && (
-                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                      No categories available. Click the folder icon to manage categories.
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {/* Class Name */}
-              {newClassForm.categoryId && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Class/Subject Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={newClassForm.name}
-                    onChange={(e) => setNewClassForm({ ...newClassForm, name: e.target.value })}
-                    required
-                    placeholder="e.g., Class 6, Class 7, Book 1, DIT, English Language"
-                    className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
-                  />
-                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                    Enter the class or subject name (e.g., Class 6, Class 7, Book 1, etc.)
-                  </p>
-                </div>
-              )}
-
               {/* Teacher (Optional) */}
-              {newClassForm.categoryId && (
+              {newClassForm.instituteType && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Teacher (Optional)
@@ -1454,6 +1447,138 @@ const Classes = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Category Form Modal */}
+      {showCategoryForm && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowCategoryForm(false);
+              setEditingCategory(null);
+              setCategoryFormData({
+                name: '',
+                instituteType: 'college',
+                categoryType: 'course',
+                description: ''
+              });
+            }
+          }}
+        >
+          <div 
+            className="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full shadow-xl max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 overflow-y-auto flex-1">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  {editingCategory ? 'Edit Category' : 'Add New Category'}
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowCategoryForm(false);
+                    setEditingCategory(null);
+                    setCategoryFormData({
+                      name: '',
+                      instituteType: 'college',
+                      categoryType: 'course',
+                      description: ''
+                    });
+                  }}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <form onSubmit={handleCategorySubmit} className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Category Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={categoryFormData.name}
+                    onChange={(e) => setCategoryFormData({ ...categoryFormData, name: e.target.value })}
+                    className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+                    placeholder={
+                      categoryFormData.instituteType === 'school' 
+                        ? 'e.g., 7th, 8th, 9th, 10th' 
+                        : categoryFormData.instituteType === 'college'
+                        ? 'e.g., First Year, Second Year, Third Year'
+                        : categoryFormData.instituteType === 'academy'
+                        ? 'e.g., Book 1, Book 2, Book 3'
+                        : 'e.g., Web Development, Graphic Design'
+                    }
+                  />
+                  {categoryFormData.instituteType && (
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      {categoryFormData.instituteType === 'school' && 'Examples: 7th, 8th, 9th, 10th, etc.'}
+                      {categoryFormData.instituteType === 'college' && 'Examples: First Year, Second Year, Third Year, Fourth Year, etc.'}
+                      {categoryFormData.instituteType === 'academy' && 'Examples: Book 1, Book 2, Book 3, Book 4, etc.'}
+                      {categoryFormData.instituteType === 'short_course' && 'Examples: Web Development, Graphic Design, etc.'}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Institute Type *
+                  </label>
+                  <InstituteTypeSelect
+                    value={categoryFormData.instituteType}
+                    onChange={(value) => setCategoryFormData({ ...categoryFormData, instituteType: value })}
+                    required
+                    className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+                    placeholder="Select Institute Type"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Description
+                  </label>
+                  <textarea
+                    value={categoryFormData.description}
+                    onChange={(e) => setCategoryFormData({ ...categoryFormData, description: e.target.value })}
+                    className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+                    rows="3"
+                    placeholder="Category description (optional)..."
+                  />
+                </div>
+
+                <div className="flex justify-end gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCategoryForm(false);
+                      setEditingCategory(null);
+                      setCategoryFormData({
+                        name: '',
+                        instituteType: 'college',
+                        categoryType: 'course',
+                        description: ''
+                      });
+                    }}
+                    className="px-6 py-2.5 border-2 border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-semibold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={categoryMutation.isLoading}
+                    className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold flex items-center gap-2 disabled:opacity-50"
+                  >
+                    <Plus className="w-5 h-5" />
+                    {categoryMutation.isLoading ? 'Adding...' : editingCategory ? 'Update' : 'Add'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}

@@ -54,8 +54,9 @@ const api = axios.create({
     if (config?.url?.includes('/auth/me') && status === 401) {
       return true; // Don't throw error for 401 on auth check
     }
-    // Don't throw error for 4xx/5xx status codes
-    return status >= 200 && status < 600;
+    // Only treat 2xx status codes as success
+    // This ensures 4xx/5xx errors properly trigger onError handlers
+    return status >= 200 && status < 300;
   }
 });
 

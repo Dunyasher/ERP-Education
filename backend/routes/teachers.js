@@ -10,7 +10,7 @@ const { authenticate, authorize } = require('../middleware/auth');
 // @access  Private
 router.get('/', authenticate, async (req, res) => {
   try {
-    const { instituteType, status, includeInactive, collegeId } = req.query;
+    const { instituteType, status, includeInactive } = req.query;
     const query = {};
     
     // Apply collegeId filter from authenticated user if available
@@ -20,14 +20,18 @@ router.get('/', authenticate, async (req, res) => {
       // Super admin can see all teachers
       console.log('👑 Super admin access - showing all teachers from all colleges');
     } else if (req.user && req.user.collegeId) {
-      query.collegeId = req.user.collegeId;
-      console.log(`🔒 Filtering teachers by authenticated user's collegeId: ${req.user.collegeId}`);
-    } else if (collegeId) {
-      // Allow collegeId as query param if no user collegeId (e.g., for public access)
-      query.collegeId = collegeId;
-      console.log(`🌐 Filtering teachers by query param collegeId: ${collegeId}`);
-    } else {
-      console.log('⚠️ No collegeId filter applied. Returning teachers from all colleges (if allowed by auth).');
+      // Handle both populated object and ObjectId
+      const userCollegeId = req.user.collegeId._id || req.user.collegeId || req.collegeId;
+      if (userCollegeId) {
+        // Ensure it's a valid ObjectId for query
+        const mongoose = require('mongoose');
+        if (mongoose.Types.ObjectId.isValid(userCollegeId)) {
+          query.collegeId = new mongoose.Types.ObjectId(userCollegeId);
+          console.log(`🔒 Filtering teachers by authenticated user's collegeId: ${query.collegeId.toString()}`);
+        } else {
+          console.error('❌ Invalid collegeId format:', userCollegeId);
+        }
+      }
     }
     
     if (instituteType) query['employment.instituteType'] = instituteType;
@@ -42,6 +46,13 @@ router.get('/', authenticate, async (req, res) => {
     
     console.log('📋 Teacher query:', JSON.stringify(query, null, 2));
     
+    // Debug: Check all teachers in database (without filter) to see what collegeIds exist
+    const allTeachers = await Teacher.find({}).select('collegeId personalInfo.fullName').limit(5);
+    console.log('🔍 Sample teachers in DB (first 5):');
+    allTeachers.forEach(t => {
+      console.log(`  - Name: ${t.personalInfo?.fullName || 'N/A'}, collegeId: ${t.collegeId?.toString() || 'N/A'}, type: ${typeof t.collegeId}`);
+    });
+    
     const teachers = await Teacher.find(query)
       .populate('userId', 'email profile uniqueId')
       .populate('staffCategoryId', 'name description')
@@ -55,17 +66,33 @@ router.get('/', authenticate, async (req, res) => {
       })
       .sort({ createdAt: -1 });
     
-    console.log(`✅ Fetched ${teachers.length} teachers`);
+    console.log(`✅ Fetched ${teachers.length} teachers with query`);
     if (teachers.length > 0) {
       console.log('📋 Teacher names:', teachers.map(t => t.personalInfo?.fullName || 'N/A'));
-      console.log('📋 Teacher IDs:', teachers.map(t => t._id));
       console.log('📋 Teacher collegeIds:', teachers.map(t => t.collegeId?.toString() || 'N/A'));
+    } else {
+      console.log('⚠️ No teachers found with query:', JSON.stringify(query, null, 2));
+      const userCollegeId = req.user?.collegeId?._id || req.user?.collegeId || req.collegeId;
+      console.log('📋 User collegeId for query:', userCollegeId);
+      console.log('📋 User collegeId type:', typeof userCollegeId);
+      console.log('📋 User collegeId string:', String(userCollegeId));
+      
+      // Try to find teachers without collegeId filter to see if any exist
+      const teachersWithoutFilter = await Teacher.find({ 'employment.status': { $ne: 'inactive' } }).limit(3);
+      console.log('🔍 Teachers without collegeId filter (first 3):', teachersWithoutFilter.length);
+      teachersWithoutFilter.forEach(t => {
+        console.log(`  - Name: ${t.personalInfo?.fullName || 'N/A'}, collegeId: ${t.collegeId?.toString() || 'N/A'}`);
+      });
     }
     
     res.json(teachers);
   } catch (error) {
     console.error('Get teachers error:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
   }
 });
 
@@ -102,28 +129,44 @@ router.post('/', authenticate, authorize('admin', 'super_admin'), async (req, re
   }, 25000); // 25 second timeout
 
   try {
+    console.log('📥 POST /api/teachers - Request received');
+    console.log('📥 Request body keys:', Object.keys(req.body || {}));
+    console.log('📥 User info:', { email: req.user?.email, role: req.user?.role, collegeId: req.user?.collegeId });
+    
     // Validate request body exists
     if (!req.body) {
       clearTimeout(timeout);
+      console.error('❌ No request body provided');
       return res.status(400).json({ message: 'Request body is required' });
     }
 
     const { email, password, personalInfo, contactInfo, qualification, employment, salary, staffCategoryId } = req.body;
     
+    console.log('📥 Extracted data:', {
+      email: email ? 'provided' : 'missing',
+      personalInfo: personalInfo ? 'provided' : 'missing',
+      contactInfo: contactInfo ? 'provided' : 'missing',
+      employment: employment ? 'provided' : 'missing'
+    });
+    
     // Validate required fields
     if (!email || !email.trim()) {
+      console.error('❌ Email is missing or empty');
       return res.status(400).json({ message: 'Email is required' });
     }
     
     if (!personalInfo || !personalInfo.fullName || !personalInfo.fullName.trim()) {
+      console.error('❌ Full name is missing or empty');
       return res.status(400).json({ message: 'Teacher full name is required' });
     }
     
     if (!contactInfo || !contactInfo.phone || !contactInfo.phone.trim()) {
+      console.error('❌ Phone number is missing or empty');
       return res.status(400).json({ message: 'Phone number is required' });
     }
     
     if (!employment || !employment.instituteType) {
+      console.error('❌ Institute type is missing');
       return res.status(400).json({ message: 'Institute type is required' });
     }
     
@@ -159,10 +202,38 @@ router.post('/', authenticate, authorize('admin', 'super_admin'), async (req, re
     // Create user account
     let user;
     try {
+      // Validate password if provided, otherwise use default
+      const userPassword = password && password.trim() ? password.trim() : 'password123';
+      if (password && password.trim() && password.trim().length < 6) {
+        clearTimeout(timeout);
+        return res.status(400).json({ message: 'Password must be at least 6 characters long' });
+      }
+      
+      // Get collegeId before creating user (required for non-super_admin)
+      const userCollegeId = req.user?.collegeId?._id || req.user?.collegeId || req.collegeId;
+      if (!userCollegeId) {
+        clearTimeout(timeout);
+        console.error('❌ No collegeId found for creating user');
+        return res.status(400).json({ message: 'College ID is required. Please ensure you are logged in.' });
+      }
+      
+      // Ensure collegeId is a valid ObjectId
+      const mongoose = require('mongoose');
+      let finalUserCollegeId = userCollegeId;
+      if (mongoose.Types.ObjectId.isValid(userCollegeId)) {
+        finalUserCollegeId = new mongoose.Types.ObjectId(userCollegeId);
+      } else {
+        clearTimeout(timeout);
+        return res.status(400).json({ message: 'Invalid College ID format' });
+      }
+      
+      console.log('📋 Creating user with email:', email.toLowerCase().trim());
+      console.log('📋 User collegeId:', finalUserCollegeId.toString());
       user = await User.create({
         email: email.toLowerCase().trim(),
-        password: password || 'password123',
+        password: userPassword,
         role: 'teacher',
+        collegeId: finalUserCollegeId, // Required for teacher role
         profile: {
           firstName: personalInfo.fullName.split(' ')[0] || personalInfo.fullName,
           lastName: personalInfo.fullName.split(' ').slice(1).join(' ') || '',
@@ -184,9 +255,15 @@ router.post('/', authenticate, authorize('admin', 'super_admin'), async (req, re
       if (userError.name === 'ValidationError') {
         clearTimeout(timeout);
         const errors = Object.values(userError.errors).map(err => err.message);
+        console.error('❌ User validation errors:', errors);
+        console.error('❌ User validation error details:', userError.errors);
         return res.status(400).json({ 
           message: 'User validation failed', 
-          errors: errors 
+          errors: errors,
+          details: Object.keys(userError.errors).map(key => ({
+            field: key,
+            message: userError.errors[key].message
+          }))
         });
       }
       throw userError;
@@ -194,15 +271,32 @@ router.post('/', authenticate, authorize('admin', 'super_admin'), async (req, re
     
     // Prepare teacher data - clean and validate
     // Set collegeId from authenticated user
-    const collegeId = req.user?.collegeId;
+    // Handle both populated object and ObjectId (must match GET route logic)
+    const collegeId = req.user?.collegeId?._id || req.user?.collegeId || req.collegeId;
     if (!collegeId) {
       clearTimeout(timeout);
+      console.error('❌ No collegeId found for user:', req.user?.email);
+      console.error('❌ User collegeId:', req.user?.collegeId);
+      console.error('❌ Req collegeId:', req.collegeId);
       return res.status(400).json({ message: 'College ID is required. Please ensure you are logged in.' });
+    }
+    
+    // Ensure collegeId is a valid ObjectId (must match GET route logic)
+    const mongoose = require('mongoose');
+    let finalCollegeId = collegeId;
+    if (mongoose.Types.ObjectId.isValid(collegeId)) {
+      finalCollegeId = new mongoose.Types.ObjectId(collegeId);
+      console.log('📋 Creating teacher with collegeId:', finalCollegeId.toString());
+      console.log('📋 User collegeId type:', typeof req.user?.collegeId);
+    } else {
+      console.error('❌ Invalid ObjectId format:', collegeId);
+      clearTimeout(timeout);
+      return res.status(400).json({ message: 'Invalid College ID format' });
     }
     
     const teacherData = {
       userId: user._id,
-      collegeId: collegeId,
+      collegeId: finalCollegeId,
       ...(staffCategoryId && mongoose.Types.ObjectId.isValid(staffCategoryId) && { staffCategoryId }),
       personalInfo: {
         fullName: personalInfo.fullName.trim(),

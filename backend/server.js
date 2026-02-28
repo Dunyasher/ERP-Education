@@ -144,6 +144,7 @@ app.use('/api/qrcode', require('./routes/qrcode'));
 app.use('/api/audit', require('./routes/audit'));
 app.use('/api/staff-requests', require('./routes/staffRequests'));
 app.use('/api/staff-categories', require('./routes/staffCategories'));
+app.use('/api/institute-types', require('./routes/instituteTypes'));
 app.use('/api/accountant', require('./routes/accountant'));
 console.log('✅ Accountant routes registered');
 console.log('   - POST /api/accountant/monthly-payments');

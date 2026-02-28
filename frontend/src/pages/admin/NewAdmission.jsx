@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../store/hooks';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
+import InstituteTypeSelect from '../../components/InstituteTypeSelect';
 import { 
   ArrowLeft, User, Phone, Mail, MapPin, Calendar, GraduationCap, 
   DollarSign, Save, FileText, School, Users, CreditCard 
@@ -386,12 +387,7 @@ const NewAdmission = () => {
     }
   };
 
-  const instituteTypes = [
-    { value: 'academy', label: 'Academy' },
-    { value: 'school', label: 'School' },
-    { value: 'college', label: 'College' },
-    { value: 'short_course', label: 'Institute / Short Course' }
-  ];
+  // Note: Institute types are now fetched dynamically via InstituteTypeSelect component
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-6">
@@ -446,7 +442,6 @@ const NewAdmission = () => {
                   name="fullName"
                   value={formData.fullName}
                   onChange={handleInputChange}
-                  autoComplete="name"
                   className={`input-field ${errors.fullName ? 'border-red-500' : ''}`}
                   placeholder="Enter full name"
                   required
@@ -499,7 +494,6 @@ const NewAdmission = () => {
                   name="email"
                   value={formData.email}
                   onChange={handleInputChange}
-                  autoComplete="email"
                   className={`input-field ${errors.email ? 'border-red-500' : ''}`}
                   placeholder="student@example.com"
                   required
@@ -530,7 +524,6 @@ const NewAdmission = () => {
                   name="phone"
                   value={formData.phone}
                   onChange={handleInputChange}
-                  autoComplete="tel"
                   className={`input-field ${errors.phone ? 'border-red-500' : ''}`}
                   placeholder="+92 300 1234567"
                   required
@@ -549,7 +542,6 @@ const NewAdmission = () => {
                   name="address.street"
                   value={formData.address.street}
                   onChange={handleInputChange}
-                  autoComplete="street-address"
                   className="input-field"
                   placeholder="House/Street number"
                 />
@@ -564,7 +556,6 @@ const NewAdmission = () => {
                   name="address.city"
                   value={formData.address.city}
                   onChange={handleInputChange}
-                  autoComplete="address-level2"
                   className="input-field"
                   placeholder="City"
                 />
@@ -579,7 +570,6 @@ const NewAdmission = () => {
                   name="address.state"
                   value={formData.address.state}
                   onChange={handleInputChange}
-                  autoComplete="address-level1"
                   className="input-field"
                   placeholder="State/Province"
                 />
@@ -648,7 +638,6 @@ const NewAdmission = () => {
                   name="fatherPhone"
                   value={formData.fatherPhone}
                   onChange={handleInputChange}
-                  autoComplete="tel"
                   className="input-field"
                   placeholder="+92 300 1234567"
                 />
@@ -670,19 +659,15 @@ const NewAdmission = () => {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Institute Type <span className="text-red-500">*</span>
                 </label>
-                <select
-                  name="instituteType"
+                <InstituteTypeSelect
                   value={formData.instituteType}
-                  onChange={handleInputChange}
-                  className="input-field"
+                  onChange={(value) => {
+                    setFormData(prev => ({ ...prev, instituteType: value, courseId: '' }));
+                  }}
                   required
-                >
-                  {instituteTypes.map(type => (
-                    <option key={type.value} value={type.value}>
-                      {type.label}
-                    </option>
-                  ))}
-                </select>
+                  className="input-field"
+                  placeholder="Select Institute Type"
+                />
               </div>
 
               <div>
@@ -707,9 +692,9 @@ const NewAdmission = () => {
                 {errors.courseId && (
                   <p className="mt-1 text-sm text-red-600">{errors.courseId}</p>
                 )}
-                {filteredCourses.length === 0 && !coursesLoading && (
+                {filteredCourses.length === 0 && !coursesLoading && formData.instituteType && (
                   <p className="mt-1 text-sm text-yellow-600">
-                    No courses available for {instituteTypes.find(t => t.value === formData.instituteType)?.label}
+                    No classes available for the selected institute type. Please create a class first.
                   </p>
                 )}
               </div>

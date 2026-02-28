@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
+import InstituteTypeSelect from '../../components/InstituteTypeSelect';
 import { 
   Plus, 
   Search, 
@@ -112,8 +113,15 @@ const StaffManagement = () => {
         return staffData;
       } catch (error) {
         console.error('❌ Error fetching staff:', error);
+        console.error('❌ Error status:', error.response?.status);
         console.error('❌ Error response:', error.response?.data);
-        toast.error('Failed to load staff members. Please refresh the page.');
+        console.error('❌ Error message:', error.message);
+        
+        // Only show toast for non-401 errors (401 is expected when not logged in)
+        if (error.response?.status !== 401) {
+          const errorMsg = error.response?.data?.message || error.message || 'Failed to load staff members';
+          toast.error(errorMsg);
+        }
         return [];
       }
     },
@@ -281,21 +289,217 @@ const StaffManagement = () => {
     });
   };
 
-  // Generate ID Card
+  // Generate ID Card - Automatically generate and print staff card
   const handleGenerateID = (member) => {
-    // Navigate to print staff cards page with selected staff
-    window.location.href = `/admin/print-staff-cards?staffId=${member._id}`;
+    try {
+      toast.loading('Generating staff ID card...', { id: 'generate-id' });
+      
+      // Create print window
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        toast.error('Please allow popups to print the ID card', { id: 'generate-id' });
+        return;
+      }
+      
+      // Load ID card settings from localStorage
+      let idCardSettings = null;
+      try {
+        const saved = localStorage.getItem('idCardSettings');
+        if (saved) {
+          idCardSettings = JSON.parse(saved);
+        }
+      } catch (error) {
+        console.error('Error loading ID card settings:', error);
+      }
+      
+      const photoHTML = member.personalInfo?.photo 
+        ? `<img src="${member.personalInfo.photo}" style="width:100%;height:100%;object-fit:cover;" />` 
+        : '<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:10px;color:#999;">PHOTO</div>';
+      
+      const staffId = member.userId?.uniqueId || member.srNo || member._id?.toString().slice(-8) || 'N/A';
+      const staffName = member.personalInfo?.fullName || 'N/A';
+      const staffEmail = member.userId?.email || member.contactInfo?.email || 'N/A';
+      const staffPhone = member.contactInfo?.phone || 'N/A';
+      const instituteType = member.employment?.instituteType || '';
+      const category = member.staffCategoryId?.name || '';
+      
+      // Check if imported design should be used
+      const useImportedDesign = idCardSettings?.useImportedDesign && idCardSettings?.importedDesign;
+      const importedDesign = idCardSettings?.importedDesign;
+      
+      // If using imported design, use it as the card background
+      const cardHTML = useImportedDesign ? `
+        <div class="id-card" style="background-image: url('${importedDesign}'); background-size: cover; background-position: center; position: relative;">
+          <div style="position: relative; z-index: 1; width: 100%; height: 100%;">
+            <!-- Your imported design will appear exactly as imported -->
+          </div>
+        </div>
+      ` : `
+        <div class="id-card">
+          <div class="id-card-header">
+            <h3>STAFF ID CARD</h3>
+          </div>
+          <div class="id-card-body">
+            <div class="id-card-photo">
+              ${photoHTML}
+            </div>
+            <div class="id-card-info">
+              <p><strong>Name:</strong> ${staffName.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+              <p><strong>ID:</strong> ${staffId.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+              <p><strong>Email:</strong> ${staffEmail.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+              <p><strong>Phone:</strong> ${staffPhone.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+              ${instituteType ? `<p><strong>Institute:</strong> ${instituteType.charAt(0).toUpperCase() + instituteType.slice(1).replace(/_/g, ' ').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>` : ''}
+              ${category ? `<p><strong>Category:</strong> ${category.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>` : ''}
+            </div>
+          </div>
+          <div class="id-card-qr">
+            <div style="font-size:7px;text-align:center;padding:2px;">ID: ${staffId}</div>
+          </div>
+          <div class="id-card-footer">
+            Valid for Academic Year ${new Date().getFullYear()}
+          </div>
+        </div>
+      `;
+      
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Staff ID Card - ${staffName}</title>
+            <style>
+              @page {
+                size: A4;
+                margin: 20mm;
+              }
+              body {
+                font-family: Arial, sans-serif;
+                margin: 0;
+                padding: 20px;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+                background: #f5f5f5;
+              }
+              .id-card {
+                width: 85mm;
+                height: 54mm;
+                border: 2px solid #000;
+                border-radius: 8px;
+                padding: 10px;
+                box-sizing: border-box;
+                background: white;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                position: relative;
+              }
+              .id-card[style*="background-image"] {
+                padding: 0;
+                border: none;
+                background-size: cover;
+                background-position: center;
+                background-repeat: no-repeat;
+              }
+              .id-card-header {
+                text-align: center;
+                border-bottom: 2px solid #000;
+                padding-bottom: 5px;
+                margin-bottom: 10px;
+              }
+              .id-card-header h3 {
+                margin: 0;
+                font-size: 14px;
+                font-weight: bold;
+                color: #1e40af;
+              }
+              .id-card-body {
+                display: flex;
+                gap: 10px;
+                margin-bottom: 5px;
+              }
+              .id-card-photo {
+                width: 50px;
+                height: 50px;
+                border: 1px solid #000;
+                background: #f0f0f0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 10px;
+                flex-shrink: 0;
+                overflow: hidden;
+              }
+              .id-card-info {
+                flex: 1;
+                font-size: 10px;
+                line-height: 1.4;
+              }
+              .id-card-info p {
+                margin: 2px 0;
+                word-break: break-word;
+              }
+              .id-card-qr {
+                width: 40px;
+                height: 40px;
+                border: 1px solid #000;
+                background: #f0f0f0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 7px;
+                margin: 5px auto 0;
+                text-align: center;
+              }
+              .id-card-footer {
+                text-align: center;
+                border-top: 1px solid #000;
+                margin-top: 5px;
+                padding-top: 5px;
+                font-size: 8px;
+                color: #666;
+              }
+              @media print {
+                body {
+                  margin: 0;
+                  padding: 0;
+                  background: white;
+                }
+                .id-card {
+                  box-shadow: none;
+                  margin: 0 auto;
+                }
+              }
+            </style>
+          </head>
+          <body>
+            ${cardHTML}
+            <script>
+              window.onload = function() {
+                setTimeout(function() {
+                  window.print();
+                }, 500);
+              };
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      
+      toast.success('Staff ID card generated! Print dialog will open shortly.', { id: 'generate-id' });
+    } catch (error) {
+      console.error('Error generating ID card:', error);
+      toast.error('Failed to generate ID card. Please try again.', { id: 'generate-id' });
+    }
   };
 
   // Export functions
   const exportToExcel = () => {
-    const headers = ['Emp. ID', 'Name', 'Email', 'Phone', 'Campus'];
+    const headers = ['Emp. ID', 'Name', 'Email', 'Phone', 'Institute Type'];
     const data = sortedStaff.map(member => [
       member.userId?.uniqueId || member.srNo || 'N/A',
       member.personalInfo?.fullName || 'N/A',
       member.userId?.email || 'N/A',
       member.contactInfo?.phone || 'N/A',
-      member.employment?.campus || 'Main Campus'
+      member.employment?.instituteType ? member.employment.instituteType.charAt(0).toUpperCase() + member.employment.instituteType.slice(1).replace(/_/g, ' ') : 'N/A'
     ]);
     
     const csvContent = [headers, ...data]
@@ -311,13 +515,13 @@ const StaffManagement = () => {
   };
 
   const exportToCSV = () => {
-    const headers = ['Emp. ID', 'Name', 'Email', 'Phone', 'Campus'];
+    const headers = ['Emp. ID', 'Name', 'Email', 'Phone', 'Institute Type'];
     const data = sortedStaff.map(member => [
       member.userId?.uniqueId || member.srNo || 'N/A',
       member.personalInfo?.fullName || 'N/A',
       member.userId?.email || 'N/A',
       member.contactInfo?.phone || 'N/A',
-      member.employment?.campus || 'Main Campus'
+      member.employment?.instituteType ? member.employment.instituteType.charAt(0).toUpperCase() + member.employment.instituteType.slice(1).replace(/_/g, ' ') : 'N/A'
     ]);
     
     const csvContent = [headers, ...data]
@@ -358,7 +562,7 @@ const StaffManagement = () => {
                 <th>Name</th>
                 <th>Email</th>
                 <th>Phone</th>
-                <th>Campus</th>
+                <th>Institute Type</th>
               </tr>
             </thead>
             <tbody>
@@ -368,7 +572,7 @@ const StaffManagement = () => {
                   <td>${member.personalInfo?.fullName || 'N/A'}</td>
                   <td>${member.userId?.email || 'N/A'}</td>
                   <td>${member.contactInfo?.phone || 'N/A'}</td>
-                  <td>${member.employment?.campus || 'Main Campus'}</td>
+                  <td>${member.employment?.instituteType ? member.employment.instituteType.charAt(0).toUpperCase() + member.employment.instituteType.slice(1).replace(/_/g, ' ') : 'N/A'}</td>
                 </tr>
               `).join('')}
             </tbody>
@@ -527,10 +731,27 @@ const StaffManagement = () => {
         ...(data.staffCategoryId && { staffCategoryId: data.staffCategoryId })
       };
 
-      return api.post('/teachers', teacherData);
+      const response = await api.post('/teachers', teacherData);
+      
+      // Check if response indicates an error (status >= 400)
+      if (response.status >= 400) {
+        const error = new Error(response.data?.message || 'Failed to add staff member');
+        error.response = response;
+        throw error;
+      }
+      
+      return response;
     },
-    onSuccess: async (data) => {
-      console.log('✅ Staff added successfully:', data);
+    onSuccess: async (response) => {
+      // Double-check response status
+      if (response.status >= 400) {
+        console.error('❌ Response has error status:', response.status);
+        const errorMessage = response.data?.message || 'Failed to add staff member';
+        toast.error(errorMessage);
+        return;
+      }
+      
+      console.log('✅ Staff added successfully:', response.data);
       toast.success('Staff member added successfully!');
       setShowAddStaffForm(false);
       resetStaffForm();
@@ -547,8 +768,26 @@ const StaffManagement = () => {
       }, 500);
     },
     onError: (error) => {
-      const errorMessage = error.response?.data?.message || 'Failed to add staff member';
-      toast.error(errorMessage);
+      console.error('❌ Add staff error:', error);
+      console.error('❌ Error response:', error.response?.data);
+      console.error('❌ Error status:', error.response?.status);
+      
+      let errorMessage = 'Failed to add staff member';
+      if (error.response?.data) {
+        if (error.response.data.errors && Array.isArray(error.response.data.errors) && error.response.data.errors.length > 0) {
+          // Show all validation errors
+          errorMessage = error.response.data.errors.join(', ');
+          console.error('❌ Validation errors:', error.response.data.errors);
+        } else if (error.response.data.message) {
+          errorMessage = error.response.data.message;
+        } else if (typeof error.response.data === 'string') {
+          errorMessage = error.response.data;
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      toast.error(errorMessage, { duration: 6000 });
     }
   });
 
@@ -755,7 +994,7 @@ const StaffManagement = () => {
                   <ArrowUpDown className="w-4 h-4" />
                 </div>
               </th>
-              <th className="px-4 py-3 text-left text-sm font-semibold">Campus</th>
+              <th className="px-4 py-3 text-left text-sm font-semibold">Institute Type</th>
               <th className="px-4 py-3 text-left text-sm font-semibold">ID Card</th>
               <th className="px-4 py-3 text-left text-sm font-semibold">Password</th>
               <th className="px-4 py-3 text-left text-sm font-semibold">More Options</th>
@@ -807,7 +1046,9 @@ const StaffManagement = () => {
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
                     <div className="flex items-center gap-2">
                       <Building2 className="w-4 h-4" />
-                      {member.employment?.campus || 'Main Campus'}
+                      {member.employment?.instituteType 
+                        ? member.employment.instituteType.charAt(0).toUpperCase() + member.employment.instituteType.slice(1).replace(/_/g, ' ')
+                        : 'N/A'}
                     </div>
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap">
@@ -1281,24 +1522,20 @@ const StaffManagement = () => {
                 {/* Institute Type */}
                 <div>
                   <label className="block text-sm font-medium mb-1">Institute Type *</label>
-                  <select
-                    required
+                  <InstituteTypeSelect
                     value={staffFormData.instituteType}
-                    onChange={(e) => {
+                    onChange={(value) => {
                       setStaffFormData({ 
                         ...staffFormData, 
-                        instituteType: e.target.value,
+                        instituteType: value,
                         courses: [], // Clear courses when institute type changes
                         staffCategoryId: '' // Clear category when institute type changes
                       });
                     }}
+                    required
                     className="input-field"
-                  >
-                    <option value="school">School</option>
-                    <option value="college">College</option>
-                    <option value="academy">Academy</option>
-                    <option value="short_course">Short Course</option>
-                  </select>
+                    placeholder="Select Institute Type"
+                  />
                 </div>
 
                 {/* Category */}

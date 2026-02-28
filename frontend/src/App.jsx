@@ -33,6 +33,7 @@ const Reports = lazy(() => import('./pages/admin/Reports'));
 const AccountsSummaryReport = lazy(() => import('./pages/admin/AccountsSummaryReport'));
 const Classes = lazy(() => import('./pages/admin/Classes'));
 const Categories = lazy(() => import('./pages/admin/Categories'));
+const InstituteTypes = lazy(() => import('./pages/admin/InstituteTypes'));
 const ManualAttendance = lazy(() => import('./pages/admin/ManualAttendance'));
 const StaffAttendance = lazy(() => import('./pages/admin/StaffAttendance'));
 const AttendanceReports = lazy(() => import('./pages/admin/AttendanceReports'));
@@ -130,6 +131,7 @@ function AppRoutes() {
         <Route path="/admin/courses" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Suspense fallback={<RouteLoader />}><Courses /></Suspense></ProtectedRoute>} />
         <Route path="/admin/classes" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Suspense fallback={<RouteLoader />}><Classes /></Suspense></ProtectedRoute>} />
         <Route path="/admin/categories" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Suspense fallback={<RouteLoader />}><Categories /></Suspense></ProtectedRoute>} />
+        <Route path="/admin/institute-types" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Suspense fallback={<RouteLoader />}><InstituteTypes /></Suspense></ProtectedRoute>} />
         <Route path="/admin/attendance/manual" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'teacher']}><Suspense fallback={<RouteLoader />}><ManualAttendance /></Suspense></ProtectedRoute>} />
         <Route path="/admin/attendance/staff" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'teacher']}><Suspense fallback={<RouteLoader />}><StaffAttendance /></Suspense></ProtectedRoute>} />
         <Route path="/admin/attendance/reports" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'teacher']}><Suspense fallback={<RouteLoader />}><AttendanceReports /></Suspense></ProtectedRoute>} />

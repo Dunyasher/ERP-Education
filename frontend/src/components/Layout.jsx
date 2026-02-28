@@ -80,6 +80,7 @@ const Layout = () => {
     { name: 'ID Card Printing', path: '/admin/id-card-menu', icon: CreditCard, hasSubmenu: true },
     { name: 'Public Messages', path: '/admin/messages', icon: MessageSquare, hasSubmenu: false, badge: 3 },
     { name: 'Classes', path: '/admin/classes', icon: BookOpen, hasSubmenu: false },
+    { name: 'Institute Types', path: '/admin/institute-types', icon: School, hasSubmenu: false },
     { name: 'Manage Attendance', path: '/admin/attendance/manual', icon: BarChart3, hasSubmenu: true },
     { name: 'Online Classes', path: '/admin/online-classes', icon: Monitor, hasSubmenu: false },
     { name: 'Timetable Management', path: '/admin/timetable', icon: Clock, hasSubmenu: false },

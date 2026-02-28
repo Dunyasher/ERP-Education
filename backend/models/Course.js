@@ -28,8 +28,10 @@ const courseSchema = new mongoose.Schema({
   },
   instituteType: {
     type: String,
-    enum: ['school', 'college', 'academy', 'short_course'],
-    required: true
+    required: true,
+    trim: true
+    // Removed enum restriction to allow dynamic institute types from InstituteType model
+    // enum: ['school', 'college', 'academy', 'short_course'],
   },
   description: {
     type: String,

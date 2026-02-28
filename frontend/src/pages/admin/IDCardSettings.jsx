@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
@@ -10,48 +10,99 @@ import {
   Palette,
   Type,
   Layout,
-  Printer
+  Printer,
+  Upload,
+  X,
+  Image as ImageIcon
 } from 'lucide-react';
 
 const IDCardSettings = () => {
   const queryClient = useQueryClient();
-  const [settings, setSettings] = useState({
-    cardSize: 'standard', // standard, custom
-    cardWidth: 85, // mm
-    cardHeight: 54, // mm
-    orientation: 'landscape', // landscape, portrait
-    layout: '3x3', // 3x3, 2x2, 4x4
-    headerText: 'STUDENT ID CARD',
-    footerText: `Valid for Academic Year ${new Date().getFullYear()}`,
-    primaryColor: '#1976d2',
-    secondaryColor: '#ffffff',
-    textColor: '#000000',
-    borderColor: '#000000',
-    borderWidth: 2,
-    includeQRCode: true,
-    includePhoto: true,
-    includeBarcode: false,
-    logo: '',
-    backgroundImage: '',
-    fontFamily: 'Arial',
-    fontSize: 10
-  });
-
-  const saveSettingsMutation = useMutation(
-    async (data) => {
-      // In a real implementation, save to backend
-      return Promise.resolve(data);
-    },
-    {
-      onSuccess: () => {
-        toast.success('Settings saved successfully!');
-        queryClient.invalidateQueries({ queryKey: ['idCardSettings'] });
-      },
-      onError: (error) => {
-        toast.error('Failed to save settings');
+  
+  // Load settings from localStorage on mount
+  const loadSettings = () => {
+    try {
+      const saved = localStorage.getItem('idCardSettings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          cardSize: parsed.cardSize || 'standard',
+          cardWidth: parsed.cardWidth || 85,
+          cardHeight: parsed.cardHeight || 54,
+          orientation: parsed.orientation || 'landscape',
+          layout: parsed.layout || '3x3',
+          headerText: parsed.headerText || 'STUDENT ID CARD',
+          footerText: parsed.footerText || `Valid for Academic Year ${new Date().getFullYear()}`,
+          primaryColor: parsed.primaryColor || '#1976d2',
+          secondaryColor: parsed.secondaryColor || '#ffffff',
+          textColor: parsed.textColor || '#000000',
+          borderColor: parsed.borderColor || '#000000',
+          borderWidth: parsed.borderWidth || 2,
+          includeQRCode: parsed.includeQRCode !== undefined ? parsed.includeQRCode : true,
+          includePhoto: parsed.includePhoto !== undefined ? parsed.includePhoto : true,
+          includeBarcode: parsed.includeBarcode !== undefined ? parsed.includeBarcode : false,
+          logo: parsed.logo || '',
+          backgroundImage: parsed.backgroundImage || '',
+          fontFamily: parsed.fontFamily || 'Arial',
+          fontSize: parsed.fontSize || 10,
+          importedDesign: parsed.importedDesign || null,
+          useImportedDesign: parsed.useImportedDesign || false
+        };
       }
+    } catch (error) {
+      console.error('Error loading settings:', error);
     }
-  );
+    return {
+      cardSize: 'standard',
+      cardWidth: 85,
+      cardHeight: 54,
+      orientation: 'landscape',
+      layout: '3x3',
+      headerText: 'STUDENT ID CARD',
+      footerText: `Valid for Academic Year ${new Date().getFullYear()}`,
+      primaryColor: '#1976d2',
+      secondaryColor: '#ffffff',
+      textColor: '#000000',
+      borderColor: '#000000',
+      borderWidth: 2,
+      includeQRCode: true,
+      includePhoto: true,
+      includeBarcode: false,
+      logo: '',
+      backgroundImage: '',
+      fontFamily: 'Arial',
+      fontSize: 10,
+      importedDesign: null,
+      useImportedDesign: false
+    };
+  };
+
+  const [settings, setSettings] = useState(loadSettings);
+
+  // Load settings on mount
+  useEffect(() => {
+    const loaded = loadSettings();
+    setSettings(loaded);
+  }, []);
+
+  const saveSettingsMutation = useMutation({
+    mutationFn: async (data) => {
+      // Save to localStorage
+      try {
+        localStorage.setItem('idCardSettings', JSON.stringify(data));
+        return Promise.resolve(data);
+      } catch (error) {
+        throw new Error('Failed to save settings to storage');
+      }
+    },
+    onSuccess: () => {
+      toast.success('Settings saved successfully!');
+      queryClient.invalidateQueries({ queryKey: ['idCardSettings'] });
+    },
+    onError: (error) => {
+      toast.error('Failed to save settings');
+    }
+  });
 
   const handleSave = () => {
     saveSettingsMutation.mutate(settings);
@@ -77,9 +128,58 @@ const IDCardSettings = () => {
       logo: '',
       backgroundImage: '',
       fontFamily: 'Arial',
-      fontSize: 10
+      fontSize: 10,
+      importedDesign: null,
+      useImportedDesign: false
     });
     toast.success('Settings reset to defaults');
+  };
+
+  // Handle design import
+  const handleImportDesign = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file (JPG, PNG, etc.)');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image size should be less than 5MB');
+      return;
+    }
+
+    // Convert to base64
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = reader.result;
+      setSettings(prev => ({
+        ...prev,
+        importedDesign: base64String,
+        useImportedDesign: true
+      }));
+      toast.success('Design imported successfully!');
+    };
+    reader.onerror = () => {
+      toast.error('Failed to read the image file');
+    };
+    reader.readAsDataURL(file);
+    
+    // Reset file input so same file can be selected again
+    event.target.value = '';
+  };
+
+  // Remove imported design
+  const handleRemoveImportedDesign = () => {
+    setSettings(prev => ({
+      ...prev,
+      importedDesign: null,
+      useImportedDesign: false
+    }));
+    toast.success('Imported design removed');
   };
 
   return (
@@ -366,41 +466,127 @@ const IDCardSettings = () => {
 
           {/* Preview & Actions */}
           <div className="space-y-6">
+            {/* Import Design Section */}
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                <Upload className="w-5 h-5" />
+                Import Design
+              </h2>
+              <div className="space-y-4">
+                {settings.importedDesign ? (
+                  <div className="space-y-3">
+                    <div className="relative border-2 border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-gray-50 dark:bg-gray-900">
+                      <img 
+                        src={settings.importedDesign} 
+                        alt="Imported Design" 
+                        className="w-full h-auto rounded-lg max-h-64 object-contain"
+                      />
+                      <button
+                        onClick={handleRemoveImportedDesign}
+                        className="absolute top-2 right-2 bg-red-600 hover:bg-red-700 text-white rounded-full p-1.5 transition-colors"
+                        title="Remove imported design"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settings.useImportedDesign}
+                        onChange={(e) => setSettings(prev => ({ ...prev, useImportedDesign: e.target.checked }))}
+                        className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+                      />
+                      <span className="text-gray-700 dark:text-gray-300">Use imported design for ID cards</span>
+                    </label>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      When enabled, your imported design will be used exactly as shown when generating ID cards.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center hover:border-blue-500 transition-colors">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImportDesign}
+                      className="hidden"
+                      id="import-design-input"
+                    />
+                    <label
+                      htmlFor="import-design-input"
+                      className="cursor-pointer flex flex-col items-center gap-3"
+                    >
+                      <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
+                        <Upload className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                          Click to import design
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          JPG, PNG or GIF (Max. 5MB)
+                        </p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+                          Import your custom ID card design template
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Preview */}
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Preview</h2>
               <div className="border-2 border-gray-300 dark:border-gray-600 rounded-lg p-4 bg-gray-50 dark:bg-gray-900">
-                <div 
-                  className="mx-auto border-2 rounded-lg p-3 bg-white"
-                  style={{
-                    width: '200px',
-                    height: '120px',
-                    borderColor: settings.borderColor,
-                    borderWidth: `${settings.borderWidth}px`
-                  }}
-                >
+                {settings.useImportedDesign && settings.importedDesign ? (
+                  <div className="mx-auto" style={{ maxWidth: '200px' }}>
+                    <img 
+                      src={settings.importedDesign} 
+                      alt="ID Card Preview" 
+                      className="w-full h-auto rounded-lg border-2 border-gray-300 dark:border-gray-600"
+                      style={{
+                        borderColor: settings.borderColor,
+                        borderWidth: `${settings.borderWidth}px`
+                      }}
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
+                      Your imported design will appear exactly as shown
+                    </p>
+                  </div>
+                ) : (
                   <div 
-                    className="text-center border-b-2 pb-2 mb-2"
-                    style={{ borderColor: settings.borderColor }}
+                    className="mx-auto border-2 rounded-lg p-3 bg-white"
+                    style={{
+                      width: '200px',
+                      height: '120px',
+                      borderColor: settings.borderColor,
+                      borderWidth: `${settings.borderWidth}px`
+                    }}
                   >
-                    <h3 
-                      className="font-bold text-xs"
-                      style={{ color: settings.textColor, fontFamily: settings.fontFamily }}
+                    <div 
+                      className="text-center border-b-2 pb-2 mb-2"
+                      style={{ borderColor: settings.borderColor }}
                     >
-                      {settings.headerText}
-                    </h3>
+                      <h3 
+                        className="font-bold text-xs"
+                        style={{ color: settings.textColor, fontFamily: settings.fontFamily }}
+                      >
+                        {settings.headerText}
+                      </h3>
+                    </div>
+                    <div className="text-xs" style={{ color: settings.textColor, fontFamily: settings.fontFamily }}>
+                      <p>Sample Student</p>
+                      <p>ID: 12345</p>
+                    </div>
+                    <div 
+                      className="text-center border-t mt-2 pt-1 text-xs"
+                      style={{ borderColor: settings.borderColor, color: settings.textColor, fontFamily: settings.fontFamily }}
+                    >
+                      {settings.footerText}
+                    </div>
                   </div>
-                  <div className="text-xs" style={{ color: settings.textColor, fontFamily: settings.fontFamily }}>
-                    <p>Sample Student</p>
-                    <p>ID: 12345</p>
-                  </div>
-                  <div 
-                    className="text-center border-t mt-2 pt-1 text-xs"
-                    style={{ borderColor: settings.borderColor, color: settings.textColor, fontFamily: settings.fontFamily }}
-                  >
-                    {settings.footerText}
-                  </div>
-                </div>
+                )}
               </div>
             </div>
 

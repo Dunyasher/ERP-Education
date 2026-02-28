@@ -106,6 +106,15 @@ router.post('/', authenticate, authorize('admin', 'super_admin'), async (req, re
       final: finalCollegeId
     });
     
+    // Validate that collegeId exists
+    if (!finalCollegeId) {
+      console.error('❌ No collegeId found for user:', req.user?.email, req.user?.role);
+      return res.status(400).json({ 
+        message: 'College ID is required. Please ensure you are associated with a college.',
+        errors: ['collegeId is required but was not found for the authenticated user']
+      });
+    }
+    
     const courseData = {
       ...req.body,
       collegeId: finalCollegeId
@@ -142,9 +151,17 @@ router.post('/', authenticate, authorize('admin', 'super_admin'), async (req, re
     }
     // Return more detailed error message
     if (error.name === 'ValidationError') {
+      const validationErrors = Object.values(error.errors).map(e => {
+        return `${e.path}: ${e.message}`;
+      });
+      console.error('❌ Validation errors:', validationErrors);
       return res.status(400).json({ 
         message: 'Validation error', 
-        errors: Object.values(error.errors).map(e => e.message) 
+        errors: validationErrors,
+        details: Object.keys(error.errors).map(key => ({
+          field: key,
+          message: error.errors[key].message
+        }))
       });
     }
     res.status(500).json({ message: error.message || 'Server error' });
