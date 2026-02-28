@@ -1,6 +1,6 @@
 const AuditLog = require('../models/AuditLog');
 
-/**
+/** 8
  * Audit logging middleware
  * Logs all actions performed by users, especially teachers
  */
@@ -16,7 +16,7 @@ const logAction = async (req, action, description, targetType = null, targetId =
         userId: req.user._id,
         email: req.user.email,
         role: req.user.role,
-        name: req.user.profile?.firstName 
+        name: req.user.profile?.firstName
           ? `${req.user.profile.firstName} ${req.user.profile.lastName || ''}`.trim()
           : req.user.email
       },
@@ -44,9 +44,9 @@ const auditMiddleware = (action, description, targetType = null, requiresApprova
   return async (req, res, next) => {
     // Store original json method
     const originalJson = res.json.bind(res);
-    
+
     // Override json method to log after response
-    res.json = function(data) {
+    res.json = function (data) {
       // Log the action after response is sent
       if (res.statusCode < 400) { // Only log successful actions
         const targetId = req.params.id || req.body._id || data._id || data.id || null;
@@ -54,14 +54,14 @@ const auditMiddleware = (action, description, targetType = null, requiresApprova
           ...req.body,
           ...(req.method === 'PUT' || req.method === 'PATCH' ? { updatedFields: Object.keys(req.body) } : {})
         };
-        
+
         logAction(req, action, description, targetType, targetId, changes, requiresApproval)
           .catch(err => console.error('Audit log error:', err));
       }
-      
+
       return originalJson(data);
     };
-    
+
     next();
   };
 };
