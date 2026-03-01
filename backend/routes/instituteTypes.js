@@ -5,8 +5,8 @@ const { authenticate, authorize } = require('../middleware/auth');
 
 // @route   GET /api/institute-types
 // @desc    Get all institute types
-// @access  Private (Admin, Super Admin)
-router.get('/', authenticate, authorize('admin', 'super_admin'), async (req, res) => {
+// @access  Private (Admin, Super Admin, Accountant)
+router.get('/', authenticate, authorize('admin', 'super_admin', 'accountant'), async (req, res) => {
   try {
     const { includeInactive } = req.query;
     const query = {};
@@ -27,8 +27,8 @@ router.get('/', authenticate, authorize('admin', 'super_admin'), async (req, res
 
 // @route   GET /api/institute-types/:id
 // @desc    Get single institute type
-// @access  Private (Admin, Super Admin)
-router.get('/:id', authenticate, authorize('admin', 'super_admin'), async (req, res) => {
+// @access  Private (Admin, Super Admin, Accountant)
+router.get('/:id', authenticate, authorize('admin', 'super_admin', 'accountant'), async (req, res) => {
   try {
     const instituteType = await InstituteType.findById(req.params.id);
     

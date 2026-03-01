@@ -62,9 +62,21 @@ const authorize = (...roles) => {
       return res.status(401).json({ message: 'Authentication required' });
     }
 
-    if (!roles.includes(req.user.role)) {
+    // Normalize role comparison (case-insensitive)
+    const userRole = req.user.role?.toLowerCase();
+    const allowedRoles = roles.map(r => r.toLowerCase());
+    
+    if (!allowedRoles.includes(userRole)) {
+      console.log('🚫 Authorization failed:', {
+        userRole: req.user.role,
+        allowedRoles: roles,
+        userId: req.user._id,
+        email: req.user.email,
+        path: req.path
+      });
       return res.status(403).json({ 
-        message: `Access denied. Required roles: ${roles.join(', ')}` 
+        message: `Access denied. Required roles: ${roles.join(', ')}`,
+        userRole: req.user.role
       });
     }
 

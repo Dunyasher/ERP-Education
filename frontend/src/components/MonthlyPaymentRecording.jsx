@@ -71,9 +71,21 @@ const MonthlyPaymentRecording = ({ student, onClose, showOverlay = true, onStude
 
   const paymentMutation = useMutation({
     mutationFn: async (data) => {
+      // Ensure student ID is available
+      const studentId = student?._id || student?.id;
+      if (!studentId) {
+        throw new Error('Student ID is missing. Please refresh the page and try again.');
+      }
+
+      // Log the data being sent for debugging
+      console.log('📤 Sending payment data:', {
+        ...data,
+        studentId: studentId
+      });
+
       return api.post('/accountant/monthly-payments', {
         ...data,
-        studentId: student._id
+        studentId: studentId
       });
     },
     onSuccess: async (response) => {
@@ -124,23 +136,88 @@ const MonthlyPaymentRecording = ({ student, onClose, showOverlay = true, onStude
       // User can close manually or record another payment
     },
     onError: (error) => {
-      const errorMessage = error.response?.data?.message || 
-                         error.response?.data?.error || 
+      // Log full error for debugging
+      console.error('❌ Payment error:', error);
+      console.error('Error response:', error.response?.data);
+      
+      const errorData = error.response?.data;
+      const errorMessage = errorData?.message || 
+                         errorData?.error || 
                          error.message || 
                          'Failed to record payment';
-      toast.error(errorMessage);
+      
+      // Special handling for duplicate payment
+      if (errorData?.code === 'PAYMENT_ALREADY_EXISTS' && errorData?.existingPayment) {
+        const existing = errorData.existingPayment;
+        const existingDate = new Date(existing.paymentDate).toLocaleDateString();
+        toast.error(
+          `${errorMessage}\nExisting payment: Rs. ${existing.amount.toLocaleString('en-PK')} on ${existingDate}`,
+          { 
+            duration: 7000,
+            style: { whiteSpace: 'pre-line' }
+          }
+        );
+      } else {
+        toast.error(errorMessage, { duration: 5000 });
+      }
     }
   });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!formData.amount || parseFloat(formData.amount) <= 0) {
+    // Validate student exists
+    if (!student) {
+      toast.error('Student information is missing. Please refresh the page and try again.');
+      return;
+    }
+
+    const studentId = student._id || student.id;
+    if (!studentId) {
+      toast.error('Student ID is missing. Please refresh the page and try again.');
+      return;
+    }
+    
+    // Validate amount
+    const amount = parseFloat(formData.amount);
+    if (!formData.amount || isNaN(amount) || amount <= 0) {
       toast.error('Please enter a valid amount');
       return;
     }
 
-    paymentMutation.mutate(formData);
+    // Validate month and year
+    const month = parseInt(formData.month);
+    const year = parseInt(formData.year);
+    if (!month || month < 1 || month > 12) {
+      toast.error('Please select a valid month');
+      return;
+    }
+    if (!year || year < 2020 || year > 2100) {
+      toast.error('Please enter a valid year');
+      return;
+    }
+
+    // Validate payment method
+    if (!formData.paymentMethod || formData.paymentMethod.trim() === '') {
+      toast.error('Please select a payment method');
+      return;
+    }
+
+    // Prepare data with proper types
+    const paymentData = {
+      month: month,
+      year: year,
+      amount: amount,
+      paymentMethod: formData.paymentMethod.trim(),
+      paymentDate: formData.paymentDate || new Date().toISOString().split('T')[0],
+      accountName: formData.accountName?.trim() || '',
+      notes: formData.notes?.trim() || '',
+      receiptNo: formData.receiptNo?.trim() || ''
+    };
+
+    console.log('📝 Submitting payment:', { ...paymentData, studentId });
+
+    paymentMutation.mutate(paymentData);
   };
 
   const handleInputChange = (e) => {

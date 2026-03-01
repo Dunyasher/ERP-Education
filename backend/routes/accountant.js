@@ -8,9 +8,9 @@ const MonthlyPayment = require('../models/MonthlyPayment');
 const User = require('../models/User');
 const { authenticate, authorize } = require('../middleware/auth');
 
-// All routes require accountant role
+// All routes require accountant, admin, or super_admin role
 router.use(authenticate);
-router.use(authorize('accountant'));
+router.use(authorize('accountant', 'admin', 'super_admin'));
 
 // Test route to verify accountant routes are working
 router.get('/test', (req, res) => {
@@ -97,7 +97,16 @@ router.post('/admissions/:studentId/link-fees', async (req, res) => {
       return res.status(404).json({ message: 'Student not found' });
     }
 
-    // Update student fee info
+    // Update student fee info - ensure feeInfo exists
+    if (!student.feeInfo) {
+      student.feeInfo = {
+        admissionFee: 0,
+        totalFee: 0,
+        paidFee: 0,
+        pendingFee: 0,
+        remainingFee: 0
+      };
+    }
     if (totalAmount) {
       student.feeInfo.totalFee = totalAmount;
     }
@@ -151,27 +160,59 @@ router.post('/admissions/:studentId/link-fees', async (req, res) => {
 
 // @route   POST /api/accountant/monthly-payments
 // @desc    Record monthly payment for a student
-// @access  Private (Accountant)
+// @access  Private (Accountant, Admin, Super Admin)
 router.post('/monthly-payments', async (req, res) => {
   try {
     console.log('📥 Monthly payment request received:', {
       method: req.method,
       path: req.path,
       url: req.originalUrl,
-      body: { 
-        studentId: req.body.studentId ? 'provided' : 'missing',
-        month: req.body.month,
-        year: req.body.year,
-        amount: req.body.amount,
-        accountName: req.body.accountName ? 'provided' : 'missing' 
-      },
+      body: req.body,
+      bodyKeys: Object.keys(req.body || {}),
       user: req.user ? { id: req.user._id, role: req.user.role, email: req.user.email } : 'no user'
     });
     
     const { studentId, month, year, amount, paymentMethod, paymentDate, notes, receiptNo, invoiceId, accountName } = req.body;
+    
+    console.log('📋 Extracted values:', {
+      studentId: studentId ? `${studentId.substring(0, 10)}...` : 'missing',
+      month,
+      year,
+      amount,
+      paymentMethod,
+      paymentDate,
+      notes: notes ? 'provided' : 'missing',
+      receiptNo: receiptNo ? 'provided' : 'missing',
+      accountName: accountName ? 'provided' : 'missing'
+    });
 
-    if (!studentId || !month || !year || !amount || !paymentMethod) {
-      return res.status(400).json({ message: 'Missing required fields' });
+    // Validate required fields with specific error messages
+    if (!studentId || (typeof studentId === 'string' && studentId.trim() === '')) {
+      console.error('❌ Validation failed: Student ID missing');
+      return res.status(400).json({ message: 'Student ID is required' });
+    }
+    
+    const monthNum = parseInt(month);
+    if (!month || month === '' || isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
+      console.error('❌ Validation failed: Invalid month', { month, monthNum });
+      return res.status(400).json({ message: 'Valid month is required (1-12)' });
+    }
+    
+    const yearNum = parseInt(year);
+    if (!year || year === '' || isNaN(yearNum) || yearNum < 2020 || yearNum > 2100) {
+      console.error('❌ Validation failed: Invalid year', { year, yearNum });
+      return res.status(400).json({ message: 'Valid year is required (2020-2100)' });
+    }
+    
+    const amountNum = parseFloat(amount);
+    if (!amount || amount === '' || isNaN(amountNum) || amountNum <= 0) {
+      console.error('❌ Validation failed: Invalid amount', { amount, amountNum });
+      return res.status(400).json({ message: 'Valid payment amount is required (must be greater than 0)' });
+    }
+    
+    if (!paymentMethod || (typeof paymentMethod === 'string' && paymentMethod.trim() === '')) {
+      console.error('❌ Validation failed: Payment method missing', { paymentMethod });
+      return res.status(400).json({ message: 'Payment method is required' });
     }
 
     // Check if payment for this month already exists
@@ -183,12 +224,35 @@ router.post('/monthly-payments', async (req, res) => {
     });
 
     if (existingPayment) {
-      return res.status(400).json({ message: 'Payment for this month already recorded' });
+      const monthName = new Date(year, month - 1).toLocaleString('en-US', { month: 'long' });
+      return res.status(400).json({ 
+        message: `Payment for ${monthName} ${year} has already been recorded`,
+        existingPayment: {
+          id: existingPayment._id,
+          amount: existingPayment.amount,
+          paymentDate: existingPayment.paymentDate,
+          paymentMethod: existingPayment.paymentMethod
+        },
+        code: 'PAYMENT_ALREADY_EXISTS'
+      });
     }
 
     const student = await Student.findById(studentId);
     if (!student) {
       return res.status(404).json({ message: 'Student not found' });
+    }
+
+    // Get collegeId from student or user
+    const collegeId = student.collegeId || 
+                      req.collegeId || 
+                      req.user?.collegeId?._id || 
+                      req.user?.collegeId;
+    
+    if (!collegeId) {
+      console.error('❌ No collegeId found for student or user');
+      return res.status(400).json({ 
+        message: 'College ID is required. Please ensure the student is associated with a college.' 
+      });
     }
 
     // Create exact timestamp for payment
@@ -219,8 +283,9 @@ router.post('/monthly-payments', async (req, res) => {
     let invoice = invoiceId ? await Invoice.findById(invoiceId) : await Invoice.findOne({ studentId });
     
     if (!invoice) {
-      // Create new invoice if doesn't exist
+      // Create new invoice if doesn't exist - include collegeId
       invoice = await Invoice.create({
+        collegeId: collegeId,
         studentId,
         invoiceDate: new Date(),
         items: [{
@@ -276,7 +341,16 @@ router.post('/monthly-payments', async (req, res) => {
     monthlyPayment.transactionId = transaction._id;
     await monthlyPayment.save();
 
-    // Update student fee info
+    // Update student fee info - ensure feeInfo exists
+    if (!student.feeInfo) {
+      student.feeInfo = {
+        admissionFee: 0,
+        totalFee: 0,
+        paidFee: 0,
+        pendingFee: 0,
+        remainingFee: 0
+      };
+    }
     student.feeInfo.paidFee = (student.feeInfo.paidFee || 0) + parseFloat(amount);
     student.calculatePendingFee();
     await student.save();
@@ -389,7 +463,16 @@ router.put('/correct-error', async (req, res) => {
         student.academicInfo = { ...student.academicInfo, ...corrections.academicInfo };
       }
     } else if (type === 'fee') {
-      // Correct fee data
+      // Correct fee data - ensure feeInfo exists
+      if (!student.feeInfo) {
+        student.feeInfo = {
+          admissionFee: 0,
+          totalFee: 0,
+          paidFee: 0,
+          pendingFee: 0,
+          remainingFee: 0
+        };
+      }
       if (corrections.totalFee !== undefined) {
         student.feeInfo.totalFee = corrections.totalFee;
       }
