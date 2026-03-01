@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
+import InstituteTypeSelect from '../../components/InstituteTypeSelect';
 import { 
   Search,
   ChevronRight,
@@ -16,10 +17,18 @@ const ManualAttendance = () => {
   const navigate = useNavigate();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [attendanceType, setAttendanceType] = useState('manual');
+  const [selectedInstituteType, setSelectedInstituteType] = useState('');
   const [selectedClassName, setSelectedClassName] = useState('');
   const [selectedSection, setSelectedSection] = useState('');
   const [attendanceStatus, setAttendanceStatus] = useState({});
   const [showTable, setShowTable] = useState(false);
+
+  // Auto-fetch students when class and section are selected (for manual/digital attendance)
+  const shouldAutoFetch = Boolean(
+    (attendanceType === 'manual' || attendanceType === 'digital') && 
+    selectedClassName && 
+    selectedSection
+  );
 
   // Fetch students based on filters - using React Query v5 syntax
   const { data: students = [], isLoading: isLoadingStudents, refetch } = useQuery({
@@ -31,7 +40,7 @@ const ManualAttendance = () => {
       const response = await api.get('/students', { params });
       return response.data;
     },
-    enabled: false // Only fetch when "Manage Attendance" is clicked
+    enabled: shouldAutoFetch // Auto-fetch when class and section are selected
   });
 
   // Filter students by class and section - memoized to prevent infinite loops
@@ -53,8 +62,119 @@ const ManualAttendance = () => {
     }
   });
 
-  const uniqueClasses = [...new Set(allStudents.map(s => s.className).filter(Boolean))].sort();
-  const uniqueSections = [...new Set(allStudents.map(s => s.section).filter(Boolean))].sort();
+  // Fetch courses/classes from API - this is the primary source for classes
+  const { data: courses = [] } = useQuery({
+    queryKey: ['courses'],
+    queryFn: async () => {
+      try {
+        const response = await api.get('/courses');
+        return Array.isArray(response.data) ? response.data : [];
+      } catch (error) {
+        console.error('Error fetching courses:', error);
+        return [];
+      }
+    }
+  });
+
+  // Filter classes based on selected institute type
+  const uniqueClasses = useMemo(() => {
+    // Normalize the selected institute type for comparison
+    const normalizedSelected = selectedInstituteType 
+      ? selectedInstituteType.toLowerCase().trim().replace(/\s+/g, '_')
+      : null;
+
+    let classesFromCourses = [];
+    let classesFromStudents = [];
+
+    // First, try to get classes from courses API (more reliable)
+    if (normalizedSelected) {
+      classesFromCourses = courses
+        .filter(course => {
+          const courseInstituteType = course.instituteType 
+            ? String(course.instituteType).toLowerCase().trim().replace(/\s+/g, '_')
+            : null;
+          return courseInstituteType === normalizedSelected;
+        })
+        .map(course => course.name)
+        .filter(Boolean);
+    } else {
+      classesFromCourses = courses.map(course => course.name).filter(Boolean);
+    }
+
+    // Also get classes from students (as fallback and for students without courses)
+    let filteredStudents = allStudents;
+    
+    if (normalizedSelected) {
+      filteredStudents = allStudents.filter(s => {
+        const studentInstituteType = s.academicInfo?.instituteType;
+        if (!studentInstituteType) return false;
+        
+        const normalizedStudent = String(studentInstituteType).toLowerCase().trim().replace(/\s+/g, '_');
+        return normalizedSelected === normalizedStudent;
+      });
+    }
+    
+    classesFromStudents = [...new Set(filteredStudents.map(s => s.className).filter(Boolean))];
+
+    // Combine both sources and remove duplicates
+    const allClasses = [...new Set([...classesFromCourses, ...classesFromStudents])].sort((a, b) => {
+      // For school classes, sort numerically (6th, 7th, 8th, etc.)
+      if (normalizedSelected === 'school') {
+        const getClassNumber = (name) => {
+          const match = name.match(/(\d+)(?:th|st|nd|rd)?/i) || name.match(/class\s*(\d+)/i);
+          return match ? parseInt(match[1]) : Infinity;
+        };
+        const classA = getClassNumber(a);
+        const classB = getClassNumber(b);
+        if (classA !== Infinity && classB !== Infinity) {
+          return classA - classB;
+        }
+        if (classA !== Infinity) return -1;
+        if (classB !== Infinity) return 1;
+      }
+      // For other types, sort alphabetically
+      return a.localeCompare(b);
+    });
+
+    // Debug logging
+    if (selectedInstituteType) {
+      console.log('🔍 Filtering classes by institute type:', {
+        selectedInstituteType,
+        normalizedSelected,
+        coursesFound: classesFromCourses.length,
+        studentsFound: classesFromStudents.length,
+        totalClasses: allClasses.length,
+        classes: allClasses.slice(0, 10)
+      });
+    }
+
+    return allClasses;
+  }, [allStudents, courses, selectedInstituteType]);
+  
+  // Filter sections based on selected class and institute type
+  const uniqueSections = useMemo(() => {
+    let filtered = allStudents;
+    
+    // Filter by institute type if selected
+    if (selectedInstituteType) {
+      const normalizedSelected = selectedInstituteType.toLowerCase().trim().replace(/\s+/g, '_');
+      
+      filtered = filtered.filter(s => {
+        const studentInstituteType = s.academicInfo?.instituteType;
+        if (!studentInstituteType) return false;
+        
+        const normalizedStudent = String(studentInstituteType).toLowerCase().trim().replace(/\s+/g, '_');
+        return normalizedSelected === normalizedStudent;
+      });
+    }
+    
+    // Filter by class if selected
+    if (selectedClassName) {
+      filtered = filtered.filter(s => s.className === selectedClassName);
+    }
+    
+    return [...new Set(filtered.map(s => s.section).filter(Boolean))].sort();
+  }, [allStudents, selectedClassName, selectedInstituteType]);
 
   // Initialize attendance status for all students
   useEffect(() => {
@@ -75,6 +195,16 @@ const ManualAttendance = () => {
       return hasChanges ? newStatus : prev;
     });
   }, [filteredStudents]); // filteredStudents is now memoized, so this is safe
+
+  // Automatically show table when students are loaded (for manual/digital attendance)
+  useEffect(() => {
+    if (shouldAutoFetch && filteredStudents.length > 0 && !showTable) {
+      setShowTable(true);
+    } else if (!shouldAutoFetch && showTable) {
+      // Hide table if class/section is cleared
+      setShowTable(false);
+    }
+  }, [shouldAutoFetch, filteredStudents.length, showTable]);
 
   // Mark attendance mutation
   const markAttendanceMutation = useMutation({
@@ -108,7 +238,20 @@ const ManualAttendance = () => {
 
   const handleTypeChange = (type) => {
     setAttendanceType(type);
-    // Don't navigate immediately - let user click "Manage Attendance" button
+    // Reset table for non-auto types
+    if (type !== 'manual' && type !== 'digital') {
+      setShowTable(false);
+      setSelectedClassName('');
+      setSelectedSection('');
+    }
+  };
+
+  const handleInstituteTypeChange = (value) => {
+    setSelectedInstituteType(value);
+    // Clear class and section when institute type changes
+    setSelectedClassName('');
+    setSelectedSection('');
+    setShowTable(false);
   };
 
   const handleManageAttendance = () => {
@@ -126,9 +269,14 @@ const ManualAttendance = () => {
       navigate('/admin/attendance/reports');
       return;
     }
-    // For 'digital' and 'manual', fetch students and show table
-    refetch();
-    setShowTable(true);
+    // For 'digital' and 'manual', if class and section are selected, table should already be showing
+    // But allow manual trigger if needed
+    if (selectedClassName && selectedSection) {
+      refetch();
+      setShowTable(true);
+    } else {
+      toast.error('Please select both Class and Section');
+    }
   };
 
   const handleSaveAttendance = () => {
@@ -189,7 +337,7 @@ const ManualAttendance = () => {
 
       {/* Filter Section */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Type
@@ -210,20 +358,49 @@ const ManualAttendance = () => {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Institute Type
+            </label>
+            <InstituteTypeSelect
+              value={selectedInstituteType}
+              onChange={handleInstituteTypeChange}
+              className="w-full border border-gray-300 dark:border-gray-600 rounded px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+              placeholder="All Institute Types"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Class
             </label>
             <select
               value={selectedClassName}
-              onChange={(e) => setSelectedClassName(e.target.value)}
-              className="w-full border border-gray-300 dark:border-gray-600 rounded px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+              onChange={(e) => {
+                setSelectedClassName(e.target.value);
+                // Clear section when class changes
+                setSelectedSection('');
+                setShowTable(false);
+              }}
+              disabled={!selectedInstituteType}
+              className="w-full border border-gray-300 dark:border-gray-600 rounded px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <option value="">Select Class</option>
+              <option value="">
+                {!selectedInstituteType 
+                  ? 'Select Institute Type First' 
+                  : uniqueClasses.length === 0
+                  ? `No classes found for ${selectedInstituteType}`
+                  : 'Select Class'}
+              </option>
               {uniqueClasses.map((cls) => (
                 <option key={cls} value={cls}>
                   {cls}
                 </option>
               ))}
             </select>
+            {selectedInstituteType && uniqueClasses.length === 0 && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                No classes available. Create classes for this institute type in the Classes page.
+              </p>
+            )}
           </div>
 
           <div>
@@ -232,10 +409,14 @@ const ManualAttendance = () => {
             </label>
             <select
               value={selectedSection}
-              onChange={(e) => setSelectedSection(e.target.value)}
-              className="w-full border border-gray-300 dark:border-gray-600 rounded px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+              onChange={(e) => {
+                setSelectedSection(e.target.value);
+                // Table will auto-show when section is selected (for manual/digital)
+              }}
+              disabled={!selectedClassName}
+              className="w-full border border-gray-300 dark:border-gray-600 rounded px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <option value="">Select Section</option>
+              <option value="">{selectedClassName ? 'Select Section' : 'Select Class First'}</option>
               {uniqueSections.map((sec) => (
                 <option key={sec} value={sec}>
                   {sec}

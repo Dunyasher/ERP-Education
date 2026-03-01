@@ -22,7 +22,9 @@ import {
   Save,
   FolderTree,
   Search,
-  Settings
+  Settings,
+  Filter,
+  XCircle
 } from 'lucide-react';
 
 const Classes = () => {
@@ -36,6 +38,12 @@ const Classes = () => {
   const [showInstructorForm, setShowInstructorForm] = useState(false);
   const [showCreateClassForm, setShowCreateClassForm] = useState(false);
   const [showCategoryForm, setShowCategoryForm] = useState(false);
+  const [showFilterForm, setShowFilterForm] = useState(false);
+  const [filters, setFilters] = useState({
+    instituteType: '',
+    categoryId: '',
+    status: ''
+  });
   const [editingScheduleIndex, setEditingScheduleIndex] = useState(null);
   const [selectedInstructorId, setSelectedInstructorId] = useState('');
   const [editingCategory, setEditingCategory] = useState(null);
@@ -165,17 +173,43 @@ const Classes = () => {
   // Use sorted classes
   const classes = classesData;
 
-  // Filter classes based on search term
+  // Filter classes based on search term and filters
   const filteredClasses = useMemo(() => {
-    if (!searchTerm.trim()) return classes;
-    const searchLower = searchTerm.toLowerCase();
-    return classes.filter(classItem => 
-      classItem.name?.toLowerCase().includes(searchLower) ||
-      classItem.category?.toLowerCase().includes(searchLower) ||
-      classItem.srNo?.toLowerCase().includes(searchLower) ||
-      classItem.instructor?.toLowerCase().includes(searchLower)
-    );
-  }, [classes, searchTerm]);
+    let result = classes;
+
+    // Apply filters
+    if (filters.instituteType) {
+      result = result.filter(classItem => 
+        classItem.instituteType === filters.instituteType
+      );
+    }
+    
+    if (filters.categoryId) {
+      result = result.filter(classItem => 
+        classItem.categoryId === filters.categoryId || 
+        classItem.categoryId?._id === filters.categoryId
+      );
+    }
+    
+    if (filters.status) {
+      result = result.filter(classItem => 
+        (classItem.status || 'published') === filters.status
+      );
+    }
+
+    // Apply search term
+    if (searchTerm.trim()) {
+      const searchLower = searchTerm.toLowerCase();
+      result = result.filter(classItem => 
+        classItem.name?.toLowerCase().includes(searchLower) ||
+        classItem.category?.toLowerCase().includes(searchLower) ||
+        classItem.srNo?.toLowerCase().includes(searchLower) ||
+        classItem.instructor?.toLowerCase().includes(searchLower)
+      );
+    }
+
+    return result;
+  }, [classes, searchTerm, filters]);
 
   // Auto-select class from URL parameter or location state
   useEffect(() => {
@@ -1177,18 +1211,119 @@ const Classes = () => {
         </div>
       </div>
 
-      {/* Search Bar */}
+      {/* Search Bar and Filter */}
       <div className="card">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-          <input
-            type="text"
-            placeholder="Search by name, category, or serial number..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-          />
+        <div className="flex gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <input
+              type="text"
+              placeholder="Search by name, category, or serial number..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+            />
+          </div>
+          <button
+            onClick={() => setShowFilterForm(!showFilterForm)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition-colors duration-200 ${
+              Object.values(filters).some(f => f) 
+                ? 'bg-indigo-600 hover:bg-indigo-700 text-white' 
+                : 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300'
+            }`}
+          >
+            <Filter className="w-5 h-5" />
+            Filter
+            {Object.values(filters).some(f => f) && (
+              <span className="bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                {Object.values(filters).filter(f => f).length}
+              </span>
+            )}
+          </button>
         </div>
+
+        {/* Filter Panel */}
+        {showFilterForm && (
+          <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Filter Classes</h3>
+              <button
+                onClick={() => setShowFilterForm(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Institute Type Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Institute Type
+                </label>
+                <InstituteTypeSelect
+                  value={filters.instituteType}
+                  onChange={(value) => setFilters({ ...filters, instituteType: value })}
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+                  placeholder="All Institute Types"
+                />
+              </div>
+
+              {/* Category Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Category
+                </label>
+                <select
+                  value={filters.categoryId}
+                  onChange={(e) => setFilters({ ...filters, categoryId: e.target.value })}
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+                >
+                  <option value="">All Categories</option>
+                  {allCategories.map((category) => (
+                    <option key={category._id} value={category._id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Status Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Status
+                </label>
+                <select
+                  value={filters.status}
+                  onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
+                >
+                  <option value="">All Status</option>
+                  <option value="published">Published</option>
+                  <option value="draft">Draft</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Clear Filters Button */}
+            {Object.values(filters).some(f => f) && (
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={() => {
+                    setFilters({
+                      instituteType: '',
+                      categoryId: '',
+                      status: ''
+                    });
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                >
+                  <XCircle className="w-4 h-4" />
+                  Clear All Filters
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Classes Table */}
@@ -1371,6 +1506,42 @@ const Classes = () => {
                   </p>
                 )}
               </div>
+
+              {/* Category */}
+              {newClassForm.instituteType && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Category *
+                  </label>
+                  <select
+                    value={newClassForm.categoryId}
+                    onChange={(e) => setNewClassForm({ ...newClassForm, categoryId: e.target.value })}
+                    required
+                    disabled={!newClassForm.instituteType || categoriesLoading}
+                    className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <option value="">
+                      {!newClassForm.instituteType 
+                        ? 'Select Institute Type first'
+                        : categoriesLoading
+                        ? 'Loading categories...'
+                        : filteredCategories.length === 0
+                        ? `No categories found for ${newClassForm.instituteType.replace('_', ' ')}`
+                        : `Select ${newClassForm.instituteType === 'school' ? 'Class' : newClassForm.instituteType === 'college' ? 'Year' : newClassForm.instituteType === 'academy' ? 'Book' : 'Category'}`}
+                    </option>
+                    {filteredCategories.length > 0 && filteredCategories.map((category) => (
+                      <option key={category._id} value={category._id}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                  {newClassForm.instituteType && filteredCategories.length === 0 && !categoriesLoading && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      No categories available for this institute type.
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Teacher (Optional) */}
               {newClassForm.instituteType && (

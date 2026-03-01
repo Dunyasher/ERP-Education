@@ -151,6 +151,9 @@ function AppRoutes() {
         <Route path="/admin/reports/accounts-summary" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><Suspense fallback={<RouteLoader />}><AccountsSummaryReport /></Suspense></ProtectedRoute>} />
         <Route path="/admin/settings" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Suspense fallback={<RouteLoader />}><Settings /></Suspense></ProtectedRoute>} />
         <Route path="/teacher/dashboard" element={<ProtectedRoute allowedRoles={['teacher']}><Suspense fallback={<RouteLoader />}><TeacherDashboard /></Suspense></ProtectedRoute>} />
+        <Route path="/teacher/attendance" element={<ProtectedRoute allowedRoles={['teacher']}><Suspense fallback={<RouteLoader />}><ManualAttendance /></Suspense></ProtectedRoute>} />
+        <Route path="/teacher/courses" element={<ProtectedRoute allowedRoles={['teacher']}><Suspense fallback={<RouteLoader />}><Courses /></Suspense></ProtectedRoute>} />
+        <Route path="/teacher/students" element={<ProtectedRoute allowedRoles={['teacher']}><Suspense fallback={<RouteLoader />}><Students /></Suspense></ProtectedRoute>} />
         <Route path="/accountant/dashboard" element={<ProtectedRoute allowedRoles={['accountant']}><Suspense fallback={<RouteLoader />}><AccountantDashboard /></Suspense></ProtectedRoute>} />
         <Route path="/accountant/students" element={<ProtectedRoute allowedRoles={['accountant']}><Suspense fallback={<RouteLoader />}><Students /></Suspense></ProtectedRoute>} />
         <Route path="/accountant/students/new" element={<ProtectedRoute allowedRoles={['accountant']}><Suspense fallback={<RouteLoader />}><NewAdmission /></Suspense></ProtectedRoute>} />
