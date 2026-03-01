@@ -24,12 +24,14 @@ const { getCurrentSerialNumber } = require('../utils/autoSerialNumber');
 // @access  Private
 router.get('/', authenticate, addCollegeFilter, async (req, res) => {
   try {
-    const { instituteType, status, courseId } = req.query;
+    const { instituteType, status, courseId, className, section } = req.query;
     const query = buildCollegeQuery(req);
     
     if (instituteType) query['academicInfo.instituteType'] = instituteType;
     if (status) query['academicInfo.status'] = status;
     if (courseId) query['academicInfo.courseId'] = courseId;
+    if (className) query.className = className;
+    if (section) query.section = section;
     
     const students = await Student.find(query)
       .populate('userId', 'email profile')
@@ -45,8 +47,41 @@ router.get('/', authenticate, addCollegeFilter, async (req, res) => {
       .sort({ createdAt: -1 })
       .lean(); // Use lean() for better performance
     
+    // Get last payment dates for all students efficiently
+    let lastPaymentDates = {};
+    if (PaymentTransaction && students.length > 0) {
+      try {
+        const studentIds = students.map(s => s._id);
+        // Get the most recent payment date for each student
+        const lastPayments = await PaymentTransaction.aggregate([
+          { $match: { studentId: { $in: studentIds } } },
+          { $sort: { paymentDate: -1 } },
+          { $group: {
+              _id: '$studentId',
+              lastPaymentDate: { $first: '$paymentDate' }
+            }
+          }
+        ]);
+        
+        // Create a map for quick lookup
+        lastPaymentDates = {};
+        lastPayments.forEach(payment => {
+          lastPaymentDates[payment._id.toString()] = payment.lastPaymentDate;
+        });
+      } catch (error) {
+        console.error('Error fetching last payment dates:', error);
+        // Continue without last payment dates if there's an error
+      }
+    }
+    
+    // Add last payment date to each student
+    const studentsWithLastPayment = students.map(student => ({
+      ...student,
+      lastPaymentDate: lastPaymentDates[student._id.toString()] || null
+    }));
+    
     // Ensure we always return an array
-    res.json(Array.isArray(students) ? students : []);
+    res.json(Array.isArray(studentsWithLastPayment) ? studentsWithLastPayment : []);
   } catch (error) {
     console.error('❌ Get students error:', error);
     console.error('   Error name:', error.name);

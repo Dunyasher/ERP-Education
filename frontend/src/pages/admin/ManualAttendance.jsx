@@ -23,34 +23,68 @@ const ManualAttendance = () => {
   const [attendanceStatus, setAttendanceStatus] = useState({});
   const [showTable, setShowTable] = useState(false);
 
-  // Auto-fetch students when class and section are selected (for manual/digital attendance)
+  // Auto-fetch students when class is selected (section is optional)
   const shouldAutoFetch = Boolean(
     (attendanceType === 'manual' || attendanceType === 'digital') && 
-    selectedClassName && 
-    selectedSection
+    selectedClassName
   );
 
   // Fetch students based on filters - using React Query v5 syntax
   const { data: students = [], isLoading: isLoadingStudents, refetch } = useQuery({
-    queryKey: ['students', selectedClassName, selectedSection],
+    queryKey: ['students', selectedInstituteType, selectedClassName, selectedSection],
     queryFn: async () => {
       const params = {};
+      if (selectedInstituteType) params.instituteType = selectedInstituteType;
       if (selectedClassName) params.className = selectedClassName;
       if (selectedSection) params.section = selectedSection;
       const response = await api.get('/students', { params });
+      console.log('📋 Fetched students:', {
+        params,
+        count: response.data?.length || 0,
+        students: response.data?.slice(0, 3) // Log first 3 for debugging
+      });
       return response.data;
     },
-    enabled: shouldAutoFetch // Auto-fetch when class and section are selected
+    enabled: shouldAutoFetch // Auto-fetch when class is selected (section is optional)
   });
 
   // Filter students by class and section - memoized to prevent infinite loops
   const filteredStudents = useMemo(() => {
-    return students.filter(student => {
+    // Since we're already filtering on the backend, we can use students directly
+    // But add additional client-side filtering as a safety measure
+    const filtered = students.filter(student => {
       let matches = true;
-      if (selectedClassName && student.className !== selectedClassName) matches = false;
-      if (selectedSection && student.section !== selectedSection) matches = false;
+      
+      // Filter by class name (exact match)
+      if (selectedClassName && student.className !== selectedClassName) {
+        matches = false;
+      }
+      
+      // Filter by section (exact match, but section is optional)
+      if (selectedSection && student.section !== selectedSection) {
+        matches = false;
+      }
+      
       return matches;
     });
+    
+    // Debug logging
+    if (selectedClassName) {
+      console.log('🔍 Filtering students:', {
+        totalStudents: students.length,
+        selectedClassName,
+        selectedSection: selectedSection || 'All',
+        filteredCount: filtered.length,
+        sampleStudents: students.slice(0, 3).map(s => ({
+          name: s.personalInfo?.fullName,
+          className: s.className,
+          section: s.section,
+          instituteType: s.academicInfo?.instituteType
+        }))
+      });
+    }
+    
+    return filtered;
   }, [students, selectedClassName, selectedSection]);
 
   // Get unique classes and sections from all students
@@ -118,10 +152,13 @@ const ManualAttendance = () => {
 
     // Combine both sources and remove duplicates
     const allClasses = [...new Set([...classesFromCourses, ...classesFromStudents])].sort((a, b) => {
-      // For school classes, sort numerically (6th, 7th, 8th, etc.)
+      // For school classes, sort numerically (1st, 2nd, 3rd, 6th, 7th, 8th, 9th, etc.)
       if (normalizedSelected === 'school') {
         const getClassNumber = (name) => {
-          const match = name.match(/(\d+)(?:th|st|nd|rd)?/i) || name.match(/class\s*(\d+)/i);
+          // Try to extract number from various formats: "1st", "2nd", "3rd", "6th", "Class 7", "7th class", etc.
+          const match = name.match(/(\d+)(?:th|st|nd|rd)?/i) || 
+                       name.match(/class\s*(\d+)/i) ||
+                       name.match(/(\d+)\s*class/i);
           return match ? parseInt(match[1]) : Infinity;
         };
         const classA = getClassNumber(a);
@@ -131,6 +168,33 @@ const ManualAttendance = () => {
         }
         if (classA !== Infinity) return -1;
         if (classB !== Infinity) return 1;
+      }
+      // For college: sort by year order (First Year, Second Year, etc.)
+      if (normalizedSelected === 'college') {
+        const yearOrder = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth'];
+        const getYearIndex = (name) => {
+          const nameLower = name.toLowerCase();
+          return yearOrder.findIndex(year => nameLower.includes(year));
+        };
+        const yearA = getYearIndex(a);
+        const yearB = getYearIndex(b);
+        if (yearA !== -1 && yearB !== -1) return yearA - yearB;
+        if (yearA !== -1) return -1;
+        if (yearB !== -1) return 1;
+      }
+      // For academy: sort by book number (Book 1, Book 2, etc.)
+      if (normalizedSelected === 'academy') {
+        const getBookNumber = (name) => {
+          const match = name.match(/book\s*(\d+)/i) || name.match(/(\d+)\s*book/i);
+          return match ? parseInt(match[1]) : Infinity;
+        };
+        const bookA = getBookNumber(a);
+        const bookB = getBookNumber(b);
+        if (bookA !== Infinity && bookB !== Infinity) {
+          return bookA - bookB;
+        }
+        if (bookA !== Infinity) return -1;
+        if (bookB !== Infinity) return 1;
       }
       // For other types, sort alphabetically
       return a.localeCompare(b);
@@ -153,27 +217,41 @@ const ManualAttendance = () => {
   
   // Filter sections based on selected class and institute type
   const uniqueSections = useMemo(() => {
-    let filtered = allStudents;
+    // Must have both institute type and class selected to show sections
+    if (!selectedInstituteType || !selectedClassName) {
+      return [];
+    }
+
+    const normalizedSelected = selectedInstituteType.toLowerCase().trim().replace(/\s+/g, '_');
     
-    // Filter by institute type if selected
-    if (selectedInstituteType) {
-      const normalizedSelected = selectedInstituteType.toLowerCase().trim().replace(/\s+/g, '_');
+    let filtered = allStudents.filter(s => {
+      // Filter by institute type
+      const studentInstituteType = s.academicInfo?.instituteType;
+      if (!studentInstituteType) return false;
       
-      filtered = filtered.filter(s => {
-        const studentInstituteType = s.academicInfo?.instituteType;
-        if (!studentInstituteType) return false;
-        
-        const normalizedStudent = String(studentInstituteType).toLowerCase().trim().replace(/\s+/g, '_');
-        return normalizedSelected === normalizedStudent;
+      const normalizedStudent = String(studentInstituteType).toLowerCase().trim().replace(/\s+/g, '_');
+      if (normalizedSelected !== normalizedStudent) return false;
+      
+      // Filter by class
+      if (s.className !== selectedClassName) return false;
+      
+      return true;
+    });
+    
+    const sections = [...new Set(filtered.map(s => s.section).filter(Boolean))].sort();
+    
+    // Debug logging
+    if (selectedInstituteType && selectedClassName) {
+      console.log('🔍 Filtering sections:', {
+        selectedInstituteType,
+        selectedClassName,
+        filteredStudents: filtered.length,
+        sectionsFound: sections.length,
+        sections: sections
       });
     }
     
-    // Filter by class if selected
-    if (selectedClassName) {
-      filtered = filtered.filter(s => s.className === selectedClassName);
-    }
-    
-    return [...new Set(filtered.map(s => s.section).filter(Boolean))].sort();
+    return sections;
   }, [allStudents, selectedClassName, selectedInstituteType]);
 
   // Initialize attendance status for all students
@@ -198,13 +276,16 @@ const ManualAttendance = () => {
 
   // Automatically show table when students are loaded (for manual/digital attendance)
   useEffect(() => {
-    if (shouldAutoFetch && filteredStudents.length > 0 && !showTable) {
-      setShowTable(true);
+    if (shouldAutoFetch) {
+      // Show table when class is selected, even if no students found yet (loading state)
+      if (!showTable) {
+        setShowTable(true);
+      }
     } else if (!shouldAutoFetch && showTable) {
-      // Hide table if class/section is cleared
+      // Hide table if class is cleared
       setShowTable(false);
     }
-  }, [shouldAutoFetch, filteredStudents.length, showTable]);
+  }, [shouldAutoFetch, showTable]);
 
   // Mark attendance mutation
   const markAttendanceMutation = useMutation({
@@ -269,13 +350,13 @@ const ManualAttendance = () => {
       navigate('/admin/attendance/reports');
       return;
     }
-    // For 'digital' and 'manual', if class and section are selected, table should already be showing
-    // But allow manual trigger if needed
-    if (selectedClassName && selectedSection) {
+    // For 'digital' and 'manual', if class is selected, table should already be showing
+    // Section is optional - attendance can be managed for all students in a class
+    if (selectedClassName) {
       refetch();
       setShowTable(true);
     } else {
-      toast.error('Please select both Class and Section');
+      toast.error('Please select at least a Class');
     }
   };
 
@@ -405,18 +486,26 @@ const ManualAttendance = () => {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Section
+              Section (Optional)
             </label>
             <select
               value={selectedSection}
               onChange={(e) => {
                 setSelectedSection(e.target.value);
-                // Table will auto-show when section is selected (for manual/digital)
+                // Table will auto-show when class is selected (section is optional)
               }}
-              disabled={!selectedClassName}
+              disabled={!selectedInstituteType || !selectedClassName}
               className="w-full border border-gray-300 dark:border-gray-600 rounded px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <option value="">{selectedClassName ? 'Select Section' : 'Select Class First'}</option>
+              <option value="">
+                {!selectedInstituteType 
+                  ? 'Select Institute Type First'
+                  : !selectedClassName
+                  ? 'Select Class First'
+                  : uniqueSections.length === 0
+                  ? 'No sections (Optional - leave empty for all students)'
+                  : 'All Sections (Optional)'}
+              </option>
               {uniqueSections.map((sec) => (
                 <option key={sec} value={sec}>
                   {sec}
@@ -513,7 +602,20 @@ const ManualAttendance = () => {
             </div>
           ) : filteredStudents.length === 0 ? (
             <div className="text-center py-12">
-              <p className="text-gray-600 dark:text-gray-400">No students found. Please adjust filters.</p>
+              <p className="text-gray-600 dark:text-gray-400 mb-2 font-medium">No students found for the selected filters.</p>
+              <div className="text-sm text-gray-500 dark:text-gray-500 mt-4 space-y-1">
+                <p><strong>Selected Filters:</strong></p>
+                <p>Institute Type: {selectedInstituteType || 'Not selected'}</p>
+                <p>Class: {selectedClassName || 'Not selected'}</p>
+                {selectedSection && <p>Section: {selectedSection}</p>}
+                <p className="mt-4 text-xs">Please verify:</p>
+                <ul className="list-disc list-inside text-left max-w-md mx-auto mt-2 space-y-1">
+                  <li>Students are enrolled in class "{selectedClassName}"</li>
+                  <li>Students have institute type "{selectedInstituteType}"</li>
+                  {selectedSection && <li>Students are in section "{selectedSection}"</li>}
+                  <li>Students have active status</li>
+                </ul>
+              </div>
             </div>
           ) : (
             <>

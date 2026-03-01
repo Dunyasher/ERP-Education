@@ -205,8 +205,22 @@ studentSchema.pre('save', async function(next) {
 
 // Calculate pending fee and remaining fee
 studentSchema.methods.calculatePendingFee = function() {
-  this.feeInfo.pendingFee = this.feeInfo.totalFee - this.feeInfo.paidFee;
-  this.feeInfo.remainingFee = (this.feeInfo.totalFee || 0) + (this.feeInfo.admissionFee || 0) - (this.feeInfo.paidFee || 0);
+  // Ensure feeInfo exists
+  if (!this.feeInfo) {
+    this.feeInfo = {
+      admissionFee: 0,
+      totalFee: 0,
+      paidFee: 0,
+      pendingFee: 0,
+      remainingFee: 0
+    };
+  }
+  const totalFee = this.feeInfo.totalFee || 0;
+  const paidFee = this.feeInfo.paidFee || 0;
+  const admissionFee = this.feeInfo.admissionFee || 0;
+  
+  this.feeInfo.pendingFee = totalFee - paidFee;
+  this.feeInfo.remainingFee = totalFee + admissionFee - paidFee;
   return this.feeInfo.pendingFee;
 };
 

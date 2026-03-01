@@ -650,6 +650,21 @@ const Students = () => {
                 Father's Name
               </th>
               <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                Institute Type
+              </th>
+              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                Total Fee
+              </th>
+              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                Paid Fee
+              </th>
+              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                Pending Fee
+              </th>
+              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                Last Payment Date
+              </th>
+              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
                 Actions
               </th>
             </tr>
@@ -657,7 +672,7 @@ const Students = () => {
           <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
             {filteredStudents.length === 0 ? (
               <tr>
-                <td colSpan="4" className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                <td colSpan="9" className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
                   <Users className="w-12 h-12 mx-auto mb-4 text-gray-400" />
                   <p>No students found</p>
                   {searchTerm && <p className="text-sm mt-2">Try adjusting your search</p>}
@@ -665,6 +680,25 @@ const Students = () => {
               </tr>
             ) : (
               filteredStudents.map((student) => {
+                // Format institute type name
+                const instituteTypeName = student.academicInfo?.instituteType
+                  ? student.academicInfo.instituteType
+                      .replace(/_/g, ' ')
+                      .replace(/\b\w/g, l => l.toUpperCase())
+                  : 'N/A';
+
+                // Get fee information
+                const totalFee = student.feeInfo?.totalFee || 0;
+                const paidFee = student.feeInfo?.paidFee || 0;
+                const pendingFee = student.feeInfo?.pendingFee || (totalFee - paidFee);
+                const isFullyPaid = pendingFee <= 0 && totalFee > 0;
+                const hasNoFee = totalFee === 0;
+
+                // Get last payment date
+                const lastPaymentDate = student.lastPaymentDate 
+                  ? new Date(student.lastPaymentDate)
+                  : null;
+
                 return (
                   <tr key={student._id} className="table-row hover:bg-gray-50 dark:hover:bg-gray-800">
                     <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
@@ -675,6 +709,41 @@ const Students = () => {
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                       {student.parentInfo?.fatherName || 'N/A'}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                      {instituteTypeName}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                      {formatCurrency(totalFee)}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-green-600 dark:text-green-400">
+                      {formatCurrency(paidFee)}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
+                      {hasNoFee ? (
+                        <span className="text-gray-500 dark:text-gray-400">N/A</span>
+                      ) : isFullyPaid ? (
+                        <span className="text-green-600 dark:text-green-400 flex items-center gap-1">
+                          <CheckCircle className="w-4 h-4" />
+                          {formatCurrency(0)}
+                        </span>
+                      ) : (
+                        <span className="text-red-600 dark:text-red-400 font-semibold">
+                          {formatCurrency(pendingFee)}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                      {lastPaymentDate ? (
+                        <div className="flex flex-col">
+                          <span>{formatDate(lastPaymentDate)}</span>
+                          <span className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                            {Math.floor((new Date() - lastPaymentDate) / (1000 * 60 * 60 * 24))} days ago
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 dark:text-gray-500 italic">No payment</span>
+                      )}
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center gap-2">
