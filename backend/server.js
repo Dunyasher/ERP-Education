@@ -17,15 +17,14 @@ if (!fs.existsSync(uploadsDir)) {
 const app = express();
 
 // Middleware - CORS Configuration (Optimized for seamless connection)
+const allowedOrigins = process.env.CLIENT_URL 
+  ? process.env.CLIENT_URL.split(',').map(url => url.trim())
+  : process.env.FRONTEND_URL 
+    ? [process.env.FRONTEND_URL]
+    : [];
+
 app.use(cors({
-  origin: [
-    'http://localhost:3000', 
-    'http://localhost:5173', 
-    'http://127.0.0.1:3000', 
-    'http://127.0.0.1:5173',
-    'http://0.0.0.0:5173',
-    'http://0.0.0.0:3000'
-  ],
+  origin: allowedOrigins.length > 0 ? allowedOrigins : true, // Allow all origins if not configured
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
@@ -71,7 +70,12 @@ app.use((req, res, next) => {
 });
 
 // Database Connection
-const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/education-erp';
+const mongoURI = process.env.MONGODB_URI;
+if (!mongoURI) {
+  console.error('❌ MONGODB_URI environment variable is required');
+  console.error('📋 Please set MONGODB_URI in backend/.env file');
+  process.exit(1);
+}
 
 let retryInterval = null;
 
@@ -219,9 +223,14 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log('🚀 EDUCATION ERP BACKEND SERVER');
   console.log('='.repeat(60));
   console.log(`✅ Server running on port ${PORT}`);
-  console.log(`📡 API Base URL: http://localhost:${PORT}/api`);
-  console.log(`🏥 Health Check: http://localhost:${PORT}/api/health`);
-  console.log(`🌐 CORS Enabled for: http://localhost:5173`);
+  const apiUrl = process.env.BACKEND_URL || `http://0.0.0.0:${PORT}`;
+  console.log(`📡 API Base URL: ${apiUrl}/api`);
+  console.log(`🏥 Health Check: ${apiUrl}/api/health`);
+  if (allowedOrigins.length > 0) {
+    console.log(`🌐 CORS Enabled for: ${allowedOrigins.join(', ')}`);
+  } else {
+    console.log(`🌐 CORS: All origins allowed (configure CLIENT_URL or FRONTEND_URL in .env)`);
+  }
   console.log(`📊 MongoDB: ${mongoose.connection.readyState === 1 ? '✅ Connected' : '⏳ Connecting...'}`);
   console.log('='.repeat(60));
   console.log('✅ Server is ready to accept connections\n');

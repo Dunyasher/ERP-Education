@@ -16,7 +16,7 @@ export default defineConfig({
     strictPort: false,
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
+        target: process.env.VITE_API_URL?.replace('/api', '') || process.env.BACKEND_URL || '',
         changeOrigin: true,
         secure: false,
         ws: true, // Enable WebSocket proxying
@@ -24,14 +24,15 @@ export default defineConfig({
         configure: (proxy, _options) => {
           proxy.on('error', (err, _req, _res) => {
             console.error('❌ Proxy error:', err.message);
-            console.error('❌ Backend server may not be running on http://localhost:5000');
-            console.error('❌ Please start the backend: npm run start:backend');
+            console.error('❌ Backend server connection failed');
+            console.error('❌ Please start the backend and configure VITE_API_URL or BACKEND_URL');
           });
           proxy.on('proxyReq', (proxyReq, req, _res) => {
             // Log only in development for cleaner output
             const isDev = process.env.NODE_ENV !== 'production';
             if (isDev) {
-              console.log(`🔄 ${req.method} ${req.url} -> http://localhost:5000${req.url}`);
+              const target = process.env.VITE_API_URL?.replace('/api', '') || process.env.BACKEND_URL || '';
+              console.log(`🔄 ${req.method} ${req.url} -> ${target}${req.url}`);
             }
           });
           proxy.on('proxyRes', (proxyRes, req, _res) => {

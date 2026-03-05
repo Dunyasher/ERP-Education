@@ -3,20 +3,9 @@ import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 // Determine the API base URL
 const getBaseUrl = () => {
   if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname;
-    const isDevelopment = 
-      hostname === 'localhost' || 
-      hostname === '127.0.0.1' || 
-      hostname === '' ||
-      window.location.port === '3000' ||
-      window.location.port === '5173';
-    
-    if (isDevelopment) {
-      return 'http://localhost:5000/api';
-    }
     return import.meta.env.VITE_API_URL || '/api';
   }
-  return import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+  return import.meta.env.VITE_API_URL || '/api';
 };
 
 const baseQuery = fetchBaseQuery({

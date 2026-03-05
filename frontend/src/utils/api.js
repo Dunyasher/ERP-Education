@@ -4,25 +4,10 @@ import axios from 'axios';
 // Use Vite proxy in development to avoid CORS issues
 let baseURL = '/api';
 
-// Use proxy path in development (Vite will proxy /api to http://localhost:5000)
+// Use environment variable for API URL
 if (typeof window !== 'undefined') {
-  const hostname = window.location.hostname;
-  const isDevelopment = hostname === 'localhost' || 
-                       hostname === '127.0.0.1' || 
-                       hostname === '' ||
-                       window.location.port === '3000' ||
-                       window.location.port === '5173' ||
-                       window.location.port === '5174' ||
-                       window.location.port === '5175' ||
-                       window.location.port === '5176';
-  
-  if (isDevelopment) {
-    // Use Vite proxy path - this avoids CORS issues
-    baseURL = '/api';
-  } else {
-    // Production: use environment variable or relative path
-    baseURL = import.meta.env.VITE_API_URL || '/api';
-  }
+  // Always use environment variable or relative path
+  baseURL = import.meta.env.VITE_API_URL || '/api';
 } else if (import.meta.env.VITE_API_URL) {
   // Server-side or build time: use environment variable if available
   baseURL = import.meta.env.VITE_API_URL;
