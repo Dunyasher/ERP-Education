@@ -7,7 +7,7 @@ import { Plus, Edit, Trash2, Search, DollarSign, Calendar, Filter, Download } fr
 const ExpenseManagement = () => {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState(true);
   const [editingExpense, setEditingExpense] = useState(null);
   const [filters, setFilters] = useState({
     startDate: '',
@@ -33,9 +33,9 @@ const ExpenseManagement = () => {
   });
 
   // Fetch expenses
-  const { data: expensesData = [], isLoading } = useQuery(
-    ['expenses', filters],
-    async () => {
+  const { data: expensesData = [], isLoading } = useQuery({
+    queryKey: ['expenses', filters],
+    queryFn: async () => {
       try {
         const params = new URLSearchParams();
         if (filters.startDate) params.append('startDate', filters.startDate);
@@ -50,7 +50,7 @@ const ExpenseManagement = () => {
         return [];
       }
     }
-  );
+  });
 
   // Ensure expenses is always an array
   const expenses = Array.isArray(expensesData) ? expensesData : [];
@@ -162,6 +162,9 @@ const ExpenseManagement = () => {
   // Calculate totals
   const totalAmount = filteredExpenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
 
+  const formatCurrency = (amount) =>
+    new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount || 0);
+
   const categoryOptions = [
     'operational',
     'utilities',
@@ -210,7 +213,7 @@ const ExpenseManagement = () => {
                 Total Expenses
               </p>
               <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">
-                ${totalAmount.toLocaleString()}
+                {formatCurrency(totalAmount)}
               </p>
             </div>
             <div className="bg-red-500 p-4 rounded-lg">
@@ -394,7 +397,7 @@ const ExpenseManagement = () => {
                     {expense.department || 'N/A'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-white">
-                    ${expense.amount?.toLocaleString() || '0.00'}
+                    {formatCurrency(expense.amount)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                     {expense.paymentMethod || 'N/A'}

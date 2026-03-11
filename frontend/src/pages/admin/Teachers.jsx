@@ -197,7 +197,7 @@ const Teachers = () => {
       // Handle network errors
       if (!error.response) {
         if (error.code === 'ECONNREFUSED' || error.message?.includes('Network Error') || error.message?.includes('ERR_NETWORK')) {
-          toast.error('Cannot connect to server. Please make sure the backend server is running on port 5000.');
+          toast.error('Cannot connect to server. From project root run: npm run dev. Ensure backend (port 5000) and MongoDB are running.');
           return;
         }
       }

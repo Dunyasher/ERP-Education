@@ -58,6 +58,11 @@ const expenseSchema = new mongoose.Schema({
   receiptNo: String,
   invoiceNo: String,
   notes: String,
+  teacherId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Teacher',
+    required: false
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
@@ -78,6 +83,7 @@ expenseSchema.pre('save', async function(next) {
 expenseSchema.index({ date: 1 });
 expenseSchema.index({ category: 1 });
 expenseSchema.index({ department: 1 });
+expenseSchema.index({ teacherId: 1, category: 1, date: 1 });
 
 module.exports = mongoose.model('Expense', expenseSchema);
 

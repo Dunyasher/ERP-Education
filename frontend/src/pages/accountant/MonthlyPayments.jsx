@@ -182,7 +182,7 @@ const MonthlyPayments = () => {
                       <th className="text-left py-2 xs:py-3 px-2 xs:px-4 text-xs xs:text-sm font-semibold text-gray-700 dark:text-gray-300 hidden md:table-cell">Course</th>
                       <th className="text-left py-2 xs:py-3 px-2 xs:px-4 text-xs xs:text-sm font-semibold text-gray-700 dark:text-gray-300">Monthly Fee</th>
                       <th className="text-left py-2 xs:py-3 px-2 xs:px-4 text-xs xs:text-sm font-semibold text-gray-700 dark:text-gray-300">Paid</th>
-                      <th className="text-left py-2 xs:py-3 px-2 xs:px-4 text-xs xs:text-sm font-semibold text-gray-700 dark:text-gray-300">Pending</th>
+                      <th className="text-left py-2 xs:py-3 px-2 xs:px-4 text-xs xs:text-sm font-semibold text-gray-700 dark:text-gray-300">Remaining</th>
                       <th className="text-left py-2 xs:py-3 px-2 xs:px-4 text-xs xs:text-sm font-semibold text-gray-700 dark:text-gray-300">Actions</th>
                     </tr>
                   </thead>
@@ -217,8 +217,8 @@ const MonthlyPayments = () => {
                           </td>
                           <td className={`block sm:table-cell py-2 xs:py-3 px-2 xs:px-4 font-semibold text-xs xs:text-sm sm:text-base ${
                             pending > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-gray-600 dark:text-gray-400'
-                          }`} data-label="Pending">
-                            <span className="sm:hidden font-semibold mr-2">Pending:</span>
+                          }`} data-label="Remaining">
+                            <span className="sm:hidden font-semibold mr-2">Remaining:</span>
                             Rs. {pending.toLocaleString()}
                           </td>
                           <td className="block sm:table-cell py-2 xs:py-3 px-2 xs:px-4 text-xs xs:text-sm sm:text-base" data-label="Actions">

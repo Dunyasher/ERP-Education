@@ -16,9 +16,9 @@ const StudentFeeHistory = () => {
     return '/admin/students';
   };
 
-  const { data, isLoading, error } = useQuery(
-    ['studentHistory', id],
-    async () => {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['studentHistory', id],
+    queryFn: async () => {
       try {
         if (!id) {
           throw new Error('Student ID is required');
@@ -51,12 +51,10 @@ const StudentFeeHistory = () => {
         throw err;
       }
     },
-    { 
-      enabled: !!id, 
-      retry: false,
-      refetchOnWindowFocus: false
-    }
-  );
+    enabled: !!id,
+    retry: false,
+    refetchOnWindowFocus: false
+  });
 
   const formatCurrency = (amount) => {
     if (!amount && amount !== 0) return '$0';

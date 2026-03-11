@@ -849,7 +849,7 @@ const Classes = () => {
                       <th>Email</th>
                       <th>Total Fee</th>
                       <th>Paid</th>
-                      <th>Pending</th>
+                      <th>Remaining</th>
                       <th>Status</th>
                     </tr>
                   </thead>
@@ -968,7 +968,7 @@ const Classes = () => {
                             Paid: <span className="font-semibold">{formatCurrency(schedulePaidFee)}</span>
                           </p>
                           <p className="text-red-600 dark:text-red-400">
-                            Pending: <span className="font-semibold">{formatCurrency(schedulePendingFee)}</span>
+                            Remaining: <span className="font-semibold">{formatCurrency(schedulePendingFee)}</span>
                           </p>
                         </div>
                       </div>

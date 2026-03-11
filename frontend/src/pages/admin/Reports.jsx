@@ -33,6 +33,7 @@ const Reports = () => {
   const allReports = [
     { id: 'accounts-summary', name: 'Accounts Summary Report', icon: FileBarChart, path: '/admin/reports/accounts-summary' },
     { id: 'admission-date', name: 'Admission Date Report', icon: Calendar, path: '/admin/reports/admission-date' },
+    { id: 'date-report', name: 'Date Report', icon: Calendar, path: '/admin/reports/date-report' },
     { id: 'attendance', name: 'Attendance Report', icon: Clock, path: '/admin/reports/attendance' },
     { id: 'balance-sheet', name: 'Balance Sheet', icon: FileBarChart, path: '/admin/reports/balance-sheet' },
     { id: 'detailed-expense', name: 'Detailed Expense Report', icon: TrendingDown, path: '/admin/reports/detailed-expense' },

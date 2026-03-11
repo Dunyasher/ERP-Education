@@ -83,8 +83,9 @@ export const login = createAsyncThunk(
   'auth/login',
   async ({ email, password }, { rejectWithValue }) => {
     try {
-      // Use API default timeout (20s) for login request
-      const response = await api.post('/auth/login', { email, password });
+      const trimmedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+      const trimmedPassword = typeof password === 'string' ? password.trim() : '';
+      const response = await api.post('/auth/login', { email: trimmedEmail, password: trimmedPassword });
 
       const { token, user } = response.data;
 

@@ -181,7 +181,7 @@ const AccountantDashboard = () => {
         <div className="card animate-fade-in">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Pending Fees</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Remaining Fees</p>
               <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
                 Rs. {stats?.pendingFees?.toLocaleString() || 0}
               </p>
@@ -315,7 +315,7 @@ const AccountantDashboard = () => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
                     <DollarSign className="w-4 h-4" />
-                    <span className="text-sm">Pending</span>
+                    <span className="text-sm">Remaining</span>
                   </div>
                   <span className="font-semibold text-red-600 dark:text-red-400">
                     {formatCurrency(classItem.totalPending || 0)}

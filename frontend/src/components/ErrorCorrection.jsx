@@ -41,30 +41,27 @@ const ErrorCorrection = ({ student, onClose, showOverlay = true }) => {
     feeStructureId: student?.feeInfo?.feeStructureId || ''
   });
 
-  const correctionMutation = useMutation(
-    async (data) => {
-      return api.put('/accountant/correct-error', {
+  const correctionMutation = useMutation({
+    mutationFn: async (data) =>
+      api.put('/accountant/correct-error', {
         type: errorType,
         studentId: student._id,
         corrections: data
-      });
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['students'] });
+      queryClient.invalidateQueries({ queryKey: ['accountantStats'] });
+      toast.success('Error corrected successfully!');
+      onClose();
     },
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['students'] });
-        queryClient.invalidateQueries({ queryKey: ['accountantStats'] });
-        toast.success('Error corrected successfully!');
-        onClose();
-      },
-      onError: (error) => {
-        const errorMessage = error.response?.data?.message || 
-                           error.response?.data?.error || 
-                           error.message || 
-                           'Failed to correct error';
-        toast.error(errorMessage);
-      }
+    onError: (error) => {
+      const errorMessage = error.response?.data?.message || 
+                         error.response?.data?.error || 
+                         error.message || 
+                         'Failed to correct error';
+      toast.error(errorMessage);
     }
-  );
+  });
 
   const handleSubmit = async (e) => {
     e.preventDefault();

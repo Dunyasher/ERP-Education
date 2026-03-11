@@ -75,12 +75,14 @@ const Layout = () => {
     { name: 'Student Management', path: '/admin/students', icon: Users, hasSubmenu: true },
     { name: 'Admission Management', path: '/admin/students/new', icon: UserCheck, hasSubmenu: true },
     { name: 'Fee Payment', path: '/admin/fee-payment', icon: DollarSign, hasSubmenu: false },
+    { name: 'Fees Overview', path: '/admin/fees/overview', icon: DollarSign, hasSubmenu: false },
     { name: 'Staff Management', path: '/admin/staff', icon: GraduationCap, hasSubmenu: false },
     { name: 'Accountant Management', path: '/admin/accountants', icon: DollarSign, hasSubmenu: false },
     { name: 'ID Card Printing', path: '/admin/id-card-menu', icon: CreditCard, hasSubmenu: true },
     { name: 'Public Messages', path: '/admin/messages', icon: MessageSquare, hasSubmenu: false, badge: 3 },
     { name: 'Classes', path: '/admin/classes', icon: BookOpen, hasSubmenu: false },
     { name: 'Institute Types', path: '/admin/institute-types', icon: School, hasSubmenu: false },
+    { name: 'Expenses', path: '/admin/expenses', icon: TrendingDown, hasSubmenu: false },
     { name: 'Manage Attendance', path: '/admin/attendance/manual', icon: BarChart3, hasSubmenu: true },
     { name: 'Online Classes', path: '/admin/online-classes', icon: Monitor, hasSubmenu: false },
     { name: 'Timetable Management', path: '/admin/timetable', icon: Clock, hasSubmenu: false },
@@ -91,6 +93,7 @@ const Layout = () => {
     { name: 'Colleges', path: '/admin/settings', icon: School },
     { name: 'All Students', path: '/admin/students', icon: Users },
     { name: 'All Courses', path: '/admin/courses', icon: BookOpen },
+    { name: 'Expenses', path: '/admin/expenses', icon: TrendingDown },
     { name: 'Reports', path: '/admin/reports', icon: BarChart3 },
     { name: 'Settings', path: '/admin/settings', icon: Settings },
   ];
@@ -111,7 +114,9 @@ const Layout = () => {
 
   const accountantMenu = [
     { name: 'Dashboard', path: '/accountant/dashboard', icon: LayoutDashboard },
+    { name: 'Expenses', path: '/admin/expenses', icon: TrendingDown },
     { name: 'Admissions', path: '/accountant/students', icon: Users },
+    { name: 'Fees Overview', path: '/admin/fees/overview', icon: DollarSign },
     { name: 'Monthly Payments', path: '/accountant/monthly-payments', icon: Calendar },
     { name: 'Payment Records', path: '/accountant/payment-records', icon: FileText },
     { name: 'Reports', path: '/accountant/reports', icon: BarChart3 },
@@ -167,21 +172,12 @@ const Layout = () => {
         }`}
       >
         <div className="h-full flex flex-col">
-          <div className="p-6 border-b border-blue-800">
-            <h1 className="text-2xl font-bold text-white">Education ERP</h1>
-            <p className="text-sm text-blue-200 mt-1">
-              {user?.role === 'super_admin'
-                ? 'Super Admin Panel'
-                : user?.role === 'admin' 
-                ? 'Admin Panel' 
-                : user?.role === 'teacher' 
-                ? 'Teacher Portal'
-                : user?.role === 'accountant'
-                ? 'Accountant Portal'
-                : 'Student Portal'}
+          <div className="p-4 border-b border-blue-800 flex-shrink-0">
+            <h1 className="text-lg font-bold text-white">Education ERP</h1>
+            <p className="text-xs text-blue-200 mt-0.5">
+              {user?.role === 'super_admin' ? 'Super Admin' : user?.role === 'admin' ? 'Admin Panel' : user?.role === 'teacher' ? 'Teacher Portal' : user?.role === 'accountant' ? 'Accountant Portal' : 'Student Portal'}
             </p>
           </div>
-
           <nav className="flex-1 p-4 overflow-y-auto">
             <ul className="space-y-0.5">
               {menu.map((item) => {
@@ -276,33 +272,28 @@ const Layout = () => {
               })}
             </ul>
 
-            {/* User Account Section - Inside Scroll Area */}
-            <div className="mt-6 pt-6 border-t border-blue-800">
-              {/* User Account Information */}
-              <div className="mb-4 px-4 py-2">
-                <p className="text-base font-bold text-white mb-1">
+            {/* User Account Section - compact sidebar footer */}
+            <div className="mt-4 pt-4 border-t border-blue-800">
+              <div className="mb-2 px-3 py-1">
+                <p className="text-xs font-semibold text-white truncate" title={`${user?.profile?.firstName} ${user?.profile?.lastName}`}>
                   {user?.role === 'admin' ? 'Admin' : user?.role === 'super_admin' ? 'Super Admin' : user?.role === 'teacher' ? 'Teacher' : user?.role === 'accountant' ? 'Accountant' : 'Student'} {user?.profile?.firstName} {user?.profile?.lastName}
                 </p>
-                <p className="text-sm text-blue-200">{user?.email}</p>
+                <p className="text-xs text-blue-200 truncate" title={user?.email}>{user?.email}</p>
               </div>
-              
-              {/* Dark Mode Button */}
               <button
                 onClick={toggleTheme}
-                className="w-full mb-2 flex items-center space-x-3 px-4 py-3 bg-blue-800 text-white hover:bg-blue-700 transition-colors"
-                title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                className="w-full mb-1 flex items-center gap-2 px-3 py-2 bg-blue-800 text-white hover:bg-blue-700 transition-colors text-sm"
+                title={theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
               >
-                <Moon size={20} className="text-white" />
-                <span className="font-medium">Dark Mode</span>
+                <Moon size={16} className="flex-shrink-0 text-white" />
+                <span>Dark Mode</span>
               </button>
-              
-              {/* Logout Button */}
               <button
                 onClick={handleLogout}
-                className="w-full flex items-center space-x-3 px-4 py-3 text-white hover:bg-blue-800 transition-colors"
+                className="w-full flex items-center gap-2 px-3 py-2 text-white hover:bg-blue-800 transition-colors text-sm"
               >
-                <LogOut size={20} className="text-white" />
-                <span className="font-medium">Logout</span>
+                <LogOut size={16} className="flex-shrink-0 text-white" />
+                <span>Logout</span>
               </button>
             </div>
           </nav>

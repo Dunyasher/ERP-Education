@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
-import { Plus, Edit, Trash2, Search, School, Save, X } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, School, Save, X, Eye, EyeOff } from 'lucide-react';
 
 const InstituteTypes = () => {
   const queryClient = useQueryClient();
@@ -66,6 +66,30 @@ const InstituteTypes = () => {
       toast.error(error.response?.data?.message || 'Failed to save institute type');
     }
   });
+
+  // Toggle hide/show (isActive) mutation
+  const toggleVisibilityMutation = useMutation({
+    mutationFn: async ({ id, isActive }) => api.put(`/institute-types/${id}`, { isActive }),
+    onSuccess: async (_, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['instituteTypes'] });
+      await queryClient.invalidateQueries({ queryKey: ['activeInstituteTypes'] });
+      await queryClient.invalidateQueries({ queryKey: ['classes'] });
+      await queryClient.invalidateQueries({ queryKey: ['courses'] });
+      await queryClient.invalidateQueries({ queryKey: ['categories'] });
+      await queryClient.invalidateQueries({ queryKey: ['students'] });
+      await queryClient.invalidateQueries({ queryKey: ['teachers'] });
+      await queryClient.invalidateQueries({ queryKey: ['staffCategories'] });
+      toast.success(variables.isActive ? 'Institute type is now visible everywhere.' : 'Institute type is now hidden everywhere.');
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to update visibility');
+    }
+  });
+
+  const handleToggleVisibility = (type) => {
+    const newActive = !type.isActive;
+    toggleVisibilityMutation.mutate({ id: type._id, isActive: newActive });
+  };
 
   // Delete institute type mutation
   const deleteMutation = useMutation({
@@ -291,6 +315,19 @@ const InstituteTypes = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleToggleVisibility(type)}
+                            disabled={toggleVisibilityMutation.isLoading}
+                            className={`flex items-center gap-1.5 px-2 py-1 rounded text-sm ${
+                              type.isActive
+                                ? 'text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/30'
+                                : 'text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/30'
+                            }`}
+                            title={type.isActive ? 'Hide everywhere' : 'Show everywhere'}
+                          >
+                            {type.isActive ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            <span>{type.isActive ? 'Hide' : 'Show'}</span>
+                          </button>
                           <button
                             onClick={() => handleEdit(type)}
                             className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"

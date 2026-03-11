@@ -14,24 +14,33 @@ const { authenticate } = require('../middleware/auth');
 // @access  Private (Admin)
 router.get('/admin', authenticate, async (req, res) => {
   try {
-    const { instituteType } = req.query;
+    const { instituteType, month, year, date } = req.query;
     const query = {};
     if (instituteType) {
       query['academicInfo.instituteType'] = instituteType;
     }
-    
-    // Get current month start and end dates
-    const now = new Date();
-    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-    
-    // Get today's start and end dates
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-    
-    // Get current year start and end dates
-    const currentYearStart = new Date(now.getFullYear(), 0, 1);
-    const currentYearEnd = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+
+    // Use selected month/year/date or fallback to current
+    const viewYear = year ? parseInt(year) : new Date().getFullYear();
+    const viewMonth = month ? parseInt(month) : new Date().getMonth() + 1;
+    let viewDate;
+    if (date) {
+      viewDate = new Date(date);
+    } else {
+      viewDate = new Date(viewYear, viewMonth - 1, 1);
+    }
+
+    // Get month start and end dates
+    const currentMonthStart = new Date(viewYear, viewMonth - 1, 1);
+    const currentMonthEnd = new Date(viewYear, viewMonth, 0, 23, 59, 59);
+
+    // Get "today" (selected date) start and end
+    const todayStart = new Date(viewDate.getFullYear(), viewDate.getMonth(), viewDate.getDate(), 0, 0, 0, 0);
+    const todayEnd = new Date(viewDate.getFullYear(), viewDate.getMonth(), viewDate.getDate(), 23, 59, 59, 999);
+
+    // Get year start and end dates
+    const currentYearStart = new Date(viewYear, 0, 1);
+    const currentYearEnd = new Date(viewYear, 11, 31, 23, 59, 59, 999);
     
     // Get all students with their courses and categories for department breakdown
     let students = [];
@@ -278,11 +287,10 @@ router.get('/admin', authenticate, async (req, res) => {
     // Calculate dues (pending fees)
     let duesAmount = 0;
     let duesCount = 0;
+    const invoiceMatch = { status: { $in: ['pending', 'partial', 'overdue'] }, pendingAmount: { $gt: 0 } };
+    if (req.collegeId) invoiceMatch.collegeId = req.collegeId;
     try {
-      const pendingInvoices = await Invoice.find({
-        status: { $in: ['pending', 'partial', 'overdue'] },
-        pendingAmount: { $gt: 0 }
-      });
+      const pendingInvoices = await Invoice.find(invoiceMatch);
       duesAmount = pendingInvoices.reduce((sum, inv) => sum + (inv.pendingAmount || 0), 0);
       duesCount = pendingInvoices.length;
     } catch (duesError) {
@@ -316,11 +324,11 @@ router.get('/admin', authenticate, async (req, res) => {
         Course.countDocuments(instituteType ? { instituteType } : {}),
         Student.countDocuments({ ...query, 'academicInfo.status': 'active' }),
         Invoice.aggregate([
-          { $match: { status: 'paid' } },
+          { $match: req.collegeId ? { status: 'paid', collegeId: req.collegeId } : { status: 'paid' } },
           { $group: { _id: null, total: { $sum: '$paidAmount' } } }
         ]).catch(() => []),
         Invoice.aggregate([
-          { $match: { status: { $in: ['pending', 'partial'] } } },
+          { $match: req.collegeId ? { status: { $in: ['pending', 'partial'] }, collegeId: req.collegeId } : { status: { $in: ['pending', 'partial'] } } },
           { $group: { _id: null, total: { $sum: '$pendingAmount' } } }
         ]).catch(() => [])
       ]);
@@ -391,6 +399,58 @@ router.get('/admin', authenticate, async (req, res) => {
       console.error('Error fetching admission statistics:', admissionError.message);
       // Continue with default values
     }
+
+    // Monthly financial summary (last 12 months) for line chart
+    let monthlyFinancialSummary = [];
+    try {
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const monthlyIncomeAgg = await Invoice.aggregate([
+        { $match: { status: { $in: ['paid', 'partial'] } } },
+        {
+          $group: {
+            _id: {
+              year: { $year: { $ifNull: ['$paymentDate', '$updatedAt'] } },
+              month: { $month: { $ifNull: ['$paymentDate', '$updatedAt'] } }
+            },
+            total: { $sum: '$paidAmount' }
+          }
+        }
+      ]);
+      const monthlyExpenseAgg = await Expense.aggregate([
+        {
+          $group: {
+            _id: {
+              year: { $year: '$date' },
+              month: { $month: '$date' }
+            },
+            total: { $sum: '$amount' }
+          }
+        }
+      ]);
+      const incomeMap = {};
+      monthlyIncomeAgg.forEach(({ _id, total }) => {
+        const key = `${_id.year}-${_id.month}`;
+        incomeMap[key] = total;
+      });
+      const expenseMap = {};
+      monthlyExpenseAgg.forEach(({ _id, total }) => {
+        const key = `${_id.year}-${_id.month}`;
+        expenseMap[key] = total;
+      });
+      const now = new Date();
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
+        monthlyFinancialSummary.push({
+          month: monthNames[d.getMonth()],
+          monthKey: key,
+          income: incomeMap[key] || 0,
+          expense: expenseMap[key] || 0
+        });
+      }
+    } catch (monthlyError) {
+      console.error('Error fetching monthly financial summary:', monthlyError.message);
+    }
     
     res.json({
       totalStudents,
@@ -416,7 +476,9 @@ router.get('/admin', authenticate, async (req, res) => {
       // Admission statistics
       admissionsThisMonth,
       admissionsToday,
-      recentAdmissions
+      recentAdmissions,
+      // Monthly financial summary for line chart
+      monthlyFinancialSummary
     });
   } catch (error) {
     console.error('Admin dashboard error:', error);
@@ -475,11 +537,22 @@ router.get('/student', authenticate, async (req, res) => {
         .limit(10)
     ]);
     
+    const totalFees = student.feeInfo?.totalFee ?? 0;
+    const paidFees = student.feeInfo?.paidFee ?? 0;
+    const pendingFees = student.feeInfo?.remainingFee ?? student.feeInfo?.pendingFee ?? Math.max(0, totalFees - paidFees);
+
+    const attendancePresent = myAttendance.filter(a => a.status === 'present').length;
+
     res.json({
       student,
       myInvoices,
       myAttendance,
-      pendingFee: student.feeInfo.pendingFee
+      myCourses: student.academicInfo?.courseId ? [{ name: student.academicInfo.courseId.name, category: student.academicInfo.courseId.categoryId?.name || 'N/A' }] : [],
+      totalFees,
+      paidFees,
+      pendingFees,
+      pendingFee: pendingFees,
+      attendance: { present: attendancePresent, total: myAttendance.length }
     });
   } catch (error) {
     console.error('Student dashboard error:', error);

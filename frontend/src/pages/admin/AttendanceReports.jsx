@@ -39,9 +39,9 @@ const AttendanceReports = () => {
   });
 
   // Fetch attendance summary
-  const { data: reportData, isLoading } = useQuery(
-    ['attendanceReport', startDate, endDate, selectedCourse, selectedClassName, selectedSection, attendanceType],
-    async () => {
+  const { data: reportData, isLoading } = useQuery({
+    queryKey: ['attendanceReport', startDate, endDate, selectedCourse, selectedClassName, selectedSection, attendanceType],
+    queryFn: async () => {
       const params = {
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString()
@@ -53,13 +53,8 @@ const AttendanceReports = () => {
       
       const response = await api.get('/attendance/reports/summary', { params });
       return response.data;
-    },
-    {
-      onError: (error) => {
-        toast.error(error.response?.data?.message || 'Failed to fetch attendance report');
-      }
     }
-  );
+  });
 
   const { summary = {}, byStudent = [], byDate = [], records = [] } = reportData || {};
 
