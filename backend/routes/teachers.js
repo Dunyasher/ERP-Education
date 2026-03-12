@@ -140,7 +140,7 @@ router.post('/', authenticate, authorize('admin', 'super_admin'), async (req, re
       return res.status(400).json({ message: 'Request body is required' });
     }
 
-    const { email, password, personalInfo, contactInfo, qualification, employment, salary, staffCategoryId, biometric } = req.body;
+    const { email, password, personalInfo, contactInfo, qualification, employment, salary, advance, staffCategoryId, biometric } = req.body;
     
     console.log('📥 Extracted data:', {
       email: email ? 'provided' : 'missing',
@@ -383,11 +383,21 @@ router.post('/', authenticate, authorize('admin', 'super_admin'), async (req, re
         teacherData.salary.ifscCode = salary.ifscCode.trim();
       }
     } else {
-      // Initialize salary with default values
       teacherData.salary = {
         basicSalary: 0,
         allowances: 0,
         totalSalary: 0
+      };
+    }
+    
+    // Add advance/loan if provided
+    if (advance && typeof advance === 'object') {
+      teacherData.advance = {
+        amount: parseFloat(advance.amount) || 0,
+        deductionPerMonth: parseFloat(advance.deductionPerMonth) || 0,
+        balance: parseFloat(advance.balance) ?? parseFloat(advance.amount) ?? 0,
+        dateTaken: advance.dateTaken ? new Date(advance.dateTaken) : undefined,
+        notes: advance.notes || ''
       };
     }
     

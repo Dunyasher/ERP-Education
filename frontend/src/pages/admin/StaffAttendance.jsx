@@ -130,7 +130,7 @@ const StaffAttendance = () => {
         <ol className="flex items-center space-x-2">
           <li><Link to="/admin/dashboard" className="hover:text-blue-600">Dashboard</Link></li>
           <li><ChevronRight size={16} className="inline" /></li>
-          <li><Link to="/admin/attendance" className="hover:text-blue-600">Manage Attendance</Link></li>
+          <li><Link to="/admin/attendance/manual" className="hover:text-blue-600">Manage Attendance</Link></li>
           <li><ChevronRight size={16} className="inline" /></li>
           <li className="text-gray-900 dark:text-white">Staff Attendance</li>
         </ol>

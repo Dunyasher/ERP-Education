@@ -70,7 +70,7 @@ const teacherSchema = new mongoose.Schema({
     },
     status: {
       type: String,
-      enum: ['active', 'inactive', 'resigned'],
+      enum: ['active', 'inactive', 'resigned', 'on_leave'],
       default: 'active'
     },
     subjects: [{
@@ -88,6 +88,14 @@ const teacherSchema = new mongoose.Schema({
     bankAccount: String,
     bankName: String,
     ifscCode: String
+  },
+  // Advance/Loan taken by teacher - deducted from salary each month
+  advance: {
+    amount: { type: Number, default: 0 },           // Total advance/loan taken
+    deductionPerMonth: { type: Number, default: 0 }, // Monthly deduction from salary
+    balance: { type: Number, default: 0 },          // Remaining balance to repay
+    dateTaken: Date,
+    notes: String
   },
   // Biometric data for attendance (face & fingerprint)
   biometric: {

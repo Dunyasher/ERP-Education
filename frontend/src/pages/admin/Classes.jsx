@@ -27,7 +27,8 @@ import {
   XCircle,
   Eye,
   BarChart3,
-  MoreVertical
+  MoreVertical,
+  UserX
 } from 'lucide-react';
 
 const Classes = () => {
@@ -65,6 +66,7 @@ const Classes = () => {
     days: [],
     room: ''
   });
+  const [editingClass, setEditingClass] = useState(null);
   const [newClassForm, setNewClassForm] = useState({
     name: '',
     instituteType: '',
@@ -372,29 +374,26 @@ const Classes = () => {
     }
   });
 
-  // Delete class mutation
-  const deleteClassMutation = useMutation({
-    mutationFn: async (id) => api.delete(`/courses/${id}`),
-    onSuccess: async (response, deletedId) => {
-      // Optimistically remove class from cache immediately
+  // Deactivate class mutation (sets status to archived)
+  const deactivateClassMutation = useMutation({
+    mutationFn: async (id) => api.put(`/courses/${id}`, { status: 'archived' }),
+    onSuccess: async (response, deactivatedId) => {
       queryClient.setQueryData(['classes'], (oldClasses = []) => {
-        const filtered = oldClasses.filter(classItem => classItem._id !== deletedId);
-        return filtered;
+        return oldClasses.map(classItem =>
+          classItem._id === deactivatedId ? { ...classItem, status: 'archived' } : classItem
+        );
       });
-      
-      // Invalidate and refetch classes
       queryClient.invalidateQueries({ queryKey: ['classes'] });
-      
-      toast.success('Class deleted successfully!');
+      toast.success('Class deactivated successfully!');
     },
     onError: (error) => {
-      toast.error(error.response?.data?.message || 'Failed to delete class');
+      toast.error(error.response?.data?.message || 'Failed to deactivate class');
     }
   });
 
-  const handleDelete = (id, className) => {
-    if (window.confirm(`Are you sure you want to delete "${className}"? This action cannot be undone.`)) {
-      deleteClassMutation.mutate(id);
+  const handleDeactivate = (id, className) => {
+    if (window.confirm(`Are you sure you want to deactivate "${className}"? You can reactivate it later from the edit form.`)) {
+      deactivateClassMutation.mutate(id);
     }
   };
 
@@ -645,6 +644,61 @@ const Classes = () => {
     }
   });
 
+  // Update class mutation
+  const updateClassMutation = useMutation({
+    mutationFn: async ({ id, data }) => {
+      const courseData = {
+        name: data.name,
+        instituteType: data.instituteType,
+        categoryId: data.categoryId || undefined,
+        instructorId: data.instructorId || null,
+        capacity: data.capacity || 50,
+        status: data.status || 'published',
+        fee: {
+          amount: data.feeAmount || 0,
+          currency: 'USD'
+        }
+      };
+      const response = await api.put(`/courses/${id}`, courseData);
+      return response.data;
+    },
+    onSuccess: () => {
+      setShowCreateClassForm(false);
+      setEditingClass(null);
+      setNewClassForm({
+        name: '',
+        instituteType: '',
+        categoryId: '',
+        instructorId: '',
+        room: '',
+        capacity: 50,
+        feeAmount: 0,
+        status: 'published'
+      });
+      queryClient.invalidateQueries({ queryKey: ['classes'] });
+      queryClient.invalidateQueries({ queryKey: ['courses'] });
+      toast.success('Class updated successfully!');
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to update class');
+    }
+  });
+
+  const handleEditClass = (classItem) => {
+    setEditingClass(classItem);
+    setNewClassForm({
+      name: classItem.name || '',
+      instituteType: classItem.instituteType || '',
+      categoryId: classItem.categoryId?._id || classItem.categoryId || '',
+      instructorId: classItem.instructorId || '',
+      room: classItem.room || '',
+      capacity: classItem.capacity || 50,
+      feeAmount: classItem.fee?.amount ?? classItem.feeAmount ?? 0,
+      status: classItem.status || 'published'
+    });
+    setShowCreateClassForm(true);
+  };
+
   // Fill sample data for testing
   const fillSampleData = () => {
     const sampleData = {
@@ -673,11 +727,11 @@ const Classes = () => {
       toast.error('Please select an institute type');
       return;
     }
-    if (false) {
-      toast.error('Please select at least one day');
-      return;
+    if (editingClass) {
+      updateClassMutation.mutate({ id: editingClass._id, data: newClassForm });
+    } else {
+      createClassMutation.mutate(newClassForm);
     }
-    createClassMutation.mutate(newClassForm);
   };
 
 
@@ -1195,30 +1249,40 @@ const Classes = () => {
   // Main classes list view
   return (
     <div className="space-y-6">
-      {/* Header with illustration */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-start gap-4">
-          <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shrink-0">
-            <BookOpen className="w-7 h-7 text-white" />
-          </div>
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-1">
-              Classes A - Z
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400 text-sm">
-              View all classes, student enrollment, and fee collection details (sorted alphabetically)
-            </p>
+      {/* Summary Cards - one row at top */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 text-white p-5 shadow-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-blue-100 text-sm font-medium">Total Classes</p>
+              <p className="text-2xl font-bold mt-1">{summaryStats.totalClasses}</p>
+            </div>
+            <BookOpen className="w-10 h-10 text-blue-200" />
           </div>
         </div>
-        {/* Decorative illustration */}
-        <div className="hidden sm:flex w-24 h-24 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30 items-center justify-center shrink-0 overflow-hidden">
-          <GraduationCap className="w-12 h-12 text-blue-600 dark:text-blue-400" />
+        <div className="rounded-xl bg-gradient-to-br from-green-500 to-green-600 text-white p-5 shadow-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-green-100 text-sm font-medium">Total Students</p>
+              <p className="text-2xl font-bold mt-1">{summaryStats.totalStudents}</p>
+            </div>
+            <Users className="w-10 h-10 text-green-200" />
+          </div>
+        </div>
+        <div className="rounded-xl bg-gradient-to-br from-orange-400 to-orange-600 text-white p-5 shadow-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-orange-100 text-sm font-medium">Total Fees</p>
+              <p className="text-2xl font-bold mt-1">{formatCurrency(summaryStats.totalFees)}</p>
+            </div>
+            <DollarSign className="w-10 h-10 text-orange-200" />
+          </div>
         </div>
       </div>
 
       {/* Search and Filter Bar */}
-      <div className="flex flex-wrap gap-3 items-center">
-        <div className="relative flex-1 min-w-[220px]">
+      <div className="flex flex-nowrap gap-3 items-center overflow-x-auto">
+        <div className="relative w-[250px]">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 w-5 h-5" />
           <input
             type="text"
@@ -1231,7 +1295,7 @@ const Classes = () => {
         <select
           value={filters.categoryId}
           onChange={(e) => setFilters({ ...filters, categoryId: e.target.value })}
-          className="px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[120px]"
+          className="w-[250px] px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
         >
           <option value="">Grade</option>
           {allCategories.map((cat) => (
@@ -1241,7 +1305,7 @@ const Classes = () => {
         <select
           value={sectionFilter}
           onChange={(e) => setSectionFilter(e.target.value)}
-          className="px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[120px]"
+          className="w-[250px] px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
         >
           <option value="">Section</option>
           {['A', 'B', 'C', 'D', 'E'].map((s) => (
@@ -1249,7 +1313,7 @@ const Classes = () => {
           ))}
         </select>
         <button
-          onClick={() => setShowCreateClassForm(true)}
+          onClick={() => { setEditingClass(null); setShowCreateClassForm(true); }}
           className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors shrink-0"
         >
           <Plus className="w-5 h-5" />
@@ -1257,8 +1321,8 @@ const Classes = () => {
         </button>
       </div>
 
-      {/* Main content: Table + Sidebar */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
+      {/* Main content: Table */}
+      <div>
         {/* Classes Table */}
         <div className="card overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -1335,6 +1399,20 @@ const Classes = () => {
                             <Eye className="w-4 h-4" />
                           </button>
                           <button
+                            onClick={(e) => { e.stopPropagation(); handleEditClass(classItem); }}
+                            className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg"
+                            title="Edit"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleDeactivate(classItem._id, classItem.name); }}
+                            className="p-2 text-gray-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-lg"
+                            title="Deactivate"
+                          >
+                            <UserX className="w-4 h-4" />
+                          </button>
+                          <button
                             onClick={() => setSelectedClass(classItem)}
                             className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg"
                             title="Analytics"
@@ -1356,37 +1434,6 @@ const Classes = () => {
             </tbody>
           </table>
         </div>
-
-        {/* Right Sidebar - Summary Cards */}
-        <div className="space-y-4">
-          <div className="rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 text-white p-5 shadow-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-blue-100 text-sm font-medium">Total Classes</p>
-                <p className="text-2xl font-bold mt-1">{summaryStats.totalClasses}</p>
-              </div>
-              <BookOpen className="w-10 h-10 text-blue-200" />
-            </div>
-          </div>
-          <div className="rounded-xl bg-gradient-to-br from-green-500 to-green-600 text-white p-5 shadow-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-green-100 text-sm font-medium">Total Students</p>
-                <p className="text-2xl font-bold mt-1">{summaryStats.totalStudents}</p>
-              </div>
-              <Users className="w-10 h-10 text-green-200" />
-            </div>
-          </div>
-          <div className="rounded-xl bg-gradient-to-br from-orange-400 to-orange-600 text-white p-5 shadow-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-orange-100 text-sm font-medium">Total Fees</p>
-                <p className="text-2xl font-bold mt-1">{formatCurrency(summaryStats.totalFees)}</p>
-              </div>
-              <DollarSign className="w-10 h-10 text-orange-200" />
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Create New Class Modal */}
@@ -1395,11 +1442,12 @@ const Classes = () => {
           <div className="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full my-8 p-6">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
-                Add New Class
+                {editingClass ? 'Edit Class' : 'Add New Class'}
               </h3>
               <button
                 onClick={() => {
                   setShowCreateClassForm(false);
+                  setEditingClass(null);
                   setNewClassForm({
                     name: '',
                     instituteType: '',
@@ -1562,11 +1610,13 @@ const Classes = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={createClassMutation.isLoading}
+                  disabled={createClassMutation.isLoading || updateClassMutation.isLoading}
                   className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50 flex items-center gap-2 font-semibold"
                 >
                   <Save className="w-5 h-5" />
-                  {createClassMutation.isLoading ? 'Creating...' : 'Create Class'}
+                  {editingClass
+                    ? (updateClassMutation.isLoading ? 'Updating...' : 'Update Class')
+                    : (createClassMutation.isLoading ? 'Creating...' : 'Create Class')}
                 </button>
               </div>
             </form>

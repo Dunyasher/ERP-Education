@@ -287,10 +287,12 @@ router.get('/:id/history', authenticate, addCollegeFilter, async (req, res) => {
       }
     }
 
-    // Calculate payment summary
+    // Calculate payment summary - Remaining = Total Fee - Paid Fee (always compute)
     const totalFee = student.feeInfo?.totalFee || 0;
+    const admissionFee = student.feeInfo?.admissionFee || 0;
+    const totalPayable = totalFee + admissionFee; // Full amount (totalFee may be regular only per schema)
     const totalPaid = student.feeInfo?.paidFee || 0;
-    const pendingFee = student.feeInfo?.pendingFee || (totalFee - totalPaid);
+    const pendingFee = Math.max(0, totalPayable - totalPaid);
 
     // Prepare payment history from invoices with transaction details
     const paymentHistory = (invoices || []).map(invoice => {
@@ -378,7 +380,7 @@ router.get('/:id/history', authenticate, addCollegeFilter, async (req, res) => {
       paymentInstallments: allPaymentInstallments,
       monthlyBreakdown: monthlyBreakdown,
       summary: {
-        totalFee,
+        totalFee: totalPayable, // Full amount (totalFee + admissionFee) for correct Remaining = Total - Paid
         totalPaid,
         pendingFee,
         totalInvoices: (invoices || []).length,
@@ -440,8 +442,10 @@ router.get('/:id/history', authenticate, addCollegeFilter, async (req, res) => {
       if (fallbackStudent) {
         console.log('⚠️ Returning fallback student data due to error');
         const fallbackTotalFee = fallbackStudent.feeInfo?.totalFee || 0;
+        const fallbackAdmissionFee = fallbackStudent.feeInfo?.admissionFee || 0;
+        const fallbackTotalPayable = fallbackTotalFee + fallbackAdmissionFee;
         const fallbackTotalPaid = fallbackStudent.feeInfo?.paidFee || 0;
-        const fallbackPendingFee = fallbackStudent.feeInfo?.pendingFee || (fallbackTotalFee - fallbackTotalPaid);
+        const fallbackPendingFee = Math.max(0, fallbackTotalPayable - fallbackTotalPaid);
         
         return res.json({
           student: fallbackStudent,
@@ -449,7 +453,7 @@ router.get('/:id/history', authenticate, addCollegeFilter, async (req, res) => {
           paymentInstallments: [],
           monthlyBreakdown: [],
           summary: {
-            totalFee: fallbackTotalFee,
+            totalFee: fallbackTotalPayable,
             totalPaid: fallbackTotalPaid,
             pendingFee: fallbackPendingFee,
             totalInvoices: 0,
