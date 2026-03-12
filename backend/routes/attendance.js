@@ -31,7 +31,7 @@ router.get('/', authenticate, addCollegeFilter, async (req, res) => {
     }
     
     const attendance = await Attendance.find(query)
-      .populate('studentId', 'srNo personalInfo.fullName')
+      .populate('studentId', 'srNo personalInfo.fullName className section')
       .populate('courseId', 'name')
       .populate('markedBy', 'personalInfo.fullName')
       .sort({ date: -1 });

@@ -126,7 +126,7 @@ const CardScanner = () => {
     <div className="space-y-6">
       <div>
         <button
-          onClick={() => navigate('/admin/attendance/manual')}
+          onClick={() => navigate('/admin/attendance')}
           className="mb-4 flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
         >
           <ArrowLeft size={20} />
