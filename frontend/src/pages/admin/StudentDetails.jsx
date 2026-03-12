@@ -1,7 +1,7 @@
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../utils/api';
-import { ArrowLeft, Users, DollarSign, Edit, X, User, Phone, Mail, Calendar, GraduationCap, BookOpen, MapPin, CreditCard, FileText, CheckCircle, Clock, AlertCircle, UserCircle, PhoneCall, Printer } from 'lucide-react';
+import { Users, DollarSign, Edit, X, User, Phone, Mail, Calendar, GraduationCap, BookOpen, MapPin, CreditCard, FileText, CheckCircle, Clock, AlertCircle, UserCircle, PhoneCall, Printer } from 'lucide-react';
 import { useAuth } from '../../store/hooks';
 import { useEffect } from 'react';
 
@@ -313,6 +313,20 @@ const StudentDetails = () => {
     return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
+  // Format date with time (for payment history)
+  const formatDateTime = (date) => {
+    if (!date) return 'N/A';
+    const d = new Date(date);
+    return d.toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+
+  // All payment transactions (newest first) - from student history API
+  const paymentInstallments = Array.isArray(studentHistoryData?.paymentInstallments) ? [...studentHistoryData.paymentInstallments].sort((a, b) => {
+    const dateA = new Date(a.paymentDate || a.createdAt || 0);
+    const dateB = new Date(b.paymentDate || b.createdAt || 0);
+    return dateB - dateA; // Newest first
+  }) : [];
+
 
   if (isLoadingDetail) {
     return (
@@ -504,43 +518,16 @@ const StudentDetails = () => {
     });
   })();
 
-  // Use student.feeInfo as the single source of truth for Paid/Remaining (8,000 paid / 4,000 remaining, etc.)
+  // Paid Fee: use student.feeInfo or fallback to invoice/rows
   const paidFee = (studentDetail?.feeInfo != null && typeof studentDetail.feeInfo.paidFee === 'number')
     ? studentDetail.feeInfo.paidFee
     : (latestInvoice?.paidAmount ?? (displayRows.length > 0 ? displayRows.reduce((sum, r) => sum + (r.paid || 0), 0) : 0));
-  const pendingFee = (studentDetail?.feeInfo != null && (typeof studentDetail.feeInfo.remainingFee === 'number' || typeof studentDetail.feeInfo.pendingFee === 'number'))
-    ? (studentDetail.feeInfo.remainingFee ?? studentDetail.feeInfo.pendingFee)
-    : (latestInvoice?.pendingAmount ?? (displayRows.length > 0 ? (displayRows[displayRows.length - 1]?.remaining ?? Math.max(0, admissionPlusFee - paidFee)) : Math.max(0, admissionPlusFee - paidFee)));
+  // Remaining: always compute as (Admission + Fee) - Paid to avoid stale/wrong feeInfo values
+  const pendingFee = Math.max(0, admissionPlusFee - paidFee);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 p-4 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
-        {/* Enhanced Header with Gradient */}
-        <div className="mb-8">
-          <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-2xl shadow-2xl p-6 sm:p-8 mb-6">
-            <div className="flex items-center gap-4 mb-4">
-              <button
-                onClick={() => navigate(getBackPath())}
-                className="p-3 rounded-xl bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white transition-all duration-200 hover:scale-105 shadow-lg"
-                title="Back to Students"
-              >
-                <ArrowLeft className="w-5 h-5" />
-              </button>
-              <div className="flex-1">
-                <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2 flex items-center gap-3">
-                  <div className="p-2 bg-white/20 rounded-xl backdrop-blur-sm">
-                    <Users className="w-8 h-8 sm:w-10 sm:h-10" />
-                  </div>
-                  Student Details
-                </h1>
-                <p className="text-blue-100 text-lg">
-                  Complete information and fee structure for <span className="font-semibold text-white">{studentDetail.personalInfo?.fullName || 'Student'}</span>
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
         {/* Student Profile Card */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 sm:p-8 mb-6 border border-gray-100 dark:border-gray-700">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
@@ -690,137 +677,66 @@ const StudentDetails = () => {
             </div>
           </div>
 
-          {/* Fee Structure Table - Monthly breakdown with running remaining balance */}
-          {displayRows.length > 0 && (
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                Fee Recovery Schedule
-              </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                Total fee: <span className="font-semibold text-gray-900 dark:text-white">{formatCurrency(admissionPlusFee)}</span> — Fee = balance due at month start; Remaining = Fee − Paid (carries to next month).
-              </p>
-              <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead>
-                    <tr className="bg-green-700 text-white">
-                      <th className="px-4 py-3 text-left text-sm font-semibold">Months</th>
-                      <th className="px-4 py-3 text-left text-sm font-semibold">Fee</th>
-                      <th className="px-4 py-3 text-left text-sm font-semibold">Paid</th>
-                      <th className="px-4 py-3 text-left text-sm font-semibold">Remaining</th>
-                      <th className="px-4 py-3 text-left text-sm font-semibold">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                    {displayRows.map((row, idx) => (
-                      <tr key={`${row.monthKey}-${idx}`} className="bg-gray-50 dark:bg-gray-700/30 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors">
-                        <td className="px-4 py-3 whitespace-nowrap text-sm">
-                          <span className="text-blue-600 dark:text-blue-400 font-medium">{row.monthLabel.split(' ')[0]}</span>
-                          <span className="text-gray-900 dark:text-white ml-1">{row.monthLabel.split(' ')[1]}</span>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                          {formatCurrency(row.fee || 0)}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-green-600 dark:text-green-400">
-                          {formatCurrency(row.paid || 0)}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
-                          <span className={row.remaining > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400'}>
-                            {formatCurrency(row.remaining ?? 0)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          {row.status === 'paid' ? (
-                            <div className="flex flex-col gap-0.5">
-                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded text-xs font-medium w-fit">
-                                <CheckCircle className="w-3.5 h-3.5" /> Paid
-                              </span>
-                              {row.paymentDate && (
-                                <span className="text-xs text-gray-500 dark:text-gray-400">
-                                  {formatDate(row.paymentDate)}
-                                </span>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="flex flex-col gap-0.5">
-                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 rounded text-xs font-medium w-fit">
-                                <Clock className="w-3.5 h-3.5" /> Remaining
-                              </span>
-                              {row.dueDate && (
-                                <span className="text-xs text-gray-500 dark:text-gray-400">
-                                  {formatDate(row.dueDate)}
-                                </span>
-                              )}
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* Fee Breakdown Table - Enhanced */}
-          {latestInvoice?.items && latestInvoice.items.length > 0 && (
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                <BookOpen className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                Fee Breakdown Details
-              </h3>
+          {/* Payment History - Full breakdown: each payment with time and amount */}
+          <div className="mb-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <Clock className="w-5 h-5 text-green-600 dark:text-green-400" />
+              Payment History
+            </h3>
+            {paymentInstallments.length > 0 ? (
               <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
                 <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                   <thead className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800">
                     <tr>
-                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                        Description
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                        Quantity
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                        Amount
-                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">#</th>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Date & Time</th>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Amount</th>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Method</th>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Receipt No</th>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Collected By</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                    {latestInvoice.items.map((item, index) => (
-                      <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                    {paymentInstallments.map((txn, idx) => (
+                      <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{idx + 1}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                          {item.description || 'N/A'}
+                          {formatDateTime(txn.paymentDate || txn.createdAt)}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                          {item.quantity || 1}
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-green-600 dark:text-green-400">
+                          {formatCurrency(txn.amount)}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-white">
-                          {formatCurrency(item.amount || 0)}
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400 capitalize">
+                          {txn.paymentMethod?.replace('_', ' ') || 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                          {txn.receiptNo || '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                          {txn.collectedByName || '-'}
                         </td>
                       </tr>
                     ))}
-                    {latestInvoice.discount > 0 && (
-                      <tr className="bg-yellow-50 dark:bg-yellow-900/20">
-                        <td colSpan="2" className="px-6 py-4 text-sm font-semibold text-gray-900 dark:text-white">
-                          Discount
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-green-600 dark:text-green-400">
-                          -{formatCurrency(latestInvoice.discount || 0)}
-                        </td>
-                      </tr>
-                    )}
-                    <tr className="bg-gradient-to-r from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-600 font-bold">
-                      <td colSpan="2" className="px-6 py-4 text-sm text-gray-900 dark:text-white">
-                        Total Amount
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                        {formatCurrency(latestInvoice.totalAmount || totalFee)}
-                      </td>
-                    </tr>
                   </tbody>
+                  <tfoot>
+                    <tr className="bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 font-bold">
+                      <td colSpan="2" className="px-6 py-4 text-sm text-gray-900 dark:text-white">
+                        Total Paid
+                      </td>
+                      <td className="px-6 py-4 text-sm text-green-700 dark:text-green-400">
+                        {formatCurrency(paymentInstallments.reduce((s, t) => s + (t.amount || 0), 0))}
+                      </td>
+                      <td colSpan="3" />
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="p-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 text-center">
+                <p className="text-gray-500 dark:text-gray-400 text-sm">No payments recorded yet.</p>
+              </div>
+            )}
+          </div>
 
           {/* Invoice Information - Enhanced */}
           {latestInvoice && (

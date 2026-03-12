@@ -128,6 +128,11 @@ const StudentFeeHistory = () => {
     pendingFee: 0
   };
 
+  // Always compute: Total = totalFee (+ admissionFee if applicable), Remaining = Total - Paid
+  const totalFeeDisplay = summary.totalFee || (student?.feeInfo?.totalFee || 0) + (student?.feeInfo?.admissionFee || 0);
+  const totalPaidDisplay = summary.totalPaid ?? student?.feeInfo?.paidFee ?? 0;
+  const remainingFeeDisplay = Math.max(0, totalFeeDisplay - totalPaidDisplay);
+
   if (!student) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-6">
@@ -322,7 +327,7 @@ const StudentFeeHistory = () => {
             <h3 className="font-semibold text-blue-900 dark:text-blue-200">Total Fee</h3>
           </div>
           <p className="text-3xl font-bold text-blue-700 dark:text-blue-300">
-            {formatCurrency(summary.totalFee || student.feeInfo?.totalFee || 0)}
+            {formatCurrency(totalFeeDisplay)}
           </p>
         </div>
         <div className="bg-green-50 dark:bg-green-900/20 p-6 rounded-lg border border-green-200 dark:border-green-800">
@@ -331,7 +336,7 @@ const StudentFeeHistory = () => {
             <h3 className="font-semibold text-green-900 dark:text-green-200">Total Paid Fee</h3>
           </div>
           <p className="text-3xl font-bold text-green-700 dark:text-green-300">
-            {formatCurrency(summary.totalPaid || student.feeInfo?.paidFee || 0)}
+            {formatCurrency(totalPaidDisplay)}
           </p>
         </div>
         <div className="bg-red-50 dark:bg-red-900/20 p-6 rounded-lg border border-red-200 dark:border-red-800">
@@ -340,8 +345,7 @@ const StudentFeeHistory = () => {
             <h3 className="font-semibold text-red-900 dark:text-red-200">Remaining Fee</h3>
           </div>
           <p className="text-3xl font-bold text-red-700 dark:text-red-300">
-            {formatCurrency(summary.pendingFee || student.feeInfo?.pendingFee || 
-              (student.feeInfo?.totalFee || 0) - (student.feeInfo?.paidFee || 0))}
+            {formatCurrency(remainingFeeDisplay)}
           </p>
         </div>
       </div>
@@ -552,20 +556,19 @@ const StudentFeeHistory = () => {
             <div>
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Fee</p>
               <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                {formatCurrency(summary.totalFee || student.feeInfo?.totalFee || 0)}
+                {formatCurrency(totalFeeDisplay)}
               </p>
             </div>
             <div>
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Paid</p>
               <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                {formatCurrency(summary.totalPaid || student.feeInfo?.paidFee || 0)}
+                {formatCurrency(totalPaidDisplay)}
               </p>
             </div>
             <div>
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Remaining Fee</p>
               <p className="text-2xl font-bold text-red-600 dark:text-red-400">
-                {formatCurrency(summary.pendingFee || student.feeInfo?.pendingFee || 
-                  (student.feeInfo?.totalFee || 0) - (student.feeInfo?.paidFee || 0))}
+                {formatCurrency(remainingFeeDisplay)}
               </p>
             </div>
           </div>
@@ -844,8 +847,8 @@ const StudentFeeHistory = () => {
                   <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-green-600 dark:text-green-400">
                     {formatCurrency(student.feeInfo?.paidFee || 0)}
                   </td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-red-600 dark:text-red-400">
-                    {formatCurrency(student.feeInfo?.pendingFee || (student.feeInfo?.totalFee || 0) - (student.feeInfo?.paidFee || 0))}
+                    <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-red-600 dark:text-red-400">
+                      {formatCurrency(remainingFeeDisplay)}
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap">
                     <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-200">
@@ -868,14 +871,13 @@ const StudentFeeHistory = () => {
                   Grand Total:
                 </td>
                 <td className="px-4 py-4 whitespace-nowrap text-sm font-bold text-gray-900 dark:text-white">
-                  {formatCurrency(summary.totalFee || student.feeInfo?.totalFee || 0)}
+                  {formatCurrency(totalFeeDisplay)}
                 </td>
                 <td className="px-4 py-4 whitespace-nowrap text-sm font-bold text-green-600 dark:text-green-400">
-                  {formatCurrency(summary.totalPaid || student.feeInfo?.paidFee || 0)}
+                  {formatCurrency(totalPaidDisplay)}
                 </td>
                 <td className="px-4 py-4 whitespace-nowrap text-sm font-bold text-red-600 dark:text-red-400">
-                  {formatCurrency(summary.pendingFee || student.feeInfo?.pendingFee || 
-                    (student.feeInfo?.totalFee || 0) - (student.feeInfo?.paidFee || 0))}
+                  {formatCurrency(remainingFeeDisplay)}
                 </td>
                 <td colSpan="2"></td>
               </tr>

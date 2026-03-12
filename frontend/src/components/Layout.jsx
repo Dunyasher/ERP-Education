@@ -153,7 +153,7 @@ const Layout = () => {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Mobile sidebar toggle */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-blue-900 shadow-md p-4 flex items-center justify-between">
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-[#1e3a5f] shadow-md p-4 flex items-center justify-between">
         <h1 className="text-xl font-bold text-white">Education ERP</h1>
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -274,7 +274,7 @@ const Layout = () => {
       {/* Main content area (top header + content) */}
       <div className="lg:ml-72 flex flex-col min-h-screen pt-14 lg:pt-0">
         {/* Top header bar - desktop */}
-        <header className="hidden lg:flex items-center justify-between px-6 py-4 bg-gradient-to-r from-blue-700 to-blue-800 rounded-b-xl shadow-md flex-shrink-0">
+        <header className="hidden lg:flex items-center justify-between px-6 py-4 bg-[#1e3a5f] rounded-b-xl shadow-md flex-shrink-0">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
               <School size={28} className="text-white" />

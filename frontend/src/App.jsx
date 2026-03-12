@@ -50,6 +50,7 @@ const IDCardSettings = lazy(() => import('./pages/admin/IDCardSettings'));
 const PublicMessages = lazy(() => import('./pages/admin/PublicMessages'));
 const StudentFeePayment = lazy(() => import('./pages/admin/StudentFeePayment'));
 const StudentFeesOverview = lazy(() => import('./pages/admin/StudentFeesOverview'));
+const FeeReceipt = lazy(() => import('./pages/admin/FeeReceipt'));
 const Settings = lazy(() => import('./pages/admin/Settings'));
 const AccountantSettings = lazy(() => import('./pages/admin/AccountantSettings'));
 
@@ -151,6 +152,7 @@ function AppRoutes() {
         <Route path="/admin/id-card-settings" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Suspense fallback={<RouteLoader />}><IDCardSettings /></Suspense></ProtectedRoute>} />
         <Route path="/admin/messages" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Suspense fallback={<RouteLoader />}><PublicMessages /></Suspense></ProtectedRoute>} />
         <Route path="/admin/fees" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><Suspense fallback={<RouteLoader />}><FeeManagement /></Suspense></ProtectedRoute>} />
+        <Route path="/admin/fees/receipt/:id" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><Suspense fallback={<RouteLoader />}><FeeReceipt /></Suspense></ProtectedRoute>} />
         <Route path="/admin/expenses" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><Suspense fallback={<RouteLoader />}><ExpenseManagement /></Suspense></ProtectedRoute>} />
         <Route path="/admin/expenses/report" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Suspense fallback={<RouteLoader />}><DailyExpenseReport /></Suspense></ProtectedRoute>} />
         <Route path="/admin/reports" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><Suspense fallback={<RouteLoader />}><Reports /></Suspense></ProtectedRoute>} />

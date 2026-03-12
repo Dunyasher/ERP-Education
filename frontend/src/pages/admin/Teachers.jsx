@@ -1,9 +1,9 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
-import { Plus, Edit, Trash2, Search, GraduationCap, User, Mail, Phone, CreditCard, Award, Users, X, UserPlus, CheckCircle, Circle, FileText, BarChart3, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Plus, Edit, Trash2, Search, GraduationCap, User, Mail, Phone, CreditCard, Award, Users, X, DollarSign, TrendingDown, UserX, CheckCircle, CircleDot, UserMinus, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, BarChart3 } from 'lucide-react';
 
 const Teachers = () => {
   const queryClient = useQueryClient();
@@ -12,12 +12,13 @@ const Teachers = () => {
   const [departmentFilter, setDepartmentFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [entriesPerPage] = useState(10);
+  const entriesPerPage = 10;
   const [showForm, setShowForm] = useState(false);
   const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const [editingTeacher, setEditingTeacher] = useState(null);
+  const [selectedTeacher, setSelectedTeacher] = useState(null);
   const [emailError, setEmailError] = useState('');
   const [isCheckingEmail, setIsCheckingEmail] = useState(false);
   const [categoryFormData, setCategoryFormData] = useState({
@@ -63,6 +64,13 @@ const Teachers = () => {
     salary: {
       basicSalary: 0,
       allowances: 0
+    },
+    advance: {
+      amount: 0,
+      deductionPerMonth: 0,
+      balance: 0,
+      dateTaken: '',
+      notes: ''
     }
   });
 
@@ -168,6 +176,7 @@ const Teachers = () => {
             qualification: data.qualification || {},
             employment: data.employment || {},
             salary: data.salary || {},
+            ...(data.advance && { advance: data.advance }),
             ...(data.staffCategoryId && { staffCategoryId: data.staffCategoryId })
           };
           
@@ -203,7 +212,7 @@ const Teachers = () => {
       // Handle network errors
       if (!error.response) {
         if (error.code === 'ECONNREFUSED' || error.message?.includes('Network Error') || error.message?.includes('ERR_NETWORK')) {
-          toast.error('Cannot connect to server. From project root run: npm run dev. Ensure backend (port 5000) and MongoDB are running.');
+          toast.error('Cannot connect to server. Please make sure the backend server is running on port 5000.');
           return;
         }
       }
@@ -366,14 +375,24 @@ const Teachers = () => {
       salary: {
         basicSalary: 0,
         allowances: 0
+      },
+      advance: {
+        amount: 0,
+        deductionPerMonth: 0,
+        balance: 0,
+        dateTaken: '',
+        notes: ''
       }
     });
   };
 
-  const handleEdit = (teacher) => {
+  const formatCurrency = (n) => `Rs ${Number(n || 0).toLocaleString('en-PK', { minimumFractionDigits: 0 })}`;
+
+  const handleEdit = (teacher, e) => {
+    if (e) e.stopPropagation();
     setEditingTeacher(teacher);
-    // Determine role from teacher data or default to teacher
     const userRole = teacher.userId?.role || 'teacher';
+    const adv = teacher.advance || {};
     setFormData({
       staffCategoryId: teacher.staffCategoryId?._id || teacher.staffCategoryId || '',
       role: userRole,
@@ -383,9 +402,21 @@ const Teachers = () => {
       contactInfo: teacher.contactInfo || {},
       qualification: teacher.qualification || {},
       employment: teacher.employment || {},
-      salary: teacher.salary || {}
+      salary: teacher.salary || { basicSalary: 0, allowances: 0 },
+      advance: {
+        amount: adv.amount ?? 0,
+        deductionPerMonth: adv.deductionPerMonth ?? 0,
+        balance: adv.balance ?? adv.amount ?? 0,
+        dateTaken: adv.dateTaken ? new Date(adv.dateTaken).toISOString().split('T')[0] : '',
+        notes: adv.notes || ''
+      }
     });
     setShowForm(true);
+  };
+
+  const handleViewDetails = (teacher, e) => {
+    if (e) e.stopPropagation();
+    setSelectedTeacher(teacher);
   };
 
   const handleSubmit = async (e) => {
@@ -438,8 +469,20 @@ const Teachers = () => {
     });
   };
 
+  const handleDeactivate = (teacher) => {
+    if (window.confirm(`Deactivate ${teacher.personalInfo?.fullName || 'this teacher'}?`)) {
+      api.put(`/teachers/${teacher._id}`, {
+        ...teacher,
+        employment: { ...teacher.employment, status: 'inactive' }
+      }).then(() => {
+        queryClient.invalidateQueries({ queryKey: ['teachers'] });
+        toast.success('Teacher deactivated');
+      }).catch(err => toast.error(err.response?.data?.message || 'Failed to deactivate'));
+    }
+  };
+
   const handleDelete = (id) => {
-    if (window.confirm('Are you sure you want to delete this teacher?')) {
+    if (window.confirm('Are you sure you want to delete this teacher? This cannot be undone.')) {
       deleteMutation.mutate(id);
     }
   };
@@ -556,53 +599,38 @@ const Teachers = () => {
 
   // Filter teachers
   const filteredTeachers = useMemo(() => {
-    const teachersArray = Array.isArray(teachers) ? teachers : [];
-    return teachersArray.filter(teacher => {
-      const searchLower = searchTerm.toLowerCase();
-      const matchesSearch = !searchTerm.trim() || (
-        teacher.personalInfo?.fullName?.toLowerCase().includes(searchLower) ||
-        teacher.srNo?.toLowerCase().includes(searchLower) ||
-        teacher.userId?.email?.toLowerCase().includes(searchLower) ||
-        teacher.userId?.uniqueId?.toLowerCase().includes(searchLower)
+    let arr = Array.isArray(teachers) ? teachers : [];
+    if (searchTerm.trim()) {
+      const s = searchTerm.toLowerCase();
+      arr = arr.filter(t =>
+        t.personalInfo?.fullName?.toLowerCase().includes(s) ||
+        t.srNo?.toLowerCase().includes(s) ||
+        t.userId?.email?.toLowerCase().includes(s) ||
+        t.userId?.uniqueId?.toLowerCase().includes(s)
       );
-      const dept = typeof teacher.staffCategoryId === 'object' ? teacher.staffCategoryId?.name : teacher.employment?.subjects?.[0] || '';
-      const matchesDept = !departmentFilter || dept?.toLowerCase().includes(departmentFilter.toLowerCase());
-      const status = (teacher.employment?.status || 'active').replace(/\s+/g, '_');
-      const matchesStatus = !statusFilter || status === statusFilter;
-      return matchesSearch && matchesDept && matchesStatus;
-    });
+    }
+    if (departmentFilter) {
+      const dept = departmentFilter.toLowerCase();
+      arr = arr.filter(t => {
+        const subj = (t.employment?.subjects || []).join(' ').toLowerCase();
+        const cat = (typeof t.staffCategoryId === 'object' ? t.staffCategoryId?.name : '')?.toLowerCase() || '';
+        return subj.includes(dept) || cat.includes(dept);
+      });
+    }
+    if (statusFilter) arr = arr.filter(t => (t.employment?.status || 'active') === statusFilter);
+    return arr;
   }, [teachers, searchTerm, departmentFilter, statusFilter]);
 
+  const totalPages = Math.ceil(filteredTeachers.length / entriesPerPage) || 1;
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, departmentFilter, statusFilter]);
+  const paginatedTeachers = filteredTeachers.slice((currentPage - 1) * entriesPerPage, currentPage * entriesPerPage);
 
-  // Stats
-  const totalTeachers = teachers?.length || 0;
-  const activeCount = teachers?.filter(t => (t.employment?.status || 'active') === 'active')?.length || 0;
-  const onLeaveCount = teachers?.filter(t => {
-    const s = (t.employment?.status || '').toLowerCase();
-    return s === 'on_leave' || s === 'on leave';
-  })?.length || 0;
-  const inactiveCount = teachers?.filter(t => t.employment?.status === 'inactive')?.length || 0;
-
-  // Pagination
-  const totalPages = Math.ceil(filteredTeachers.length / entriesPerPage);
-  const paginatedTeachers = useMemo(() => {
-    const start = (currentPage - 1) * entriesPerPage;
-    return filteredTeachers.slice(start, start + entriesPerPage);
-  }, [filteredTeachers, currentPage, entriesPerPage]);
-
-  // Unique departments for filter dropdown
-  const departments = useMemo(() => {
-    const set = new Set();
-    teachers?.forEach(t => {
-      const name = typeof t.staffCategoryId === 'object' ? t.staffCategoryId?.name : null;
-      if (name) set.add(name);
-      t.employment?.subjects?.forEach(s => set.add(s));
-    });
-    return Array.from(set).filter(Boolean).sort();
-  }, [teachers]);
+  const totalCount = filteredTeachers.length;
+  const activeCount = filteredTeachers.filter(t => (t.employment?.status || 'active') === 'active').length;
+  const onLeaveCount = filteredTeachers.filter(t => (t.employment?.status || '') === 'on_leave').length;
+  const inactiveCount = filteredTeachers.filter(t => (t.employment?.status || '') === 'inactive').length;
 
   if (isLoading) {
     return (
@@ -637,176 +665,164 @@ const Teachers = () => {
     );
   }
 
+  const getStatusLabel = (s) => {
+    const m = { active: 'Active', inactive: 'Inactive', on_leave: 'On Leave', resigned: 'Resigned' };
+    return m[s] || s || 'Active';
+  };
+
+  const getStatusStyles = (s) => {
+    if (s === 'active') return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
+    if (s === 'on_leave') return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300';
+    return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
+  };
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="flex items-center gap-4">
-          <div className="w-20 h-20 rounded-xl bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/30 dark:to-blue-800/30 flex items-center justify-center shrink-0">
-            <GraduationCap className="w-10 h-10 text-blue-600 dark:text-blue-400" />
-          </div>
+    <div className="w-full">
+      <div className="w-full space-y-6">
+        {/* Header */}
+        <div className="flex justify-between items-start">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
               Teachers Management
             </h1>
-            <p className="text-gray-500 dark:text-gray-400 text-sm mt-0.5">
+            <p className="text-gray-600 dark:text-gray-400 text-sm">
               Manage all teachers in the system
             </p>
           </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => { setShowCategoryForm(true); setEditingCategory(null); resetCategoryForm(); }}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+              <Users className="w-5 h-5" />
+              Manage Categories
+            </button>
+            <button
+              onClick={() => { setShowForm(true); setEditingTeacher(null); resetForm(); }}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
+            >
+              <Plus className="w-5 h-5" />
+              Add Teacher
+            </button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => {
-              setShowCategoryForm(true);
-              setEditingCategory(null);
-              resetCategoryForm();
-            }}
-            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center gap-2 text-sm"
-          >
-            <Users className="w-4 h-4" />
-            Manage Categories
-          </button>
-          <button
-            onClick={() => {
-              setShowForm(true);
-              setEditingTeacher(null);
-              resetForm();
-            }}
-            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
-          >
-            <Plus className="w-5 h-5" />
-            Add Teacher
-          </button>
-        </div>
-      </div>
 
-      {/* Filter Card */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4">
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
+        {/* Search & Filters - Each 25% width */}
+        <div className="grid grid-cols-4 gap-3">
+          <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
             <input
               type="text"
               placeholder="Search teachers..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800"
             />
           </div>
           <select
             value={departmentFilter}
             onChange={(e) => setDepartmentFilter(e.target.value)}
-            className="px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 min-w-[140px]"
+            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800"
           >
             <option value="">Department</option>
-            {departments.map(d => <option key={d} value={d}>{d}</option>)}
+            {[...new Set(teachers.flatMap(t => t.employment?.subjects || []))].filter(Boolean).map(d => (
+              <option key={d} value={d}>{d}</option>
+            ))}
           </select>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 min-w-[120px]"
+            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800"
           >
             <option value="">Status</option>
             <option value="active">Active</option>
             <option value="on_leave">On Leave</option>
             <option value="inactive">Inactive</option>
+            <option value="resigned">Resigned</option>
           </select>
-          <button className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors">
+          <button
+            className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
+          >
             Filter
           </button>
         </div>
-      </div>
 
-      {/* Main content: Table + Sidebar */}
-      <div className="flex flex-col lg:flex-row gap-6">
-        {/* Teachers List Card */}
-        <div className="flex-1 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-            <h2 className="text-lg font-bold text-gray-900 dark:text-white">Teachers List</h2>
-            <div className="flex flex-wrap gap-3 mt-3">
-              <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-sm font-medium">
-                <UserPlus className="w-4 h-4" />
-                Total Teachers {totalTeachers}
-              </span>
-              <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 text-sm font-medium">
-                <CheckCircle className="w-4 h-4" />
-                Active {activeCount}
-              </span>
-              <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 text-sm font-medium">
-                <Circle className="w-4 h-4" />
-                On Leave {onLeaveCount}
-              </span>
-              <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-sm font-medium">
-                <User className="w-4 h-4" />
-                Inactive {inactiveCount}
-              </span>
-            </div>
+        {/* Teachers List */}
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Teachers List</h2>
+          <div className="flex flex-wrap gap-3 mb-4">
+            <span className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 rounded-lg text-sm">
+              <GraduationCap className="w-4 h-4" />
+              Total Teachers {totalCount}
+            </span>
+            <span className="inline-flex items-center gap-2 px-3 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded-lg text-sm">
+              <CheckCircle className="w-4 h-4" />
+              Active {activeCount}
+            </span>
+            <span className="inline-flex items-center gap-2 px-3 py-1 bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 rounded-lg text-sm">
+              <CircleDot className="w-4 h-4" />
+              On Leave {onLeaveCount}
+            </span>
+            <span className="inline-flex items-center gap-2 px-3 py-1 bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 rounded-lg text-sm">
+              <UserMinus className="w-4 h-4" />
+              Inactive {inactiveCount}
+            </span>
           </div>
-          <div className="overflow-x-auto">
+
+          {/* Table */}
+          <div className="w-full bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
             <table className="w-full">
-              <thead className="bg-gray-50 dark:bg-gray-700/50">
-                <tr>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">
-                    <input type="checkbox" className="rounded" />
-                  </th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Name</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Department</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Status</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Actions</th>
+              <thead>
+                <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900 dark:text-white">Name</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900 dark:text-white">Department</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900 dark:text-white">Status</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900 dark:text-white">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+              <tbody>
                 {paginatedTeachers.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-12 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan={4} className="px-4 py-12 text-center text-gray-500 dark:text-gray-400">
                       No teachers found
                     </td>
                   </tr>
                 ) : (
                   paginatedTeachers.map((teacher) => {
-                    const status = (teacher.employment?.status || 'active').replace(/\s+/g, '_');
-                    const statusStyles = {
-                      active: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
-                      on_leave: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
-                      inactive: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
-                    };
-                    const dept = typeof teacher.staffCategoryId === 'object' ? teacher.staffCategoryId?.name : teacher.employment?.subjects?.join(', ');
+                    const status = teacher.employment?.status || 'active';
                     return (
-                      <tr key={teacher._id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
-                        <td className="py-3 px-4">
-                          <input type="checkbox" className="rounded" />
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-semibold text-sm">
+                      <tr key={teacher._id} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3" onClick={() => handleViewDetails(teacher)}>
+                            <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-semibold">
                               {teacher.personalInfo?.fullName?.charAt(0)?.toUpperCase() || 'T'}
                             </div>
-                            <span className="font-medium text-gray-900 dark:text-white">
+                            <span className="font-medium text-gray-900 dark:text-white cursor-pointer hover:underline">
                               {teacher.personalInfo?.fullName || 'N/A'}
                             </span>
                           </div>
                         </td>
-                        <td className="py-3 px-4 text-gray-600 dark:text-gray-400">{dept || '-'}</td>
-                        <td className="py-3 px-4">
-                          <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold capitalize ${statusStyles[status] || statusStyles.active}`}>
-                            {status.replace('_', ' ')}
+                        <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
+                          {teacher.employment?.subjects?.join(', ') || (typeof teacher.staffCategoryId === 'object' ? teacher.staffCategoryId?.name : null) || 'No Department'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold ${getStatusStyles(status)}`}>
+                            {getStatusLabel(status)}
                           </span>
                         </td>
-                        <td className="py-3 px-4">
+                        <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => handleEdit(teacher)}
-                              className="flex items-center gap-1 px-2 py-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors text-sm"
+                              className="text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 text-sm"
                             >
-                              <Edit className="w-4 h-4" />
-                              Edit
+                              <Edit className="w-4 h-4" /> Edit
                             </button>
                             <button
-                              onClick={() => handleDelete(teacher._id)}
-                              className="flex items-center gap-1 px-2 py-1.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors text-sm"
+                              onClick={() => handleDeactivate(teacher)}
+                              className="text-red-600 dark:text-red-400 hover:underline flex items-center gap-1 text-sm"
                             >
-                              <Trash2 className="w-4 h-4" />
-                              Delete
+                              <UserX className="w-4 h-4" /> Deactivate
                             </button>
                           </div>
                         </td>
@@ -816,63 +832,27 @@ const Teachers = () => {
                 )}
               </tbody>
             </table>
-          </div>
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 dark:border-gray-700">
-              <span className="text-sm text-gray-500 dark:text-gray-400">
-                Page {currentPage} of {totalPages}
-              </span>
-              <div className="flex items-center gap-2">
+            {totalPages > 1 && (
+              <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
                 <button
                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                   disabled={currentPage <= 1}
-                  className="p-2 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 disabled:opacity-50"
                 >
-                  <ChevronLeft className="w-4 h-4" />
+                  <ChevronLeft className="w-4 h-4" /> Previous
                 </button>
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  Page {currentPage} of {totalPages}
+                </span>
                 <button
                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                   disabled={currentPage >= totalPages}
-                  className="p-2 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 disabled:opacity-50"
                 >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={currentPage >= totalPages}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg disabled:opacity-50"
-                >
-                  Next
+                  Next <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
-            </div>
-          )}
-        </div>
-
-        {/* Right Sidebar */}
-        <div className="w-full lg:w-64 shrink-0">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 space-y-2">
-            <button
-              onClick={() => navigate('/admin/staff')}
-              className="w-full flex items-center gap-3 px-4 py-3 text-left text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-            >
-              <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-              <span className="font-medium">Staff Directory</span>
-            </button>
-            <button
-              onClick={() => navigate('/admin/attendance')}
-              className="w-full flex items-center gap-3 px-4 py-3 text-left text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-            >
-              <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-              <span className="font-medium">Attendance</span>
-            </button>
-            <button
-              onClick={() => navigate('/admin/reports')}
-              className="w-full flex items-center gap-3 px-4 py-3 text-left text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-            >
-              <BarChart3 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-              <span className="font-medium">Reports</span>
-            </button>
+            )}
           </div>
         </div>
       </div>
@@ -1170,6 +1150,60 @@ const Teachers = () => {
                         />
                       </div>
                     </div>
+                    <h3 className="text-lg font-semibold pt-4 border-t">Advance / Loan</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Total Advance Amount</label>
+                        <input
+                          type="number"
+                          value={formData.advance?.amount || ''}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            advance: { ...formData.advance, amount: parseFloat(e.target.value) || 0 }
+                          })}
+                          className="input-field"
+                          placeholder="0"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Monthly Deduction</label>
+                        <input
+                          type="number"
+                          value={formData.advance?.deductionPerMonth || ''}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            advance: { ...formData.advance, deductionPerMonth: parseFloat(e.target.value) || 0 }
+                          })}
+                          className="input-field"
+                          placeholder="Amount deducted from salary each month"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Date Taken</label>
+                        <input
+                          type="date"
+                          value={formData.advance?.dateTaken || ''}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            advance: { ...formData.advance, dateTaken: e.target.value }
+                          })}
+                          className="input-field"
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium mb-1">Notes</label>
+                        <input
+                          type="text"
+                          value={formData.advance?.notes || ''}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            advance: { ...formData.advance, notes: e.target.value }
+                          })}
+                          className="input-field"
+                          placeholder="Optional notes about the advance"
+                        />
+                      </div>
+                    </div>
                   </div>
                 )}
 
@@ -1198,6 +1232,140 @@ const Teachers = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Teacher Detail Modal - Salary & Advance Breakdown */}
+      {selectedTeacher && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setSelectedTeacher(null)}
+        >
+          <div
+            className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6">
+              <div className="flex justify-between items-start mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-14 h-14 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-xl">
+                    {selectedTeacher.personalInfo?.fullName?.charAt(0)?.toUpperCase() || 'T'}
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                      {selectedTeacher.personalInfo?.fullName || 'N/A'}
+                    </h2>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {selectedTeacher.teacherId || selectedTeacher.srNo || ''} • {selectedTeacher.employment?.subjects?.join(', ') || 'No Department'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedTeacher(null)}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Salary Structure Breakdown */}
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                  <DollarSign className="w-5 h-5 text-green-600" />
+                  Salary Structure
+                </h3>
+                <div className="space-y-3 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">Basic Salary</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">{formatCurrency(selectedTeacher.salary?.basicSalary)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">Allowances</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">{formatCurrency(selectedTeacher.salary?.allowances)}</span>
+                  </div>
+                  <div className="flex justify-between pt-2 border-t border-gray-200 dark:border-gray-600 font-semibold">
+                    <span className="text-gray-900 dark:text-white">Gross Salary</span>
+                    <span className="text-green-600 dark:text-green-400">{formatCurrency(selectedTeacher.salary?.totalSalary || (selectedTeacher.salary?.basicSalary || 0) + (selectedTeacher.salary?.allowances || 0))}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Advance / Loan Section */}
+              {selectedTeacher.advance?.amount > 0 ? (
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                    <TrendingDown className="w-5 h-5 text-amber-600" />
+                    Advance / Loan
+                  </h3>
+                  <div className="space-y-3 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10 p-4">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600 dark:text-gray-400">Total Advance Taken</span>
+                      <span className="font-semibold text-amber-700 dark:text-amber-400">{formatCurrency(selectedTeacher.advance?.amount)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600 dark:text-gray-400">Monthly Deduction</span>
+                      <span className="font-semibold text-amber-700 dark:text-amber-400">- {formatCurrency(selectedTeacher.advance?.deductionPerMonth)}</span>
+                    </div>
+                    {selectedTeacher.advance?.balance > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600 dark:text-gray-400">Remaining Balance</span>
+                        <span className="font-semibold text-gray-900 dark:text-white">{formatCurrency(selectedTeacher.advance?.balance)}</span>
+                      </div>
+                    )}
+                    {selectedTeacher.advance?.dateTaken && (
+                      <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+                        <span>Date Taken</span>
+                        <span>{new Date(selectedTeacher.advance.dateTaken).toLocaleDateString()}</span>
+                      </div>
+                    )}
+                    {selectedTeacher.advance?.notes && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400 pt-1">{selectedTeacher.advance.notes}</p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="mb-6 p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">No advance or loan recorded.</p>
+                </div>
+              )}
+
+              {/* Net Pay Calculation */}
+              <div className="rounded-xl bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800 p-4">
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Net Salary (Take-Home)</h3>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-400">Gross Salary</span>
+                    <span>{formatCurrency(selectedTeacher.salary?.totalSalary || (selectedTeacher.salary?.basicSalary || 0) + (selectedTeacher.salary?.allowances || 0))}</span>
+                  </div>
+                  {selectedTeacher.advance?.deductionPerMonth > 0 && (
+                    <div className="flex justify-between text-amber-600 dark:text-amber-400">
+                      <span>Less: Advance Deduction</span>
+                      <span>- {formatCurrency(selectedTeacher.advance.deductionPerMonth)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between pt-2 font-bold text-lg text-green-700 dark:text-green-400">
+                    <span>Net Pay</span>
+                    <span>{formatCurrency((selectedTeacher.salary?.totalSalary || (selectedTeacher.salary?.basicSalary || 0) + (selectedTeacher.salary?.allowances || 0)) - (selectedTeacher.advance?.deductionPerMonth || 0))}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 flex gap-3">
+                <button
+                  onClick={(e) => { handleEdit(selectedTeacher, e); setSelectedTeacher(null); }}
+                  className="flex-1 py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() => setSelectedTeacher(null)}
+                  className="flex-1 py-2 px-4 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg font-medium"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>

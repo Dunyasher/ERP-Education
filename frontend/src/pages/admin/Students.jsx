@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
-import { Plus, Edit, Trash2, Search, Users, Eye, Printer, X, Lock, EyeOff, AlertTriangle, DollarSign, FileText, CreditCard, Receipt, CheckCircle, User, FileSpreadsheet, ChevronDown, Calendar, Clock, Bell } from 'lucide-react';
+import { Plus, Edit, Search, Users, Eye, Printer, X, Lock, EyeOff, AlertTriangle, DollarSign, FileText, CreditCard, Receipt, CheckCircle, User, FileSpreadsheet, ChevronDown, Calendar, Clock, Bell, UserX } from 'lucide-react';
 import StudentAdmissionPrint from '../../components/StudentAdmissionPrint';
 import AccountantAdmissionForm from '../../components/AccountantAdmissionForm';
 import ErrorCorrection from '../../components/ErrorCorrection';
@@ -503,28 +503,27 @@ const Students = () => {
     studentMutation.mutate(formData);
   };
 
-  const handleDelete = async (student) => {
+  const handleDeactivate = async (student) => {
     if (!student || !student._id) {
       toast.error('Invalid student data');
       return;
     }
 
     const reason = window.prompt(
-      `Are you sure you want to delete student ${student.personalInfo?.fullName || 'N/A'} (${student.srNo || 'N/A'})?\n\nPlease provide a reason for deletion (optional):`
+      `Are you sure you want to deactivate student ${student.personalInfo?.fullName || 'N/A'} (${student.srNo || 'N/A'})?\n\nPlease provide a reason (optional):`
     );
     
     if (reason !== null) {
-      // User clicked OK (even if reason is empty)
       try {
         await api.delete(`/students/${student._id}`, {
           data: { reason: reason || 'No reason provided' }
         });
         queryClient.invalidateQueries({ queryKey: ['students'] });
-        toast.success('Student deleted successfully. Notification sent to admin and director.');
+        toast.success('Student deactivated successfully.');
       } catch (error) {
-        const errorMessage = error.response?.data?.message || error.message || 'Failed to delete student';
+        const errorMessage = error.response?.data?.message || error.message || 'Failed to deactivate student';
         toast.error(errorMessage);
-        console.error('Delete student error:', error);
+        console.error('Deactivate student error:', error);
       }
     }
   };
@@ -901,11 +900,11 @@ const Students = () => {
                             )}
                             {(user?.role === 'admin' || user?.role === 'super_admin') && (
                               <button
-                                onClick={() => { handleDelete(student); setShowActionDropdown(null); }}
-                                className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
+                                onClick={() => { handleDeactivate(student); setShowActionDropdown(null); }}
+                                className="w-full text-left px-4 py-2 text-sm text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 flex items-center gap-2"
                               >
-                                <Trash2 className="w-4 h-4" />
-                                Delete
+                                <UserX className="w-4 h-4" />
+                                Deactivate
                               </button>
                             )}
                             <button

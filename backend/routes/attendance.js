@@ -11,11 +11,15 @@ const { addCollegeFilter, buildCollegeQuery } = require('../middleware/collegeFi
 // @access  Private
 router.get('/', authenticate, addCollegeFilter, async (req, res) => {
   try {
-    const { studentId, courseId, date, startDate, endDate } = req.query;
+    const { studentId, courseId, date, startDate, endDate, className, section, digitalMethod, attendanceType } = req.query;
     const query = buildCollegeQuery(req);
     
     if (studentId) query.studentId = studentId;
     if (courseId) query.courseId = courseId;
+    if (className) query.className = className;
+    if (section) query.section = section;
+    if (digitalMethod) query.digitalMethod = digitalMethod;
+    if (attendanceType) query.attendanceType = attendanceType;
     if (date) {
       const startOfDay = new Date(date);
       startOfDay.setHours(0, 0, 0, 0);
@@ -31,7 +35,7 @@ router.get('/', authenticate, addCollegeFilter, async (req, res) => {
     }
     
     const attendance = await Attendance.find(query)
-      .populate('studentId', 'srNo personalInfo.fullName className section')
+      .populate('studentId', 'srNo personalInfo.fullName personalInfo.photo className section admissionNo rollNo')
       .populate('courseId', 'name')
       .populate('markedBy', 'personalInfo.fullName')
       .sort({ date: -1 });

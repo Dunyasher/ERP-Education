@@ -1,390 +1,433 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import api from '../../utils/api';
-import DatePicker from 'react-datepicker';
 import InstituteTypeSelect from '../../components/InstituteTypeSelect';
-import 'react-datepicker/dist/react-datepicker.css';
 import {
-  Search,
-  Filter,
-  Plus,
-  CheckCircle2,
-  AlertTriangle,
-  Clock,
-  Fingerprint,
+  ChevronDown,
+  ChevronUp,
+  Check,
+  MoreVertical,
   User,
-  Calendar,
+  Camera,
+  Scan,
+  Fingerprint,
+  ClipboardList
 } from 'lucide-react';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+
+const TYPE_OPTIONS = [
+  { value: '', label: 'All Types', icon: ClipboardList },
+  { value: 'face_scan', label: 'Face Scan', icon: Camera },
+  { value: 'card_scan', label: 'Card Scanner', icon: Scan },
+  { value: 'fingerprint', label: 'Fingerprint Scan', icon: Fingerprint },
+  { value: 'manual', label: 'Manual', icon: ClipboardList },
+];
 
 const ManageAttendance = () => {
-  const navigate = useNavigate();
+  const [filterType, setFilterType] = useState('face_scan');
+  const [selectedInstituteType, setSelectedInstituteType] = useState('');
+  const [selectedClassName, setSelectedClassName] = useState('');
+  const [selectedSection, setSelectedSection] = useState('');
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [searchQuery, setSearchQuery] = useState('');
-  const [instituteTypeFilter, setInstituteTypeFilter] = useState('');
+  const [showTable, setShowTable] = useState(true);
+  const [sortBy, setSortBy] = useState(null);
+  const [sortDir, setSortDir] = useState('asc');
+  const [rowMenuOpen, setRowMenuOpen] = useState(null);
 
   const dateStr = selectedDate.toISOString().split('T')[0];
 
-  // Fetch attendance records for selected date
-  const { data: attendanceRecords = [], isLoading: loadingAttendance } = useQuery({
-    queryKey: ['attendance', dateStr],
+  // Map filter type to API params
+  const getApiParams = () => {
+    const params = { date: dateStr };
+    if (selectedClassName) params.className = selectedClassName;
+    if (selectedSection) params.section = selectedSection;
+    if (filterType === 'manual') params.attendanceType = 'manual';
+    else if (['face_scan', 'card_scan', 'fingerprint'].includes(filterType)) {
+      params.attendanceType = 'digital';
+      params.digitalMethod = filterType;
+    }
+    return params;
+  };
+
+  // Fetch attendance records
+  const { data: attendanceRecords = [], isLoading } = useQuery({
+    queryKey: ['attendance', dateStr, selectedClassName, selectedSection, filterType],
     queryFn: async () => {
-      const res = await api.get('/attendance', { params: { date: dateStr } });
-      return res.data;
+      const params = getApiParams();
+      const res = await api.get('/attendance', { params });
+      return res.data || [];
+    },
+    enabled: showTable,
+  });
+
+  // Fetch courses/students for class and section dropdowns
+  const { data: courses = [] } = useQuery({
+    queryKey: ['courses'],
+    queryFn: async () => {
+      const res = await api.get('/courses');
+      return Array.isArray(res.data) ? res.data : [];
     },
   });
 
-  // Fetch students
-  const { data: students = [] } = useQuery({
-    queryKey: ['students'],
+  const { data: allStudents = [] } = useQuery({
+    queryKey: ['allStudents'],
     queryFn: async () => {
       const res = await api.get('/students');
-      return res.data;
+      return res.data || [];
     },
   });
 
-  // Fetch teachers
-  const { data: teachers = [] } = useQuery({
-    queryKey: ['teachers'],
-    queryFn: async () => {
-      const res = await api.get('/teachers');
-      return res.data;
-    },
-  });
-
-  // Build combined records: attendance records (students) + teachers as staff
-  const combinedRecords = useMemo(() => {
-    const records = [];
-
-    // Map attendance by studentId for quick lookup
-    const attendanceByStudent = {};
-    attendanceRecords.forEach((att) => {
-      const sid = att.studentId?._id?.toString() || att.studentId?.toString();
-      if (sid) attendanceByStudent[sid] = att;
-    });
-
-    // Add students with their attendance
-    students.forEach((student) => {
-      const att = attendanceByStudent[student._id.toString()];
-      const status = att?.status || 'absent';
-      const attDate = att?.date;
-      const instType = student.academicInfo?.instituteType;
-      records.push({
-        id: `student-${student._id}`,
-        _id: student._id,
-        name: student.personalInfo?.fullName || 'N/A',
-        role: 'Student',
-        classDept: att?.className || student.className || '—',
-        instituteType: instType ? String(instType).toLowerCase().trim().replace(/\s+/g, '_') : null,
-        timeIn: attDate ? formatTime(attDate) : '—',
-        timeOut: attDate ? formatTime(attDate) : '—',
-        status,
-        avatar: null,
-        isStudent: true,
-      });
-    });
-
-    // Add teachers (staff) - no backend attendance for now, show as present by default for demo
-    teachers.forEach((teacher) => {
-      const instType = teacher.employment?.instituteType;
-      records.push({
-        id: `teacher-${teacher._id}`,
-        _id: teacher._id,
-        name: teacher.personalInfo?.fullName || 'N/A',
-        role: 'Teacher',
-        classDept: teacher.staffCategoryId?.name || teacher.employment?.instituteType || '—',
-        instituteType: instType ? String(instType).toLowerCase().trim().replace(/\s+/g, '_') : null,
-        timeIn: '—',
-        timeOut: '—',
-        status: 'present',
-        avatar: null,
-        isStudent: false,
-      });
-    });
-
-    return records;
-  }, [attendanceRecords, students, teachers]);
-
-  // Filter by search and class
-  const filteredRecords = useMemo(() => {
-    let list = combinedRecords;
-    const q = searchQuery.toLowerCase().trim();
-    if (q) {
-      list = list.filter(
-        (r) =>
-          r.name.toLowerCase().includes(q) ||
-          r.role.toLowerCase().includes(q) ||
-          (r.classDept && r.classDept.toLowerCase().includes(q))
-      );
+  const uniqueClasses = useMemo(() => {
+    const normalized = selectedInstituteType
+      ? selectedInstituteType.toLowerCase().trim().replace(/\s+/g, '_')
+      : null;
+    let fromCourses = [];
+    if (normalized) {
+      fromCourses = courses
+        .filter((c) => {
+          const ct = c.instituteType ? String(c.instituteType).toLowerCase().trim().replace(/\s+/g, '_') : null;
+          return ct === normalized;
+        })
+        .map((c) => c.name)
+        .filter(Boolean);
+    } else {
+      fromCourses = courses.map((c) => c.name).filter(Boolean);
     }
-    if (classFilter) {
-      list = list.filter((r) => r.classDept === classFilter);
+    let filtered = allStudents;
+    if (normalized) {
+      filtered = allStudents.filter((s) => {
+        const st = s.academicInfo?.instituteType;
+        if (!st) return false;
+        return String(st).toLowerCase().trim().replace(/\s+/g, '_') === normalized;
+      });
     }
-    return list;
-  }, [combinedRecords, searchQuery, classFilter]);
+    const fromStudents = [...new Set(filtered.map((s) => s.className).filter(Boolean))];
+    return [...new Set([...fromCourses, ...fromStudents])].sort();
+  }, [courses, allStudents, selectedInstituteType]);
 
-  // Unique classes/departments for dropdown
-  const classOptions = useMemo(() => {
-    const set = new Set();
-    combinedRecords.forEach((r) => {
-      if (r.classDept && r.classDept !== '—') set.add(r.classDept);
-    });
-    return ['', ...Array.from(set).sort()];
-  }, [combinedRecords]);
+  const uniqueSections = useMemo(() => {
+    if (!selectedClassName) return [];
+    const normalized = selectedInstituteType
+      ? selectedInstituteType.toLowerCase().trim().replace(/\s+/g, '_')
+      : null;
+    let filtered = allStudents.filter((s) => s.className === selectedClassName);
+    if (normalized) {
+      filtered = filtered.filter((s) => {
+        const st = s.academicInfo?.instituteType;
+        if (!st) return false;
+        return String(st).toLowerCase().trim().replace(/\s+/g, '_') === normalized;
+      });
+    }
+    return [...new Set(filtered.map((s) => s.section).filter(Boolean))].sort();
+  }, [allStudents, selectedClassName, selectedInstituteType]);
 
-  // Summary stats
-  const summary = useMemo(() => {
-    const present = filteredRecords.filter((r) =>
-      ['present', 'late', 'excused', 'leave'].includes(r.status)
-    ).length;
-    const absent = filteredRecords.filter((r) =>
-      ['absent', 'sunday', 'holiday'].includes(r.status)
-    ).length;
-    const late = filteredRecords.filter((r) => r.status === 'late').length;
-    return { present, absent, late };
-  }, [filteredRecords]);
-
-  function formatTime(date) {
+  const formatTime = (date) => {
+    if (!date) return '—';
     const d = new Date(date);
-    return d.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  };
+
+  const formatClassDisplay = (record) => {
+    const cls = record.className || record.studentId?.className;
+    const sec = record.section || record.studentId?.section;
+    if (cls && sec) return `${cls} - ${sec}`;
+    return cls || sec || '—';
+  };
+
+  const sortedRecords = useMemo(() => {
+    if (!sortBy) return attendanceRecords;
+    const arr = [...attendanceRecords];
+    arr.sort((a, b) => {
+      let va = '';
+      let vb = '';
+      if (sortBy === 'timeIn') {
+        va = new Date(a.date || 0).getTime();
+        vb = new Date(b.date || 0).getTime();
+      }
+      if (sortBy === 'timeOut') return 0;
+      if (typeof va === 'string') {
+        va = (va || '').toString().toLowerCase();
+        vb = (vb || '').toString().toLowerCase();
+        return sortDir === 'asc' ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
+      }
+      return sortDir === 'asc' ? va - vb : vb - va;
     });
-  }
+    return arr;
+  }, [attendanceRecords, sortBy, sortDir]);
+
+  const toggleSort = (col) => {
+    if (sortBy === col) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else {
+      setSortBy(col);
+      setSortDir('asc');
+    }
+  };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-lg bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center">
-              <Fingerprint className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+      {/* Header + Filters - dark blue section (like reference image) */}
+      <div className="relative bg-[#1e3a5f] rounded-xl overflow-hidden">
+        {/* Subtle pattern overlay */}
+        <div className="absolute inset-0 opacity-5 bg-[radial-gradient(circle_at_50%_50%,_white_1px,_transparent_1px)] bg-[length:20px_20px]" />
+        <div className="relative px-6 pt-5 pb-6">
+          {/* Top row: title + illustration */}
+          <div className="flex items-center justify-between mb-5">
+            <h1 className="text-2xl font-bold text-white">Manage Student Attendance</h1>
+            <div className="hidden sm:block">
+              <svg width="180" height="80" viewBox="0 0 200 100" fill="none" className="opacity-90">
+                <rect x="40" y="30" width="70" height="50" rx="6" fill="#2563eb" stroke="white" strokeWidth="2" />
+                <text x="75" y="62" fill="white" fontSize="14" fontFamily="monospace" fontWeight="bold">08:05</text>
+                <circle cx="130" cy="55" r="12" fill="#22c55e" opacity="0.9" />
+                <circle cx="130" cy="55" r="6" fill="white" opacity="0.6" />
+                <circle cx="165" cy="55" r="18" fill="#94a3b8" />
+                <circle cx="165" cy="50" r="6" fill="#64748b" />
+                <path d="M155 70 Q165 80 175 70" stroke="#64748b" strokeWidth="2" fill="none" />
+              </svg>
+            </div>
+          </div>
+          {/* Filter Row */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 lg:gap-4 items-end">
+            <div>
+              <label className="block text-xs font-medium text-white/80 mb-1.5">Type</label>
+              <select
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value)}
+                className="w-full border-0 rounded-lg px-3 py-2.5 bg-white/95 text-gray-900 focus:ring-2 focus:ring-green-400"
+              >
+                {TYPE_OPTIONS.map((opt) => (
+                  <option key={opt.value || 'all'} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+              <label className="block text-xs font-medium text-white/80 mb-1.5">Institute Type</label>
+              <InstituteTypeSelect
+                value={selectedInstituteType}
+                onChange={setSelectedInstituteType}
+                placeholder="All Institutes"
+                className="w-full border-0 rounded-lg px-3 py-2.5 bg-white/95 text-gray-900 focus:ring-2 focus:ring-green-400"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-white/80 mb-1.5">Class</label>
+              <select
+                value={selectedClassName}
+                onChange={(e) => setSelectedClassName(e.target.value)}
+                className="w-full border-0 rounded-lg px-3 py-2.5 bg-white/95 text-gray-900 focus:ring-2 focus:ring-green-400"
+              >
+                <option value="">Select Class</option>
+                {uniqueClasses.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-white/80 mb-1.5">Section (Optional)</label>
+              <select
+                value={selectedSection}
+                onChange={(e) => setSelectedSection(e.target.value)}
+                className="w-full border-0 rounded-lg px-3 py-2.5 bg-white/95 text-gray-900 focus:ring-2 focus:ring-green-400"
+              >
+                <option value="">Select Section</option>
+                {uniqueSections.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-white/80 mb-1.5">Date</label>
+              <div className="[&_.react-datepicker-wrapper]:block [&_.react-datepicker__input-container]:block">
+                <DatePicker
+                  selected={selectedDate}
+                  onChange={(d) => setSelectedDate(d)}
+                  dateFormat="MM/dd/yyyy"
+                  className="w-full border-0 rounded-lg px-3 py-2.5 bg-white/95 text-gray-900 focus:ring-2 focus:ring-green-400"
+                />
+              </div>
+            </div>
+            <div>
+              <button
+                onClick={() => setShowTable(true)}
+                className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors shadow-md"
+              >
+                <Check className="w-5 h-5" />
                 Manage Attendance
-              </h1>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-                Monitor and manage student and staff attendance records.
-              </p>
+              </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Search and filters - clean white rounded controls */}
-      <div className="flex flex-col sm:flex-row gap-3 flex-wrap items-stretch">
-        <div className="relative w-[250px]">
-          <Search
-            className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
-            size={16}
-          />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search students or staff..."
-            className="w-full pl-8 pr-2 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-white placeholder-gray-400 text-sm"
-          />
-        </div>
-        <select
-          value={classFilter}
-          onChange={(e) => setClassFilter(e.target.value)}
-          className="w-[250px] px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-white text-gray-700 dark:text-gray-300"
-        >
-          <option value="">Class or Department</option>
-          {classOptions.filter(Boolean).map((opt) => (
-            <option key={opt} value={opt}>
-              {opt}
-            </option>
-          ))}
-        </select>
-        <div className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl min-w-[180px]">
-          <Calendar className="w-5 h-5 text-gray-400 flex-shrink-0" />
-          <DatePicker
-            selected={selectedDate}
-            onChange={(date) => setSelectedDate(date)}
-            className="flex-1 min-w-0 bg-transparent focus:outline-none dark:text-white text-gray-700 text-sm"
-            dateFormat="MMMM d, yyyy"
-          />
-        </div>
-        <button
-          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-colors shadow-sm"
-          onClick={() => {}}
-        >
-          <Filter size={18} />
-          Filter
-        </button>
-        <button
-          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl font-medium transition-colors shadow-sm"
-          onClick={() => navigate('/admin/attendance/manual')}
-        >
-          <Plus size={18} />
-          Add Record
-        </button>
-      </div>
-
-      {/* Main content area */}
-      <div>
-          {/* Attendance Records - title and summary pills on same row */}
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-            <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-              Attendance Records
-            </h2>
-            <div className="flex flex-wrap gap-3">
-              <div className="inline-flex items-center gap-2 px-4 py-2.5 bg-cyan-50 dark:bg-cyan-900/20 rounded-xl">
-                <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400" />
-                <span className="font-semibold text-cyan-800 dark:text-cyan-200">
-                  Present {summary.present}
-                </span>
-              </div>
-              <div className="inline-flex items-center gap-2 px-4 py-2.5 bg-orange-100/80 dark:bg-orange-900/30 rounded-xl">
-                <AlertTriangle className="w-5 h-5 text-orange-600 dark:text-orange-400" />
-                <span className="font-semibold text-orange-800 dark:text-orange-200">
-                  Absent {summary.absent}
-                </span>
-              </div>
-              <div className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-100 dark:bg-slate-700/50 rounded-xl">
-                <Clock className="w-5 h-5 text-slate-600 dark:text-slate-400" />
-                <span className="font-semibold text-slate-700 dark:text-slate-300">
-                  Late {summary.late}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Attendance Records Table */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <div className="overflow-x-auto">
-              {loadingAttendance ? (
-                <div className="p-12 text-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4" />
-                  <p className="text-gray-500 dark:text-gray-400">Loading attendance...</p>
-                </div>
-              ) : filteredRecords.length === 0 ? (
-                <div className="p-12 text-center text-gray-500 dark:text-gray-400">
-                  No attendance records found for the selected filters.
-                </div>
-              ) : (
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead className="bg-gray-50 dark:bg-gray-700/50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Name
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Role
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Class / Dept.
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Time In
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Time Out
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Status
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800">
-                    {filteredRecords.map((record) => (
+      {/* Attendance Table */}
+      {showTable && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead className="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Student Name
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Class
+                  </th>
+                  <th
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
+                    onClick={() => toggleSort('timeIn')}
+                  >
+                    <span className="flex items-center gap-1">
+                      Time In
+                      {sortBy === 'timeIn' ? (sortDir === 'asc' ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />) : <ChevronDown className="w-4 h-4 opacity-50" />}
+                    </span>
+                  </th>
+                  <th
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
+                    onClick={() => toggleSort('timeOut')}
+                  >
+                    <span className="flex items-center gap-1">
+                      Time Out
+                      {sortBy === 'timeOut' ? (sortDir === 'asc' ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />) : <ChevronDown className="w-4 h-4 opacity-50" />}
+                    </span>
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-4 py-3 w-12"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-12 text-center text-gray-500 dark:text-gray-400">
+                      <div className="flex justify-center">
+                        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
+                      </div>
+                      <p className="mt-2">Loading attendance...</p>
+                    </td>
+                  </tr>
+                ) : sortedRecords.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-12 text-center text-gray-500 dark:text-gray-400">
+                      No attendance records found for the selected filters.
+                      <p className="mt-2 text-sm">
+                        <Link to="/admin/attendance/manual" className="text-blue-600 hover:underline">Mark attendance manually</Link>
+                        {' or try different filters.'}
+                      </p>
+                    </td>
+                  </tr>
+                ) : (
+                  sortedRecords.map((record) => {
+                    const student = record.studentId;
+                    const name = student?.personalInfo?.fullName || 'N/A';
+                    const classDisplay = formatClassDisplay(record);
+                    const isPresent = ['present', 'late', 'excused', 'leave'].includes(record.status || '');
+                    const statusLabel = record.status === 'late' ? 'Late' : record.status === 'present' ? 'Present' : record.status || '—';
+                    return (
                       <tr
-                        key={record.id}
+                        key={record._id}
                         className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                       >
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-5 py-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center flex-shrink-0">
-                              <User
-                                className="w-5 h-5 text-blue-600 dark:text-blue-400"
-                                size={20}
-                              />
+                            <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-600 flex items-center justify-center flex-shrink-0 overflow-hidden ring-2 ring-white dark:ring-gray-700 shadow-sm">
+                              {student?.personalInfo?.photo ? (
+                                <img src={student.personalInfo.photo} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <User className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                              )}
                             </div>
-                            <span className="text-sm font-medium text-gray-900 dark:text-white">
-                              {record.name}
-                            </span>
+                            <div>
+                              <p className="font-semibold text-gray-900 dark:text-white">{name}</p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{classDisplay}</p>
+                            </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
-                          {record.role}
+                        <td className="px-5 py-4 text-sm text-gray-700 dark:text-gray-300">{classDisplay}</td>
+                        <td className="px-5 py-4 text-sm text-gray-700 dark:text-gray-300 font-medium">{formatTime(record.date)}</td>
+                        <td className="px-5 py-4 text-sm text-gray-700 dark:text-gray-300">—</td>
+                        <td className="px-5 py-4">
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium ${
+                              isPresent
+                                ? 'bg-green-600 text-white'
+                                : 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-400'
+                            }`}
+                          >
+                            {isPresent && <Check className="w-4 h-4" strokeWidth={2.5} />}
+                            {statusLabel}
+                          </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
-                          {record.classDept}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
-                          {record.timeIn}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
-                          {record.timeOut}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <StatusBadge status={record.status} />
+                        <td className="px-5 py-4">
+                          <div className="relative">
+                            <button
+                              onClick={() => setRowMenuOpen(rowMenuOpen === record._id ? null : record._id)}
+                              className="p-1.5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-500 transition-colors"
+                            >
+                              <MoreVertical className="w-5 h-5" />
+                            </button>
+                            {rowMenuOpen === record._id && (
+                              <>
+                                <div
+                                  className="fixed inset-0 z-10"
+                                  onClick={() => setRowMenuOpen(null)}
+                                />
+                                <div className="absolute right-0 top-full mt-1 py-1 w-40 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-20">
+                                  <Link
+                                    to={`/admin/students/${student?._id}/details`}
+                                    className="block px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                    onClick={() => setRowMenuOpen(null)}
+                                  >
+                                    View Details
+                                  </Link>
+                                  <Link
+                                    to={`/admin/students/${student?._id}/fee-history`}
+                                    className="block px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                    onClick={() => setRowMenuOpen(null)}
+                                  >
+                                    Fee History
+                                  </Link>
+                                </div>
+                              </>
+                            )}
+                          </div>
                         </td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
-      </div>
+        </div>
+      )}
+
+      {/* Quick links to other attendance methods - shown when no records */}
+      {showTable && sortedRecords.length === 0 && !isLoading && (
+        <div className="flex flex-wrap gap-2 justify-center py-4 text-sm">
+          <span className="text-gray-500 dark:text-gray-400">Or try:</span>
+          <Link to="/admin/attendance/manual" className="text-blue-600 hover:underline">Manual</Link>
+          <span className="text-gray-400">|</span>
+          <Link to="/admin/attendance/face-scan" className="text-blue-600 hover:underline">Face Scan</Link>
+          <span className="text-gray-400">|</span>
+          <Link to="/admin/card-scanner" className="text-blue-600 hover:underline">Card Scanner</Link>
+          <span className="text-gray-400">|</span>
+          <Link to="/admin/attendance/fingerprint-scan" className="text-blue-600 hover:underline">Fingerprint</Link>
+          <span className="text-gray-400">|</span>
+          <Link to="/admin/attendance/staff" className="text-blue-600 hover:underline">Staff</Link>
+          <span className="text-gray-400">|</span>
+          <Link to="/admin/attendance/reports" className="text-blue-600 hover:underline">Reports</Link>
+        </div>
+      )}
     </div>
   );
 };
-
-function StatusBadge({ status }) {
-  const config = {
-    present: {
-      bg: 'bg-green-100 dark:bg-green-900/30',
-      text: 'text-green-700 dark:text-green-300',
-      icon: CheckCircle2,
-    },
-    late: {
-      bg: 'bg-orange-100 dark:bg-orange-900/30',
-      text: 'text-orange-700 dark:text-orange-300',
-      icon: Clock,
-    },
-    absent: {
-      bg: 'bg-red-100 dark:bg-red-900/30',
-      text: 'text-red-700 dark:text-red-300',
-      icon: AlertTriangle,
-    },
-    excused: {
-      bg: 'bg-blue-100 dark:bg-blue-900/30',
-      text: 'text-blue-700 dark:text-blue-300',
-      icon: CheckCircle2,
-    },
-    leave: {
-      bg: 'bg-gray-100 dark:bg-gray-700/50',
-      text: 'text-gray-700 dark:text-gray-300',
-      icon: AlertTriangle,
-    },
-    sunday: {
-      bg: 'bg-amber-100 dark:bg-amber-900/30',
-      text: 'text-amber-700 dark:text-amber-300',
-      icon: AlertTriangle,
-    },
-    holiday: {
-      bg: 'bg-amber-100 dark:bg-amber-900/30',
-      text: 'text-amber-700 dark:text-amber-300',
-      icon: AlertTriangle,
-    },
-  };
-  const c = config[status] || config.absent;
-  const Icon = c.icon;
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${c.bg} ${c.text}`}
-    >
-      <Icon className="w-4 h-4" />
-      {status?.charAt(0).toUpperCase() + (status?.slice(1) || '')}
-    </span>
-  );
-}
 
 export default ManageAttendance;
