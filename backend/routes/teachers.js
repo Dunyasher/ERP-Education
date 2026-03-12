@@ -140,7 +140,7 @@ router.post('/', authenticate, authorize('admin', 'super_admin'), async (req, re
       return res.status(400).json({ message: 'Request body is required' });
     }
 
-    const { email, password, personalInfo, contactInfo, qualification, employment, salary, staffCategoryId } = req.body;
+    const { email, password, personalInfo, contactInfo, qualification, employment, salary, staffCategoryId, biometric } = req.body;
     
     console.log('📥 Extracted data:', {
       email: email ? 'provided' : 'missing',
@@ -389,6 +389,23 @@ router.post('/', authenticate, authorize('admin', 'super_admin'), async (req, re
         allowances: 0,
         totalSalary: 0
       };
+    }
+    
+    // Add biometric data if provided (face & fingerprint for attendance)
+    if (biometric && typeof biometric === 'object') {
+      teacherData.biometric = {
+        enrolledAt: new Date()
+      };
+      if (biometric.faceTemplate && biometric.faceTemplate.trim()) {
+        teacherData.biometric.faceId = `face_${user._id}_${Date.now()}`;
+        teacherData.biometric.faceTemplate = biometric.faceTemplate.trim();
+      }
+      if (biometric.fingerprintId && biometric.fingerprintId.trim()) {
+        teacherData.biometric.fingerprintId = biometric.fingerprintId.trim();
+        if (biometric.fingerprintTemplate && biometric.fingerprintTemplate.trim()) {
+          teacherData.biometric.fingerprintTemplate = biometric.fingerprintTemplate.trim();
+        }
+      }
     }
     
     // Create teacher record

@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import api from '../../utils/api';
+import InstituteTypeSelect from '../../components/InstituteTypeSelect';
 import { 
   Search, 
   ChevronRight,
@@ -11,7 +12,7 @@ import {
 const StudentPromotion = () => {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
-    campus: 'Mai',
+    instituteType: '',
     promotionFromClass: '',
     promotionFromSection: '',
     promotionToClass: '',
@@ -64,9 +65,27 @@ const StudentPromotion = () => {
       [name]: value,
       // Reset dependent fields
       ...(name === 'promotionFromClass' && { promotionFromSection: '' }),
-      ...(name === 'promotionToClass' && { promotionToSection: '' })
+      ...(name === 'promotionToClass' && { promotionToSection: '' }),
+      ...(name === 'instituteType' && { promotionFromClass: '', promotionFromSection: '', promotionToClass: '', promotionToSection: '' })
     }));
   };
+
+  const handleInstituteTypeChange = (value) => {
+    setFormData(prev => ({
+      ...prev,
+      instituteType: value,
+      promotionFromClass: '',
+      promotionFromSection: '',
+      promotionToClass: '',
+      promotionToSection: ''
+    }));
+  };
+
+  // Filter courses by institute type
+  const filteredCourses = useMemo(() => {
+    if (!formData.instituteType) return courses;
+    return courses.filter(c => c.instituteType === formData.instituteType);
+  }, [courses, formData.instituteType]);
 
   const handleSearch = () => {
     // TODO: Implement search functionality
@@ -120,20 +139,17 @@ const StudentPromotion = () => {
         {/* Filter Form */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-            {/* Campus */}
+            {/* Institute Type */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Campus
+                Institute Type
               </label>
-              <select
-                name="campus"
-                value={formData.campus}
-                onChange={handleInputChange}
+              <InstituteTypeSelect
+                value={formData.instituteType}
+                onChange={handleInstituteTypeChange}
                 className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-              >
-                <option value="Mai">Mai</option>
-                <option value="Main">Main</option>
-              </select>
+                placeholder="Select Institute Type"
+              />
             </div>
 
             {/* Promotion From Class */}
@@ -148,7 +164,7 @@ const StudentPromotion = () => {
                 className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
               >
                 <option value="">Select Class</option>
-                {courses.map(course => (
+                {filteredCourses.map(course => (
                   <option key={course._id} value={course._id}>
                     {course.name}
                   </option>
@@ -194,7 +210,7 @@ const StudentPromotion = () => {
                   className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
                 >
                   <option value="">Select Class</option>
-                  {courses.map(course => (
+                  {filteredCourses.map(course => (
                     <option key={course._id} value={course._id}>
                       {course.name}
                     </option>

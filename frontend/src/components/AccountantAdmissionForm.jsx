@@ -171,15 +171,14 @@ const AccountantAdmissionForm = ({ onClose, onSuccess, editingStudent = null, sh
   }, [onClose]);
 
   // Create student mutation
-  const createStudentMutation = useMutation(
-    async (data) => {
+  const createStudentMutation = useMutation({
+    mutationFn: async (data) => {
       if (editingStudent) {
         return api.put(`/students/${editingStudent._id}`, data);
       }
       return api.post('/students', data);
     },
-    {
-      onSuccess: async (response, variables) => {
+    onSuccess: async (response, variables) => {
         const studentData = response.data?.data || response.data;
         const studentId = studentData?._id || studentData?.id;
 
@@ -198,24 +197,23 @@ const AccountantAdmissionForm = ({ onClose, onSuccess, editingStudent = null, sh
           }
         }
 
-        queryClient.invalidateQueries('students');
-        queryClient.invalidateQueries('accountantStats');
-        queryClient.invalidateQueries('nextSerial');
+        queryClient.invalidateQueries({ queryKey: ['students'] });
+        queryClient.invalidateQueries({ queryKey: ['accountantStats'] });
+        queryClient.invalidateQueries({ queryKey: ['nextSerial'] });
         
         if (onSuccess) onSuccess(response.data);
         onClose();
         
         toast.success(`Student ${editingStudent ? 'updated' : 'admitted'} successfully!`);
       },
-      onError: (error) => {
-        const errorMessage = error.response?.data?.message || 
-                           error.response?.data?.error || 
-                           error.message || 
-                           'Failed to save student';
-        toast.error(errorMessage);
-      }
+    onError: (error) => {
+      const errorMessage = error.response?.data?.message || 
+                         error.response?.data?.error || 
+                         error.message || 
+                         'Failed to save student';
+      toast.error(errorMessage);
     }
-  );
+  });
 
   const handleSubmit = async (e) => {
     e.preventDefault();

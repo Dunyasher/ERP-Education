@@ -7,7 +7,9 @@ import InstituteTypeSelect from '../../components/InstituteTypeSelect';
 import { 
   Search,
   ChevronRight,
-  Circle
+  Circle,
+  User,
+  FileText
 } from 'lucide-react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
@@ -22,6 +24,7 @@ const ManualAttendance = () => {
   const [selectedSection, setSelectedSection] = useState('');
   const [attendanceStatus, setAttendanceStatus] = useState({});
   const [showTable, setShowTable] = useState(false);
+  const [studentSearch, setStudentSearch] = useState('');
 
   // Auto-fetch students when class is selected (section is optional)
   const shouldAutoFetch = Boolean(
@@ -86,6 +89,38 @@ const ManualAttendance = () => {
     
     return filtered;
   }, [students, selectedClassName, selectedSection]);
+
+  // Search-filtered students for table
+  const searchedStudents = useMemo(() => {
+    if (!studentSearch.trim()) return filteredStudents;
+    const q = studentSearch.toLowerCase().trim();
+    return filteredStudents.filter(s =>
+      (s.personalInfo?.fullName || '').toLowerCase().includes(q) ||
+      (s.admissionNo || '').toLowerCase().includes(q) ||
+      (s.rollNo || '').toLowerCase().includes(q)
+    );
+  }, [filteredStudents, studentSearch]);
+
+  // Attendance stats for circular chart
+  const attendanceStats = useMemo(() => {
+    const total = filteredStudents.length;
+    const present = filteredStudents.filter(s => {
+      const st = attendanceStatus[s._id] || 'present';
+      return ['present', 'late', 'excused', 'leave'].includes(st);
+    }).length;
+    const absent = total - present;
+    const percent = total > 0 ? Math.round((present / total) * 100) : 0;
+    return { total, present, absent, percent };
+  }, [filteredStudents, attendanceStatus]);
+
+  // Recent absences (students marked absent)
+  const recentAbsences = useMemo(() =>
+    filteredStudents.filter(s => {
+      const st = attendanceStatus[s._id] || 'present';
+      return ['absent', 'sunday', 'holiday'].includes(st);
+    }).map(s => ({ name: s.personalInfo?.fullName, studentId: s._id })),
+    [filteredStudents, attendanceStatus]
+  );
 
   // Get unique classes and sections from all students
   const { data: allStudents = [] } = useQuery({
@@ -402,7 +437,7 @@ const ManualAttendance = () => {
         <ol className="flex items-center space-x-2">
           <li><Link to="/admin/dashboard" className="hover:text-blue-600">Dashboard</Link></li>
           <li><ChevronRight size={16} className="inline" /></li>
-          <li><Link to="/admin/attendance/manual" className="hover:text-blue-600">Manage Attendance</Link></li>
+          <li><Link to="/admin/attendance" className="hover:text-blue-600">Manage Attendance</Link></li>
           <li><ChevronRight size={16} className="inline" /></li>
           <li className="text-gray-900 dark:text-white">Student Attendance</li>
         </ol>
@@ -538,150 +573,164 @@ const ManualAttendance = () => {
         </div>
       </div>
 
-      {/* Attendance Summary Box */}
+      {/* 3-Panel Attendance Design - when class selected */}
       {showTable && (
-        <div className="bg-gray-100 dark:bg-gray-700 rounded-lg p-6 text-center">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Attendance For Class:</p>
-              <p className="text-lg font-semibold text-gray-900 dark:text-white">{selectedClassName || 'All Classes'}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Section:</p>
-              <p className="text-lg font-semibold text-gray-900 dark:text-white">{selectedSection || 'All Sections'}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Campus:</p>
-              <p className="text-lg font-semibold text-gray-900 dark:text-white">Main Campus</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Date:</p>
-              <p className="text-lg font-semibold text-gray-900 dark:text-white">{formatDate(selectedDate)}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Action Buttons */}
-      {showTable && filteredStudents.length > 0 && (
-        <div className="flex flex-wrap gap-3">
-          <button
-            onClick={() => handleMarkAll('present')}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded font-medium transition-colors"
-          >
-            ✓ Mark All Present
-          </button>
-          <button
-            onClick={() => handleMarkAll('absent')}
-            className="bg-red-600 hover:bg-red-700 text-white px-6 py-2.5 rounded font-medium transition-colors"
-          >
-            ✗ Mark All Absent
-          </button>
-          <button
-            onClick={() => handleMarkAll('holiday')}
-            className="bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded font-medium transition-colors"
-          >
-            ✗ Mark All Holiday
-          </button>
-          <button
-            onClick={() => handleMarkAll('sunday')}
-            className="bg-red-600 hover:bg-red-700 text-white px-6 py-2.5 rounded font-medium transition-colors"
-          >
-            ✗ Mark All Sunday
-          </button>
-        </div>
-      )}
-
-      {/* Students Table */}
-      {showTable && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+        <div className="space-y-4">
           {isLoadingStudents ? (
-            <div className="text-center py-12">
+            <div className="card text-center py-12">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
               <p className="text-gray-600 dark:text-gray-400">Loading students...</p>
             </div>
           ) : filteredStudents.length === 0 ? (
-            <div className="text-center py-12">
+            <div className="card text-center py-12">
               <p className="text-gray-600 dark:text-gray-400 mb-2 font-medium">No students found for the selected filters.</p>
-              <div className="text-sm text-gray-500 dark:text-gray-500 mt-4 space-y-1">
-                <p><strong>Selected Filters:</strong></p>
-                <p>Institute Type: {selectedInstituteType || 'Not selected'}</p>
-                <p>Class: {selectedClassName || 'Not selected'}</p>
-                {selectedSection && <p>Section: {selectedSection}</p>}
-                <p className="mt-4 text-xs">Please verify:</p>
-                <ul className="list-disc list-inside text-left max-w-md mx-auto mt-2 space-y-1">
-                  <li>Students are enrolled in class "{selectedClassName}"</li>
-                  <li>Students have institute type "{selectedInstituteType}"</li>
-                  {selectedSection && <li>Students are in section "{selectedSection}"</li>}
-                  <li>Students have active status</li>
-                </ul>
-              </div>
+              <p className="text-sm text-gray-500">Class: {selectedClassName} {selectedSection && `| Section: ${selectedSection}`}</p>
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead className="bg-gray-50 dark:bg-gray-700">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        #
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Roll ID
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Name
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Parent
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Class
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Attendance Status
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                    {filteredStudents.map((student, index) => (
-                      <tr key={student._id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                          {index + 1}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-mono">
-                          {student.admissionNo || student.rollNo || 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                          {student.personalInfo?.fullName || 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                          {student.parentInfo?.fatherName || student.parentInfo?.motherName || 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                          {student.className || 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <select
-                            value={attendanceStatus[student._id] || 'present'}
-                            onChange={(e) => handleStatusChange(student._id, e.target.value)}
-                            className="border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-                          >
-                            <option value="present">Present</option>
-                            <option value="absent">Absent</option>
-                            <option value="late">Late</option>
-                            <option value="holiday">Holiday</option>
-                            <option value="sunday">Sunday</option>
-                            <option value="excused">Excused</option>
-                            <option value="leave">Leave</option>
-                          </select>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              {/* Today's status bar */}
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                Today&apos;s status: {formatDate(selectedDate)}
               </div>
-              <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-600">
+
+              {/* Action Buttons */}
+              <div className="flex flex-wrap gap-3">
+                <button onClick={() => handleMarkAll('present')} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium text-sm">
+                  ✓ Mark All Present
+                </button>
+                <button onClick={() => handleMarkAll('absent')} className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-medium text-sm">
+                  ✗ Mark All Absent
+                </button>
+                <button onClick={() => handleMarkAll('holiday')} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-medium text-sm">
+                  Mark All Holiday
+                </button>
+                <button onClick={() => handleMarkAll('sunday')} className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded font-medium text-sm">
+                  Mark All Sunday
+                </button>
+              </div>
+
+              {/* 3-panel grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* Left: Attendance Summary with circular chart */}
+                <div className="lg:col-span-3 space-y-4">
+                  <div className="card p-6 flex flex-col items-center">
+                    <div className="relative w-40 h-40">
+                      <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                        <circle cx="50" cy="50" r="45" fill="none" stroke="rgb(229 231 235)" strokeWidth="8" className="dark:stroke-gray-600" />
+                        <circle cx="50" cy="50" r="45" fill="none" stroke="rgb(34 197 94)" strokeWidth="8" strokeDasharray={`${attendanceStats.percent * 2.83} 283`} strokeLinecap="round" />
+                        <circle cx="50" cy="50" r="45" fill="none" stroke="rgb(59 130 246)" strokeWidth="8" strokeDasharray={`${(100 - attendanceStats.percent) * 2.83} 283`} strokeDashoffset={`-${attendanceStats.percent * 2.83}`} strokeLinecap="round" opacity="0.6" />
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <User className="w-10 h-10 text-gray-400 dark:text-gray-500 mb-1" />
+                        <span className="text-2xl font-bold text-gray-900 dark:text-white">{attendanceStats.percent}%</span>
+                        <span className="text-sm font-medium text-green-600 dark:text-green-400">Present</span>
+                      </div>
+                    </div>
+                    <div className="mt-4 w-full space-y-2">
+                      <div className="flex justify-between items-center p-2 bg-gray-100 dark:bg-gray-700 rounded">
+                        <span className="text-sm text-gray-600 dark:text-gray-400">Total Students</span>
+                        <span className="font-semibold text-gray-900 dark:text-white">{attendanceStats.total}</span>
+                      </div>
+                      <div className="flex justify-between items-center p-2 bg-red-50 dark:bg-red-900/20 rounded">
+                        <span className="text-sm text-gray-600 dark:text-gray-400">Absent Today</span>
+                        <span className="font-semibold text-red-600 dark:text-red-400">{attendanceStats.absent}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Middle: Student table with search */}
+                <div className="lg:col-span-6 card">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type="text"
+                        value={studentSearch}
+                        onChange={(e) => setStudentSearch(e.target.value)}
+                        placeholder="Search students..."
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-sm"
+                      />
+                    </div>
+                    <button className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400">
+                      <FileText className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                      <thead className="bg-gray-50 dark:bg-gray-700 sticky top-0">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Student Name</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Time In</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Time Out</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                        {searchedStudents.map((student) => {
+                          const st = attendanceStatus[student._id] || 'present';
+                          const isPresent = ['present', 'late', 'excused', 'leave'].includes(st);
+                          return (
+                            <tr key={student._id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                              <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                                {student.personalInfo?.fullName || 'N/A'}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">—</td>
+                              <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">—</td>
+                              <td className="px-4 py-3">
+                                <select
+                                  value={st}
+                                  onChange={(e) => handleStatusChange(student._id, e.target.value)}
+                                  className={`border rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 ${isPresent ? 'text-green-600 dark:text-green-400 border-green-200 dark:border-green-800' : 'text-red-600 dark:text-red-400 border-red-200 dark:border-red-800'}`}
+                                >
+                                  <option value="present">Present</option>
+                                  <option value="absent">Absent</option>
+                                  <option value="late">Late</option>
+                                  <option value="excused">Excused</option>
+                                  <option value="leave">Leave</option>
+                                  <option value="holiday">Holiday</option>
+                                  <option value="sunday">Sunday</option>
+                                </select>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Right: Calendar + Recent Absences */}
+                <div className="lg:col-span-3 space-y-4">
+                  <div className="card p-4">
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Calendar</h3>
+                    <DatePicker
+                      selected={selectedDate}
+                      onChange={(date) => setSelectedDate(date)}
+                      inline
+                      className="w-full border-0"
+                    />
+                  </div>
+                  <div className="card p-4">
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Recent Absences</h3>
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {recentAbsences.length === 0 ? (
+                        <p className="text-sm text-gray-500 dark:text-gray-400">No absences for today</p>
+                      ) : (
+                        recentAbsences.map((a) => (
+                          <div key={a.studentId} className="text-sm text-gray-700 dark:text-gray-300 flex justify-between">
+                            <span>{a.name || 'N/A'}</span>
+                            <span className="text-gray-500 dark:text-gray-400 text-xs">{formatDateShort(selectedDate)}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Save button */}
+              <div className="flex justify-end">
                 <button
                   onClick={handleSaveAttendance}
                   disabled={markAttendanceMutation.isLoading}

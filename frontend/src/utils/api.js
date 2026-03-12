@@ -109,7 +109,7 @@ api.interceptors.response.use(
           connectionErrorShown = true;
           lastErrorTime = now;
           import('react-hot-toast').then(({ default: toast }) => {
-            toast.error('Cannot connect to server. Please make sure the backend server is running on port 5000.', {
+            toast.error('Cannot connect to server. From project root run: npm run dev (or npm run dev:backend). Ensure backend is on port 5000 and MongoDB is running.', {
               duration: 5000,
               id: 'connection-error' // Use same ID to prevent duplicates
             });

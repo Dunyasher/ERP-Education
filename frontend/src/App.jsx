@@ -31,9 +31,11 @@ const AccountantManagement = lazy(() => import('./pages/admin/AccountantManageme
 const Courses = lazy(() => import('./pages/admin/Courses'));
 const Reports = lazy(() => import('./pages/admin/Reports'));
 const AccountsSummaryReport = lazy(() => import('./pages/admin/AccountsSummaryReport'));
+const DateReport = lazy(() => import('./pages/admin/DateReport'));
 const Classes = lazy(() => import('./pages/admin/Classes'));
 const Categories = lazy(() => import('./pages/admin/Categories'));
 const InstituteTypes = lazy(() => import('./pages/admin/InstituteTypes'));
+const ManageAttendance = lazy(() => import('./pages/admin/ManageAttendance'));
 const ManualAttendance = lazy(() => import('./pages/admin/ManualAttendance'));
 const StaffAttendance = lazy(() => import('./pages/admin/StaffAttendance'));
 const AttendanceReports = lazy(() => import('./pages/admin/AttendanceReports'));
@@ -47,7 +49,9 @@ const PrintStaffCards = lazy(() => import('./pages/admin/PrintStaffCards'));
 const IDCardSettings = lazy(() => import('./pages/admin/IDCardSettings'));
 const PublicMessages = lazy(() => import('./pages/admin/PublicMessages'));
 const StudentFeePayment = lazy(() => import('./pages/admin/StudentFeePayment'));
+const StudentFeesOverview = lazy(() => import('./pages/admin/StudentFeesOverview'));
 const Settings = lazy(() => import('./pages/admin/Settings'));
+const AccountantSettings = lazy(() => import('./pages/admin/AccountantSettings'));
 
 // Loading component for lazy routes
 const RouteLoader = () => (
@@ -125,6 +129,7 @@ function AppRoutes() {
         <Route path="/admin/students/:id/details" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><Suspense fallback={<RouteLoader />}><StudentDetails /></Suspense></ProtectedRoute>} />
         <Route path="/admin/students/:id/fee-history" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><Suspense fallback={<RouteLoader />}><StudentFeeHistory /></Suspense></ProtectedRoute>} />
         <Route path="/admin/fee-payment" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><Suspense fallback={<RouteLoader />}><StudentFeePayment /></Suspense></ProtectedRoute>} />
+        <Route path="/admin/fees/overview" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><Suspense fallback={<RouteLoader />}><StudentFeesOverview /></Suspense></ProtectedRoute>} />
         <Route path="/admin/teachers" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Suspense fallback={<RouteLoader />}><Teachers /></Suspense></ProtectedRoute>} />
         <Route path="/admin/staff" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Suspense fallback={<RouteLoader />}><StaffManagement /></Suspense></ProtectedRoute>} />
         <Route path="/admin/accountants" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Suspense fallback={<RouteLoader />}><AccountantManagement /></Suspense></ProtectedRoute>} />
@@ -132,6 +137,7 @@ function AppRoutes() {
         <Route path="/admin/classes" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Suspense fallback={<RouteLoader />}><Classes /></Suspense></ProtectedRoute>} />
         <Route path="/admin/categories" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Suspense fallback={<RouteLoader />}><Categories /></Suspense></ProtectedRoute>} />
         <Route path="/admin/institute-types" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Suspense fallback={<RouteLoader />}><InstituteTypes /></Suspense></ProtectedRoute>} />
+        <Route path="/admin/attendance" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'teacher']}><Suspense fallback={<RouteLoader />}><ManageAttendance /></Suspense></ProtectedRoute>} />
         <Route path="/admin/attendance/manual" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'teacher']}><Suspense fallback={<RouteLoader />}><ManualAttendance /></Suspense></ProtectedRoute>} />
         <Route path="/admin/attendance/staff" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'teacher']}><Suspense fallback={<RouteLoader />}><StaffAttendance /></Suspense></ProtectedRoute>} />
         <Route path="/admin/attendance/reports" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'teacher']}><Suspense fallback={<RouteLoader />}><AttendanceReports /></Suspense></ProtectedRoute>} />
@@ -145,10 +151,12 @@ function AppRoutes() {
         <Route path="/admin/id-card-settings" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Suspense fallback={<RouteLoader />}><IDCardSettings /></Suspense></ProtectedRoute>} />
         <Route path="/admin/messages" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Suspense fallback={<RouteLoader />}><PublicMessages /></Suspense></ProtectedRoute>} />
         <Route path="/admin/fees" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><Suspense fallback={<RouteLoader />}><FeeManagement /></Suspense></ProtectedRoute>} />
-        <Route path="/admin/expenses" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Suspense fallback={<RouteLoader />}><ExpenseManagement /></Suspense></ProtectedRoute>} />
+        <Route path="/admin/expenses" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><Suspense fallback={<RouteLoader />}><ExpenseManagement /></Suspense></ProtectedRoute>} />
         <Route path="/admin/expenses/report" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Suspense fallback={<RouteLoader />}><DailyExpenseReport /></Suspense></ProtectedRoute>} />
         <Route path="/admin/reports" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><Suspense fallback={<RouteLoader />}><Reports /></Suspense></ProtectedRoute>} />
         <Route path="/admin/reports/accounts-summary" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><Suspense fallback={<RouteLoader />}><AccountsSummaryReport /></Suspense></ProtectedRoute>} />
+        <Route path="/admin/reports/date-report" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><Suspense fallback={<RouteLoader />}><DateReport /></Suspense></ProtectedRoute>} />
+        <Route path="/admin/accountant-settings" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'accountant']}><Suspense fallback={<RouteLoader />}><AccountantSettings /></Suspense></ProtectedRoute>} />
         <Route path="/admin/settings" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Suspense fallback={<RouteLoader />}><Settings /></Suspense></ProtectedRoute>} />
         <Route path="/teacher/dashboard" element={<ProtectedRoute allowedRoles={['teacher']}><Suspense fallback={<RouteLoader />}><TeacherDashboard /></Suspense></ProtectedRoute>} />
         <Route path="/teacher/attendance" element={<ProtectedRoute allowedRoles={['teacher']}><Suspense fallback={<RouteLoader />}><ManualAttendance /></Suspense></ProtectedRoute>} />

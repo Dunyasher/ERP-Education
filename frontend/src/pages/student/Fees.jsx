@@ -221,7 +221,7 @@ const StudentFees = () => {
         <div className="card">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Pending</p>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Remaining</p>
               <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400 mt-1">
                 {paymentStatus.pending}
               </p>
@@ -314,7 +314,7 @@ const StudentFees = () => {
                     </p>
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Pending Amount</p>
+                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Remaining Amount</p>
                     <p className={`text-lg font-bold ${
                       invoice.pendingAmount > 0 
                         ? 'text-red-600 dark:text-red-400' 

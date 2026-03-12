@@ -20,16 +20,14 @@ const StaffAttendance = () => {
   const [showTable, setShowTable] = useState(false);
 
   // Fetch teachers/staff based on filters
-  const { data: teachers = [], isLoading: isLoadingTeachers, refetch } = useQuery(
-    ['teachers'],
-    async () => {
+  const { data: teachers = [], isLoading: isLoadingTeachers, refetch } = useQuery({
+    queryKey: ['teachers'],
+    queryFn: async () => {
       const response = await api.get('/teachers');
       return response.data;
     },
-    {
-      enabled: false // Only fetch when "Manage Attendance" is clicked
-    }
-  );
+    enabled: false // Only fetch when "Manage Attendance" is clicked
+  });
 
   // Filter teachers
   const filteredTeachers = teachers;
@@ -48,21 +46,17 @@ const StaffAttendance = () => {
   }, [filteredTeachers]);
 
   // Mark attendance mutation
-  const markAttendanceMutation = useMutation(
-    async (data) => {
-      return api.post('/attendance/manual', data);
+  const markAttendanceMutation = useMutation({
+    mutationFn: async (data) => api.post('/attendance/manual', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['attendance'] });
+      toast.success('Attendance marked successfully!');
+      setAttendanceStatus({});
     },
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['attendance'] });
-        toast.success('Attendance marked successfully!');
-        setAttendanceStatus({});
-      },
-      onError: (error) => {
-        toast.error(error.response?.data?.message || 'Failed to mark attendance');
-      }
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to mark attendance');
     }
-  );
+  });
 
   const handleStatusChange = (teacherId, status) => {
     setAttendanceStatus(prev => ({
@@ -136,7 +130,7 @@ const StaffAttendance = () => {
         <ol className="flex items-center space-x-2">
           <li><Link to="/admin/dashboard" className="hover:text-blue-600">Dashboard</Link></li>
           <li><ChevronRight size={16} className="inline" /></li>
-          <li><Link to="/admin/attendance/manual" className="hover:text-blue-600">Manage Attendance</Link></li>
+          <li><Link to="/admin/attendance" className="hover:text-blue-600">Manage Attendance</Link></li>
           <li><ChevronRight size={16} className="inline" /></li>
           <li className="text-gray-900 dark:text-white">Staff Attendance</li>
         </ol>

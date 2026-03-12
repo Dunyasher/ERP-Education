@@ -75,6 +75,22 @@ const StudentDetails = () => {
     enabled: !!id,
   });
 
+  // Fetch student history for fee structure (monthly breakdown)
+  const { data: studentHistoryData } = useQuery({
+    queryKey: ['studentHistory', id],
+    queryFn: async () => {
+      if (!id) return null;
+      try {
+        const response = await api.get(`/students/${id}/history`);
+        return response.data;
+      } catch (error) {
+        console.error('Error fetching student history:', error);
+        return null;
+      }
+    },
+    enabled: !!id,
+  });
+
   // Fetch invoices for the student to get fee breakdown
   const { data: studentInvoices = [] } = useQuery({
     queryKey: ['studentInvoices', id],
@@ -284,15 +300,10 @@ const StudentDetails = () => {
     })[0];
   };
 
-  // Format currency
+  // Format currency (Rs - PKR, consistent across fee cards and tables)
   const formatCurrency = (amount) => {
     if (!amount && amount !== 0) return 'N/A';
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
+    return `Rs ${Number(amount).toLocaleString('en-PK', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
   };
 
   // Format date
@@ -379,7 +390,7 @@ const StudentDetails = () => {
 
   const latestInvoice = getLatestInvoice();
   
-  // Calculate admission fee from invoice items
+  // Calculate admission fee: first from invoice items, then fallback to student feeInfo
   let admissionFee = 0;
   if (latestInvoice?.items && Array.isArray(latestInvoice.items)) {
     const admissionItem = latestInvoice.items.find(item => 
@@ -402,11 +413,104 @@ const StudentDetails = () => {
       }
     }
   }
+  
+  // Fallback: use admission fee from student record (e.g. when no invoice yet)
+  if (admissionFee === 0 && (studentDetail?.feeInfo?.admissionFee || 0) > 0) {
+    admissionFee = studentDetail.feeInfo.admissionFee;
+  }
 
   const totalFee = studentDetail?.feeInfo?.totalFee || latestInvoice?.totalAmount || 0;
-  const paidFee = studentDetail?.feeInfo?.paidFee || latestInvoice?.paidAmount || 0;
-  const pendingFee = studentDetail?.feeInfo?.pendingFee || latestInvoice?.pendingAmount || (totalFee - paidFee);
-  const remainingFee = pendingFee;
+  const regularFee = Math.max(0, totalFee - admissionFee);
+  const admissionPlusFee = admissionFee + regularFee;
+
+  // Build fee structure rows: from invoices + history monthly breakdown
+  const monthlyBreakdown = Array.isArray(studentHistoryData?.monthlyBreakdown) ? studentHistoryData.monthlyBreakdown : [];
+  const feeStructureRows = (() => {
+    const rows = [];
+    const seenMonths = new Set();
+    monthlyBreakdown.forEach(m => {
+      const key = m.monthKey;
+      if (seenMonths.has(key)) return;
+      seenMonths.add(key);
+      const [y, mo] = key.split('-').map(Number);
+      const monthDate = new Date(y, mo - 1, 1);
+      const feeForMonth = m.totalAmount || Math.round((regularFee / 12) * 100) / 100 || 0;
+      const paidForMonth = m.totalAmount || 0;
+      const isPaid = paidForMonth >= feeForMonth || feeForMonth <= 0;
+      rows.push({
+        monthKey: key,
+        monthLabel: m.month || monthDate.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }),
+        fee: feeForMonth > 0 ? feeForMonth : (m.totalAmount || 0),
+        paid: paidForMonth,
+        status: isPaid ? 'paid' : 'pending',
+        dueDate: new Date(y, mo - 1, 10),
+        paymentDate: m.transactions?.[0] ? new Date(m.transactions[0].paymentDate || m.transactions[0].createdAt) : null
+      });
+    });
+    if (rows.length === 0 && studentInvoices.length > 0) {
+      studentInvoices
+        .sort((a, b) => new Date(b.invoiceDate || b.createdAt) - new Date(a.invoiceDate || a.createdAt))
+        .forEach(inv => {
+          const d = new Date(inv.invoiceDate || inv.createdAt);
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          if (seenMonths.has(key)) return;
+          seenMonths.add(key);
+          const feeAmt = inv.totalAmount || 0;
+          const paidAmt = inv.paidAmount || 0;
+          rows.push({
+            monthKey: key,
+            monthLabel: d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }),
+            fee: feeAmt,
+            paid: paidAmt,
+            status: paidAmt >= feeAmt ? 'paid' : 'pending',
+            dueDate: new Date(d.getFullYear(), d.getMonth(), 10),
+            paymentDate: paidAmt > 0 ? d : null
+          });
+        });
+    }
+    return rows.sort((a, b) => b.monthKey.localeCompare(a.monthKey));
+  })();
+
+  // Build fee recovery schedule (accountant/admin style): fee = balance due at month start, remaining = fee - paid
+  const displayRows = (() => {
+    const rows = feeStructureRows.length > 0
+      ? feeStructureRows
+      : studentInvoices
+          .sort((a, b) => new Date(a.invoiceDate || a.createdAt) - new Date(b.invoiceDate || b.createdAt))
+          .slice(0, 12)
+          .map((inv) => {
+            const d = new Date(inv.invoiceDate || inv.createdAt);
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            const paidAmt = inv.paidAmount || 0;
+            return {
+              monthKey: key,
+              monthLabel: d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }),
+              paid: paidAmt,
+              status: (inv.totalAmount || 0) > 0 && paidAmt >= (inv.totalAmount || 0) ? 'paid' : 'pending',
+              dueDate: new Date(d.getFullYear(), d.getMonth(), 10),
+              paymentDate: paidAmt > 0 ? d : null
+            };
+          });
+    const sorted = [...rows].sort((a, b) => a.monthKey.localeCompare(b.monthKey));
+    let balanceDue = admissionPlusFee;
+    return sorted.map((r) => {
+      const paid = r.paid || 0;
+      const fee = balanceDue; // Balance due at start of this month (carried from previous remaining)
+      const remaining = Math.max(0, fee - paid);
+      balanceDue = remaining; // Next month's fee = this month's remaining
+      // Status must match remaining: only "paid" when nothing is left
+      const status = remaining <= 0 ? 'paid' : 'pending';
+      return { ...r, fee, paid, remaining, status };
+    });
+  })();
+
+  // Use student.feeInfo as the single source of truth for Paid/Remaining (8,000 paid / 4,000 remaining, etc.)
+  const paidFee = (studentDetail?.feeInfo != null && typeof studentDetail.feeInfo.paidFee === 'number')
+    ? studentDetail.feeInfo.paidFee
+    : (latestInvoice?.paidAmount ?? (displayRows.length > 0 ? displayRows.reduce((sum, r) => sum + (r.paid || 0), 0) : 0));
+  const pendingFee = (studentDetail?.feeInfo != null && (typeof studentDetail.feeInfo.remainingFee === 'number' || typeof studentDetail.feeInfo.pendingFee === 'number'))
+    ? (studentDetail.feeInfo.remainingFee ?? studentDetail.feeInfo.pendingFee)
+    : (latestInvoice?.pendingAmount ?? (displayRows.length > 0 ? (displayRows[displayRows.length - 1]?.remaining ?? Math.max(0, admissionPlusFee - paidFee)) : Math.max(0, admissionPlusFee - paidFee)));
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 p-4 sm:p-6 lg:p-8">
@@ -518,7 +622,7 @@ const StudentDetails = () => {
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Fee Structure Breakdown</h2>
           </div>
           
-          {/* Enhanced Fee Summary Cards */}
+          {/* Enhanced Fee Summary Cards - 5 boxes */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
             <div className="group relative overflow-hidden bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 rounded-xl p-6 border-2 border-purple-200 dark:border-purple-800 hover:shadow-lg transition-all duration-300 hover:scale-105">
               <div className="absolute top-0 right-0 w-20 h-20 bg-purple-300/20 rounded-full -mr-10 -mt-10"></div>
@@ -533,15 +637,28 @@ const StudentDetails = () => {
               </div>
             </div>
 
+            <div className="group relative overflow-hidden bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-indigo-900/20 dark:to-indigo-800/20 rounded-xl p-6 border-2 border-indigo-200 dark:border-indigo-800 hover:shadow-lg transition-all duration-300 hover:scale-105">
+              <div className="absolute top-0 right-0 w-20 h-20 bg-indigo-300/20 rounded-full -mr-10 -mt-10"></div>
+              <div className="relative">
+                <div className="flex items-center gap-2 mb-2">
+                  <BookOpen className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                  <p className="text-sm font-medium text-indigo-700 dark:text-indigo-300">Regular Fee</p>
+                </div>
+                <p className="text-3xl font-bold text-indigo-600 dark:text-indigo-400">
+                  {formatCurrency(regularFee)}
+                </p>
+              </div>
+            </div>
+
             <div className="group relative overflow-hidden bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 rounded-xl p-6 border-2 border-blue-200 dark:border-blue-800 hover:shadow-lg transition-all duration-300 hover:scale-105">
               <div className="absolute top-0 right-0 w-20 h-20 bg-blue-300/20 rounded-full -mr-10 -mt-10"></div>
               <div className="relative">
                 <div className="flex items-center gap-2 mb-2">
                   <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                  <p className="text-sm font-medium text-blue-700 dark:text-blue-300">Total Fee</p>
+                  <p className="text-sm font-medium text-blue-700 dark:text-blue-300">Admission + Fee</p>
                 </div>
                 <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">
-                  {formatCurrency(totalFee)}
+                  {formatCurrency(admissionPlusFee)}
                 </p>
               </div>
             </div>
@@ -564,7 +681,7 @@ const StudentDetails = () => {
               <div className="relative">
                 <div className="flex items-center gap-2 mb-2">
                   <Clock className="w-5 h-5 text-orange-600 dark:text-orange-400" />
-                  <p className="text-sm font-medium text-orange-700 dark:text-orange-300">Pending Fee</p>
+                  <p className="text-sm font-medium text-orange-700 dark:text-orange-300">Remaining</p>
                 </div>
                 <p className="text-3xl font-bold text-orange-600 dark:text-orange-400">
                   {formatCurrency(pendingFee)}
@@ -572,6 +689,78 @@ const StudentDetails = () => {
               </div>
             </div>
           </div>
+
+          {/* Fee Structure Table - Monthly breakdown with running remaining balance */}
+          {displayRows.length > 0 && (
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                Fee Recovery Schedule
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                Total fee: <span className="font-semibold text-gray-900 dark:text-white">{formatCurrency(admissionPlusFee)}</span> — Fee = balance due at month start; Remaining = Fee − Paid (carries to next month).
+              </p>
+              <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead>
+                    <tr className="bg-green-700 text-white">
+                      <th className="px-4 py-3 text-left text-sm font-semibold">Months</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold">Fee</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold">Paid</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold">Remaining</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                    {displayRows.map((row, idx) => (
+                      <tr key={`${row.monthKey}-${idx}`} className="bg-gray-50 dark:bg-gray-700/30 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors">
+                        <td className="px-4 py-3 whitespace-nowrap text-sm">
+                          <span className="text-blue-600 dark:text-blue-400 font-medium">{row.monthLabel.split(' ')[0]}</span>
+                          <span className="text-gray-900 dark:text-white ml-1">{row.monthLabel.split(' ')[1]}</span>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                          {formatCurrency(row.fee || 0)}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-green-600 dark:text-green-400">
+                          {formatCurrency(row.paid || 0)}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
+                          <span className={row.remaining > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400'}>
+                            {formatCurrency(row.remaining ?? 0)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {row.status === 'paid' ? (
+                            <div className="flex flex-col gap-0.5">
+                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded text-xs font-medium w-fit">
+                                <CheckCircle className="w-3.5 h-3.5" /> Paid
+                              </span>
+                              {row.paymentDate && (
+                                <span className="text-xs text-gray-500 dark:text-gray-400">
+                                  {formatDate(row.paymentDate)}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="flex flex-col gap-0.5">
+                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 rounded text-xs font-medium w-fit">
+                                <Clock className="w-3.5 h-3.5" /> Remaining
+                              </span>
+                              {row.dueDate && (
+                                <span className="text-xs text-gray-500 dark:text-gray-400">
+                                  {formatDate(row.dueDate)}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Fee Breakdown Table - Enhanced */}
           {latestInvoice?.items && latestInvoice.items.length > 0 && (

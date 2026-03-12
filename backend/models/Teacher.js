@@ -88,6 +88,14 @@ const teacherSchema = new mongoose.Schema({
     bankAccount: String,
     bankName: String,
     ifscCode: String
+  },
+  // Biometric data for attendance (face & fingerprint)
+  biometric: {
+    faceId: { type: String, sparse: true, select: false },
+    faceTemplate: { type: String, select: false }, // Base64 encoded
+    fingerprintId: { type: String, sparse: true, select: false },
+    fingerprintTemplate: { type: String, select: false },
+    enrolledAt: { type: Date, default: Date.now }
   }
 }, {
   timestamps: true

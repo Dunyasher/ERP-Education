@@ -127,13 +127,12 @@ const FeeManagement = () => {
   }, [formData.courseId]);
 
   // Create invoice mutation
-  const createInvoiceMutation = useMutation(
-    async (data) => {
+  const createInvoiceMutation = useMutation({
+    mutationFn: async (data) => {
       const response = await api.post('/fees/invoices', data);
       return response.data;
     },
-    {
-      onSuccess: () => {
+    onSuccess: () => {
         toast.success('Fee invoice created successfully!');
         queryClient.invalidateQueries({ queryKey: ['students'] });
         queryClient.invalidateQueries({ queryKey: ['invoices'] });
@@ -150,20 +149,19 @@ const FeeManagement = () => {
           notes: ''
         });
       },
-      onError: (error) => {
-        if (error.response?.status === 401) {
-          toast.error('Session expired. Please login again.');
-          setTimeout(() => {
-            window.location.href = '/login';
-          }, 2000);
-        } else if (error.response?.status === 403) {
-          toast.error('You do not have permission to perform this action.');
-        } else {
-          toast.error(error.response?.data?.message || 'Failed to create invoice. Please try again.');
-        }
+    onError: (error) => {
+      if (error.response?.status === 401) {
+        toast.error('Session expired. Please login again.');
+        setTimeout(() => {
+          window.location.href = '/login';
+        }, 2000);
+      } else if (error.response?.status === 403) {
+        toast.error('You do not have permission to perform this action.');
+      } else {
+        toast.error(error.response?.data?.message || 'Failed to create invoice. Please try again.');
       }
     }
-  );
+  });
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -524,7 +522,7 @@ const FeeManagement = () => {
                 onClose={() => setShowAdmissionForm(false)}
                 onSuccess={(studentData) => {
                   // Refresh students list
-                  queryClient.invalidateQueries('students');
+                  queryClient.invalidateQueries({ queryKey: ['students'] });
                   queryClient.invalidateQueries({ queryKey: ['invoices'] });
                   // Optionally show success message or navigate
                   toast.success('Student admitted successfully!');

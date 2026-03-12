@@ -24,7 +24,15 @@ import {
   Trash2,
   FolderTree,
   X,
-  Users
+  Users,
+  Camera,
+  Fingerprint,
+  Scan,
+  CheckCircle,
+  History,
+  DollarSign,
+  Calendar,
+  Clock
 } from 'lucide-react';
 
 const StaffManagement = () => {
@@ -40,6 +48,7 @@ const StaffManagement = () => {
     confirmPassword: ''
   });
   const [showMoreOptions, setShowMoreOptions] = useState(null);
+  const [salaryViewMode, setSalaryViewMode] = useState('monthly'); // 'today' | 'monthly' | 'yearly'
   const dropdownRef = useRef(null);
   const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
@@ -62,8 +71,115 @@ const StaffManagement = () => {
     photoPreview: null,
     instituteType: 'college',
     staffCategoryId: '',
-    courses: []
+    courses: [],
+    faceTemplate: '',      // Base64 for face recognition
+    fingerprintId: ''      // Fingerprint ID for attendance
   });
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
+  const [isCameraOn, setIsCameraOn] = useState(false);
+  const [isRegisteringFingerprint, setIsRegisteringFingerprint] = useState(false);
+  const [showSalaryDoneModal, setShowSalaryDoneModal] = useState(false);
+  const [staffForSalaryDone, setStaffForSalaryDone] = useState(null);
+  const [salaryDoneMonth, setSalaryDoneMonth] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [salaryViewMonth, setSalaryViewMonth] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [showTeacherHistory, setShowTeacherHistory] = useState(false);
+  const [staffForHistory, setStaffForHistory] = useState(null);
+
+  // Salary Done mutation - record as expense
+  const salaryDoneMutation = useMutation({
+    mutationFn: async ({ staff, monthYear }) => {
+      const [year, month] = monthYear.split('-').map(Number);
+      const amount = staff.salary?.totalSalary ?? staff.salary?.basicSalary ?? 0;
+      if (!amount || amount <= 0) throw new Error('No salary amount set for this staff');
+      const paymentDate = new Date(year, month - 1, new Date().getDate());
+      const response = await api.post('/expenses', {
+        category: 'salary',
+        description: `Salary - ${staff.personalInfo?.fullName || 'Staff'}`,
+        amount,
+        date: paymentDate.toISOString(),
+        notes: `Staff: ${staff.personalInfo?.fullName}`,
+        teacherId: staff._id
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      toast.success('Salary marked as paid');
+      setShowSalaryDoneModal(false);
+      setStaffForSalaryDone(null);
+      queryClient.invalidateQueries({ queryKey: ['teachers'] });
+      queryClient.invalidateQueries({ queryKey: ['salaryPaidStaff'] });
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.message || err.message || 'Failed to record salary');
+    }
+  });
+
+  const handleSalaryDone = (member) => {
+    const amount = member.salary?.totalSalary ?? member.salary?.basicSalary ?? 0;
+    if (!amount || amount <= 0) {
+      toast.error('No salary set for this staff. Set salary in Edit first.');
+      return;
+    }
+    setStaffForSalaryDone(member);
+    const d = new Date();
+    setSalaryDoneMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    setShowSalaryDoneModal(true);
+  };
+
+  // Register fingerprint using laptop's built-in reader (WebAuthn)
+  const registerLaptopFingerprint = async () => {
+    if (!window.PublicKeyCredential) {
+      toast.error('WebAuthn not supported. Use Chrome, Edge, or Safari on a device with fingerprint.');
+      return;
+    }
+    setIsRegisteringFingerprint(true);
+    try {
+      const challenge = crypto.getRandomValues(new Uint8Array(32));
+      const userId = new TextEncoder().encode(staffFormData.email || staffFormData.fullName || `staff-${Date.now()}`);
+      const options = {
+        challenge,
+        rp: { name: 'Education ERP' },
+        user: {
+          id: userId,
+          name: staffFormData.email || 'staff@erp.local',
+          displayName: staffFormData.fullName || 'Staff Member'
+        },
+        pubKeyCredParams: [
+          { alg: -7, type: 'public-key' },
+          { alg: -257, type: 'public-key' }
+        ],
+        authenticatorSelection: {
+          userVerification: 'required',
+          authenticatorAttachment: 'platform',
+          residentKey: 'preferred'
+        },
+        timeout: 60000
+      };
+      const credential = await navigator.credentials.create({ publicKey: options });
+      if (credential?.rawId) {
+        const credentialId = btoa(String.fromCharCode(...new Uint8Array(credential.rawId)));
+        setStaffFormData(prev => ({ ...prev, fingerprintId: `webauthn:${credentialId}` }));
+        toast.success('Laptop fingerprint registered successfully');
+      }
+    } catch (err) {
+      if (err.name === 'NotAllowedError') {
+        toast.error('Fingerprint registration was cancelled or timed out');
+      } else {
+        console.error('WebAuthn error:', err);
+        toast.error('Fingerprint registration failed. Use hardware scanner or enter ID instead.');
+      }
+    } finally {
+      setIsRegisteringFingerprint(false);
+    }
+  };
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -148,6 +264,62 @@ const StaffManagement = () => {
     staleTime: 5 * 60 * 1000
   });
 
+  // Fetch salary expenses to show which staff have been paid this month
+  const { data: salaryExpenses = [] } = useQuery({
+    queryKey: ['salaryPaidStaff', salaryViewMonth],
+    queryFn: async () => {
+      const [year, month] = salaryViewMonth.split('-').map(Number);
+      const start = new Date(year, month - 1, 1);
+      const end = new Date(year, month, 0, 23, 59, 59);
+      const res = await api.get('/expenses', {
+        params: { category: 'salary', startDate: start.toISOString(), endDate: end.toISOString() }
+      });
+      return res.data || [];
+    }
+  });
+  // Fetch teacher financial history (expenses with teacherId)
+  const { data: teacherHistoryExpenses = [], isLoading: isLoadingHistory } = useQuery({
+    queryKey: ['teacherHistory', staffForHistory?._id],
+    queryFn: async () => {
+      const res = await api.get('/expenses', { params: { teacherId: staffForHistory._id } });
+      return res.data || [];
+    },
+    enabled: !!staffForHistory?._id
+  });
+
+  const paidTeacherInfo = useMemo(() => {
+    const map = new Map();
+    (salaryExpenses || []).forEach(exp => {
+      if (exp.teacherId) {
+        const id = exp.teacherId.toString();
+        const date = exp.date ? new Date(exp.date) : null;
+        if (!map.has(id) || (date && (!map.get(id).date || date > map.get(id).date))) {
+          map.set(id, { date });
+        }
+      }
+    });
+    return map;
+  }, [salaryExpenses]);
+
+  const formatPaymentDate = (d) => {
+    if (!d) return '';
+    const date = new Date(d);
+    return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+
+  const formatMonthLabel = (monthStr) => {
+    if (!monthStr) return '—';
+    const [y, m] = monthStr.split('-').map(Number);
+    const d = new Date(y, m - 1, 1);
+    return d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+  };
+
+  const totalStaffCount = staff.length;
+  const totalPaidThisMonth = (salaryExpenses || []).reduce((sum, e) => sum + (e.amount || 0), 0);
+  const pendingPayThisMonth = staff
+    .filter(m => (m.salary?.totalSalary > 0 || m.salary?.basicSalary > 0) && !paidTeacherInfo.has(m._id.toString()))
+    .reduce((sum, m) => sum + (m.salary?.totalSalary ?? m.salary?.basicSalary ?? 0), 0);
+
   // Fetch courses for Teacher Of field
   const { data: courses = [] } = useQuery({
     queryKey: ['courses'],
@@ -218,6 +390,10 @@ const StaffManagement = () => {
         case 'phone':
           aValue = a.contactInfo?.phone || '';
           bValue = b.contactInfo?.phone || '';
+          break;
+        case 'instituteType':
+          aValue = a.employment?.instituteType || '';
+          bValue = b.employment?.instituteType || '';
           break;
         default:
           return 0;
@@ -728,7 +904,13 @@ const StaffManagement = () => {
           status: 'active',
           courses: data.courses || []
         },
-        ...(data.staffCategoryId && { staffCategoryId: data.staffCategoryId })
+        ...(data.staffCategoryId && { staffCategoryId: data.staffCategoryId }),
+        ...((data.faceTemplate || data.fingerprintId) && {
+          biometric: {
+            ...(data.faceTemplate && { faceTemplate: data.faceTemplate }),
+            ...(data.fingerprintId && { fingerprintId: data.fingerprintId.trim() })
+          }
+        })
       };
 
       const response = await api.post('/teachers', teacherData);
@@ -805,11 +987,20 @@ const StaffManagement = () => {
     }
 
     addStaffMutation.mutate({
-      ...staffFormData
+      ...staffFormData,
+      faceTemplate: staffFormData.faceTemplate || undefined,
+      fingerprintId: staffFormData.fingerprintId?.trim() || undefined
     });
   };
 
   const resetStaffForm = () => {
+    // Stop camera if running
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) videoRef.current.srcObject = null;
+    setIsCameraOn(false);
     setStaffFormData({
       fullName: '',
       email: '',
@@ -821,8 +1012,50 @@ const StaffManagement = () => {
       photoPreview: null,
       instituteType: 'college',
       staffCategoryId: '',
-      courses: []
+      courses: [],
+      faceTemplate: '',
+      fingerprintId: ''
     });
+  };
+
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } } });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        streamRef.current = stream;
+        setIsCameraOn(true);
+      }
+    } catch (err) {
+      console.error('Camera error:', err);
+      toast.error('Unable to access camera. Check permissions and try again.');
+    }
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) videoRef.current.srcObject = null;
+    setIsCameraOn(false);
+  };
+
+  const captureFace = () => {
+    if (!videoRef.current || !canvasRef.current) {
+      toast.error('Camera not ready');
+      return;
+    }
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+    setStaffFormData(prev => ({ ...prev, faceTemplate: dataUrl }));
+    stopCamera();
+    toast.success('Face captured');
   };
 
   const handlePhotoChange = (e) => {
@@ -877,15 +1110,91 @@ const StaffManagement = () => {
       </div>
 
       {/* Section Title */}
-      <div className="bg-blue-600 text-white p-4 rounded-lg flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-          <User className="w-6 h-6" />
-        </div>
-        <h1 className="text-2xl font-bold">Manage Staff Accounts</h1>
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Employee Salary</h1>
       </div>
 
-      {/* Table Controls */}
-      <div className="card flex items-center justify-between flex-wrap gap-4">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="card p-5 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Staff</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{totalStaffCount}</p>
+          </div>
+          <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+            <Users className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+          </div>
+        </div>
+        <div className="card p-5 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Paid</p>
+            <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">Rs {totalPaidThisMonth.toLocaleString()}</p>
+          </div>
+          <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+            <DollarSign className="w-6 h-6 text-green-600 dark:text-green-400" />
+          </div>
+        </div>
+        <div className="card p-5 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Remaining Pay</p>
+            <p className="text-2xl font-bold text-orange-600 dark:text-orange-400 mt-1">Rs {pendingPayThisMonth.toLocaleString()}</p>
+          </div>
+          <div className="w-12 h-12 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
+            <Clock className="w-6 h-6 text-orange-600 dark:text-orange-400" />
+          </div>
+        </div>
+        <div className="card p-5 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">This Month</p>
+            <p className="text-xl font-bold text-gray-900 dark:text-white mt-1">{formatMonthLabel(salaryViewMonth)}</p>
+          </div>
+          <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
+            <Calendar className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+          </div>
+        </div>
+      </div>
+
+      {/* Export, Salary Month & View */}
+      <div className="card flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={exportToExcel} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center gap-2 text-sm font-medium">
+            <FileSpreadsheet className="w-4 h-4" /> Excel
+          </button>
+          <button onClick={exportToCSV} className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg flex items-center gap-2 text-sm font-medium">
+            <FileText className="w-4 h-4" /> CSV
+          </button>
+          <button onClick={exportToPDF} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg flex items-center gap-2 text-sm font-medium">
+            <FileText className="w-4 h-4" /> PDF
+          </button>
+          <button onClick={handlePrint} className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg flex items-center gap-2 text-sm font-medium">
+            <Printer className="w-4 h-4" /> Print
+          </button>
+        </div>
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-600 dark:text-gray-400">Salary Month:</label>
+            <input
+              type="month"
+              value={salaryViewMonth}
+              onChange={(e) => setSalaryViewMonth(e.target.value)}
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <span className="text-sm text-gray-600 dark:text-gray-400">{formatMonthLabel(salaryViewMonth)}</span>
+          </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+              placeholder="Search staff..."
+              className="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-48"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-2">
           <label className="text-sm text-gray-600 dark:text-gray-400">Show</label>
           <select
@@ -903,52 +1212,20 @@ const StaffManagement = () => {
           </select>
           <span className="text-sm text-gray-600 dark:text-gray-400">entries</span>
         </div>
-        
-        <div className="flex items-center gap-3 flex-wrap">
-          <button
-            onClick={exportToExcel}
-            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center gap-2 text-sm font-medium transition-colors"
-          >
-            <FileSpreadsheet className="w-4 h-4" />
-            Excel
-          </button>
-          <button
-            onClick={exportToCSV}
-            className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg flex items-center gap-2 text-sm font-medium transition-colors"
-          >
-            <FileText className="w-4 h-4" />
-            CSV
-          </button>
-          <button
-            onClick={exportToPDF}
-            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg flex items-center gap-2 text-sm font-medium transition-colors"
-          >
-            <FileText className="w-4 h-4" />
-            PDF
-          </button>
-          <button
-            onClick={handlePrint}
-            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg flex items-center gap-2 text-sm font-medium transition-colors"
-          >
-            <Printer className="w-4 h-4" />
-            Print
-          </button>
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-gray-600 dark:text-gray-400">Search:</label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  setCurrentPage(1);
-                }}
-                placeholder="Search staff..."
-                className="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-64"
-              />
-            </div>
-          </div>
+        <div className="flex rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600">
+          {['today', 'monthly', 'yearly'].map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setSalaryViewMode(mode)}
+              className={`px-4 py-2 text-sm font-medium capitalize transition-colors ${
+                salaryViewMode === mode
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
+              }`}
+            >
+              {mode === 'today' ? 'Today' : mode === 'monthly' ? 'Monthly' : 'Yearly'}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -957,53 +1234,28 @@ const StaffManagement = () => {
         <table className="w-full">
           <thead>
             <tr className="bg-blue-600 text-white">
-              <th 
-                className="px-4 py-3 text-left text-sm font-semibold cursor-pointer hover:bg-blue-700 transition-colors"
-                onClick={() => handleSort('empId')}
-              >
-                <div className="flex items-center gap-2">
-                  Emp. ID
-                  <ArrowUpDown className="w-4 h-4" />
-                </div>
+              <th className="px-4 py-3 text-left text-sm font-semibold cursor-pointer hover:bg-blue-700 transition-colors" onClick={() => handleSort('empId')}>
+                <div className="flex items-center gap-2">ID <ArrowUpDown className="w-4 h-4" /></div>
               </th>
               <th className="px-4 py-3 text-left text-sm font-semibold">Photo</th>
-              <th 
-                className="px-4 py-3 text-left text-sm font-semibold cursor-pointer hover:bg-blue-700 transition-colors"
-                onClick={() => handleSort('name')}
-              >
-                <div className="flex items-center gap-2">
-                  Name
-                  <ArrowUpDown className="w-4 h-4" />
-                </div>
+              <th className="px-4 py-3 text-left text-sm font-semibold cursor-pointer hover:bg-blue-700 transition-colors" onClick={() => handleSort('name')}>
+                <div className="flex items-center gap-2">Name <ArrowUpDown className="w-4 h-4" /></div>
               </th>
-              <th 
-                className="px-4 py-3 text-left text-sm font-semibold cursor-pointer hover:bg-blue-700 transition-colors"
-                onClick={() => handleSort('email')}
-              >
-                <div className="flex items-center gap-2">
-                  Email
-                  <ArrowUpDown className="w-4 h-4" />
-                </div>
+              <th className="px-4 py-3 text-left text-sm font-semibold cursor-pointer hover:bg-blue-700 transition-colors" onClick={() => handleSort('phone')}>
+                <div className="flex items-center gap-2">Contact <ArrowUpDown className="w-4 h-4" /></div>
               </th>
-              <th 
-                className="px-4 py-3 text-left text-sm font-semibold cursor-pointer hover:bg-blue-700 transition-colors"
-                onClick={() => handleSort('phone')}
-              >
-                <div className="flex items-center gap-2">
-                  Phone
-                  <ArrowUpDown className="w-4 h-4" />
-                </div>
+              <th className="px-4 py-3 text-left text-sm font-semibold cursor-pointer hover:bg-blue-700 transition-colors" onClick={() => handleSort('instituteType')}>
+                <div className="flex items-center gap-2">Institute <ArrowUpDown className="w-4 h-4" /></div>
               </th>
-              <th className="px-4 py-3 text-left text-sm font-semibold">Institute Type</th>
-              <th className="px-4 py-3 text-left text-sm font-semibold">ID Card</th>
-              <th className="px-4 py-3 text-left text-sm font-semibold">Password</th>
-              <th className="px-4 py-3 text-left text-sm font-semibold">More Options</th>
+              <th className="px-4 py-3 text-left text-sm font-semibold">Salary</th>
+              <th className="px-4 py-3 text-left text-sm font-semibold">Status</th>
+              <th className="px-4 py-3 text-left text-sm font-semibold">Action</th>
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
             {paginatedStaff.length === 0 ? (
               <tr>
-                <td colSpan="9" className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                <td colSpan="8" className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
                   <User className="w-12 h-12 mx-auto mb-4 text-gray-400" />
                   <p>No staff members found</p>
                   {searchTerm && <p className="text-sm mt-2">Try adjusting your search</p>}
@@ -1033,14 +1285,8 @@ const StaffManagement = () => {
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
                     <div className="flex items-center gap-2">
-                      <Mail className="w-4 h-4" />
-                      {member.userId?.email || 'N/A'}
-                    </div>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                    <div className="flex items-center gap-2">
-                      <Phone className="w-4 h-4" />
-                      {member.contactInfo?.phone || 'N/A'}
+                      <Phone className="w-4 h-4 flex-shrink-0" />
+                      {member.contactInfo?.phone || member.userId?.email || 'N/A'}
                     </div>
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
@@ -1052,22 +1298,54 @@ const StaffManagement = () => {
                     </div>
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap">
-                    <button
-                      onClick={() => handleGenerateID(member)}
-                      className="px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm font-medium flex items-center gap-2 transition-colors"
-                    >
-                      <CreditCard className="w-4 h-4" />
-                      Generate ID
-                    </button>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        onClick={() => { setStaffForHistory(member); setShowTeacherHistory(true); }}
+                        className="text-left text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                      >
+                        {member.salary?.totalSalary != null
+                          ? `Rs ${Number(member.salary.totalSalary).toLocaleString()}`
+                          : member.salary?.basicSalary != null
+                            ? `Rs ${Number(member.salary.basicSalary).toLocaleString()}`
+                            : '—'}
+                      </button>
+                      {(member.salary?.totalSalary > 0 || member.salary?.basicSalary > 0) && (
+                        paidTeacherInfo.has(member._id.toString()) ? (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              {formatPaymentDate(paidTeacherInfo.get(member._id.toString())?.date)}
+                            </span>
+                            <button
+                              onClick={() => { setStaffForHistory(member); setShowTeacherHistory(true); }}
+                              className="text-xs text-blue-600 dark:text-blue-400 hover:underline w-fit text-left"
+                            >
+                              View History
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => handleSalaryDone(member)}
+                            className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-medium flex items-center gap-1 transition-colors"
+                          >
+                            <CheckCircle className="w-3 h-3" />
+                            Mark Done
+                          </button>
+                        )
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap">
-                    <button
-                      onClick={() => handleResetPassword(member)}
-                      className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium flex items-center gap-2 transition-colors"
-                    >
-                      <Key className="w-4 h-4" />
-                      Reset Password
-                    </button>
+                    {(member.salary?.totalSalary > 0 || member.salary?.basicSalary > 0) && (
+                      paidTeacherInfo.has(member._id.toString()) ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded text-xs font-medium w-fit">
+                          <CheckCircle className="w-3.5 h-3.5" /> Paid
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 rounded text-xs font-medium w-fit">
+                          Pending
+                        </span>
+                      )
+                    )}
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap relative" ref={dropdownRef}>
                     <button
@@ -1079,18 +1357,45 @@ const StaffManagement = () => {
                     </button>
                     {showMoreOptions === member._id && (
                       <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-10">
+                        {(member.salary?.totalSalary > 0 || member.salary?.basicSalary > 0) && !paidTeacherInfo.has(member._id.toString()) && (
+                          <button
+                            onClick={() => { handleSalaryDone(member); setShowMoreOptions(null); }}
+                            className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                          >
+                            <DollarSign className="w-4 h-4" />
+                            Pay Salary
+                          </button>
+                        )}
+                        <button
+                          onClick={() => { setStaffForHistory(member); setShowTeacherHistory(true); setShowMoreOptions(null); }}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                        >
+                          <History className="w-4 h-4" />
+                          View History
+                        </button>
                         <Link
                           to={`/admin/teachers`}
                           className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
                         >
                           <Edit className="w-4 h-4" />
-                          Edit
+                          Edit Staff
                         </Link>
                         <button
-                          onClick={() => {
-                            handleDelete(member);
-                            setShowMoreOptions(null);
-                          }}
+                          onClick={() => { handleGenerateID(member); setShowMoreOptions(null); }}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                        >
+                          <FileText className="w-4 h-4" />
+                          Generate Slip
+                        </button>
+                        <button
+                          onClick={() => { handleResetPassword(member); setShowMoreOptions(null); }}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                        >
+                          <Key className="w-4 h-4" />
+                          Reset Password
+                        </button>
+                        <button
+                          onClick={() => { handleDelete(member); setShowMoreOptions(null); }}
                           className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -1187,6 +1492,128 @@ const StaffManagement = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Salary Done Modal */}
+      {showSalaryDoneModal && staffForSalaryDone && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <CheckCircle className="w-6 h-6 text-green-500" />
+              Mark Salary Done
+            </h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              Record salary payment for <strong>{staffForSalaryDone.personalInfo?.fullName || 'Staff'}</strong>
+            </p>
+            <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">
+              Amount: <strong>Rs {(staffForSalaryDone.salary?.totalSalary ?? staffForSalaryDone.salary?.basicSalary ?? 0).toLocaleString()}</strong>
+            </p>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Payment month (when salary was received)
+              </label>
+              <input
+                type="month"
+                value={salaryDoneMonth}
+                onChange={(e) => setSalaryDoneMonth(e.target.value)}
+                className="input-field w-full"
+              />
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSalaryDoneModal(false);
+                  setStaffForSalaryDone(null);
+                }}
+                className="btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => salaryDoneMutation.mutate({ staff: staffForSalaryDone, monthYear: salaryDoneMonth })}
+                disabled={salaryDoneMutation.isLoading}
+                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium disabled:opacity-50"
+              >
+                {salaryDoneMutation.isLoading ? 'Recording...' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Teacher History Modal - Salary History Table */}
+      {showTeacherHistory && staffForHistory && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <History className="w-6 h-6 text-blue-500" />
+                Salary History — {staffForHistory.personalInfo?.fullName || 'Staff'}
+              </h2>
+              <button
+                onClick={() => { setShowTeacherHistory(false); setStaffForHistory(null); }}
+                className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto flex-1">
+              {isLoadingHistory ? (
+                <div className="text-center py-8 text-gray-500">Loading salary history...</div>
+              ) : teacherHistoryExpenses.length === 0 ? (
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  <History className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p>No salary records yet.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Salary History</h3>
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="bg-blue-600 text-white">
+                        <th className="px-4 py-3 text-left text-sm font-semibold">Date</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold">Salary</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold">Deductions</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold">Bonuses</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold">Net Pay</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...teacherHistoryExpenses]
+                        .sort((a, b) => new Date(b.date) - new Date(a.date))
+                        .map((exp) => {
+                          const deductions = exp.deductions ?? 0;
+                          const bonuses = exp.bonuses ?? 0;
+                          const salary = exp.grossSalary ?? (exp.amount ?? 0) + deductions - bonuses;
+                          const netPay = exp.netPay ?? exp.amount ?? salary - deductions + bonuses;
+                          return (
+                            <tr key={exp._id} className="border-b border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                              <td className="px-4 py-3 text-sm text-gray-900 dark:text-white whitespace-nowrap">
+                                {formatPaymentDate(exp.date)}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                                Rs {salary.toLocaleString()}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-orange-600 dark:text-orange-400">
+                                Rs {deductions.toLocaleString()}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-green-600 dark:text-green-400">
+                                Rs {bonuses.toLocaleString()}
+                              </td>
+                              <td className="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-white">
+                                Rs {netPay.toLocaleString()}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -1613,6 +2040,126 @@ const StaffManagement = () => {
                       })}
                     </div>
                   )}
+                </div>
+
+                {/* Face Scanner & Fingerprint - for attendance */}
+                <div className="space-y-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <h3 className="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                    <Scan className="w-5 h-5 text-indigo-500" />
+                    Face Scanner & Fingerprint
+                  </h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Register biometrics for staff attendance.</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Face Scanner */}
+                    <div className="rounded-xl border-2 border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-950/20 p-4">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+                        <Camera className="w-4 h-4 text-indigo-600" />
+                        Face Scanner
+                      </label>
+                      {staffFormData.faceTemplate ? (
+                        <div className="relative inline-block">
+                          <img src={staffFormData.faceTemplate} alt="Face scan" className="w-40 h-40 object-cover rounded-xl border-2 border-indigo-300 dark:border-indigo-700 ring-4 ring-indigo-100 dark:ring-indigo-900/50" />
+                          <button type="button" onClick={() => setStaffFormData(prev => ({ ...prev, faceTemplate: '' }))} className="absolute -top-2 -right-2 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 shadow-lg">
+                            <X className="w-4 h-4" />
+                          </button>
+                          <p className="text-xs text-green-600 dark:text-green-400 mt-2 font-medium">✓ Face registered</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="relative aspect-square max-w-[200px] mx-auto bg-gray-900 rounded-xl overflow-hidden">
+                            <video
+                              ref={videoRef}
+                              autoPlay
+                              muted
+                              playsInline
+                              className="w-full h-full object-cover"
+                              style={{ display: isCameraOn ? 'block' : 'none' }}
+                            />
+                            {!isCameraOn && (
+                              <div className="absolute inset-0 flex items-center justify-center bg-gray-800 rounded-xl">
+                                <div className="text-center text-gray-400">
+                                  <Camera className="w-12 h-12 mx-auto mb-2 opacity-60" />
+                                  <p className="text-xs">Camera off</p>
+                                </div>
+                              </div>
+                            )}
+                            {isCameraOn && (
+                              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                <div className="w-24 h-32 rounded-full border-2 border-indigo-400/80 border-dashed" title="Position face here" />
+                              </div>
+                            )}
+                            <canvas ref={canvasRef} className="hidden" />
+                          </div>
+                          <div className="flex gap-2">
+                            {!isCameraOn ? (
+                              <button type="button" onClick={startCamera} className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors">
+                                <Scan className="w-4 h-4" /> Start Face Scan
+                              </button>
+                            ) : (
+                              <>
+                                <button type="button" onClick={captureFace} className="flex items-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors">
+                                  <Camera className="w-4 h-4" /> Capture
+                                </button>
+                                <button type="button" onClick={stopCamera} className="px-4 py-2.5 bg-gray-600 hover:bg-gray-700 text-white text-sm rounded-lg">
+                                  Cancel
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {/* Fingerprint Scanner */}
+                    <div className="rounded-xl border-2 border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 p-4">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+                        <Fingerprint className="w-4 h-4 text-amber-600" />
+                        Fingerprint Scanner
+                      </label>
+                      {staffFormData.fingerprintId ? (
+                        <div className="flex flex-col items-center justify-center min-h-[160px] rounded-xl border-2 border-green-300 dark:border-green-700 bg-white dark:bg-gray-800/50 p-4">
+                          <Fingerprint className="w-16 h-16 mb-2 text-green-600 dark:text-green-400" />
+                          <p className="text-sm text-green-600 dark:text-green-400 font-medium">✓ Fingerprint registered</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {staffFormData.fingerprintId.startsWith('webauthn:') ? 'Laptop fingerprint' : 'Hardware scanner ID'}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setStaffFormData(prev => ({ ...prev, fingerprintId: '' }))}
+                            className="mt-3 text-xs text-red-600 dark:text-red-400 hover:underline"
+                          >
+                            Clear & re-register
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <button
+                            type="button"
+                            onClick={registerLaptopFingerprint}
+                            disabled={isRegisteringFingerprint}
+                            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-amber-600 hover:bg-amber-700 disabled:bg-amber-400 text-white text-sm font-medium rounded-lg transition-colors"
+                          >
+                            <Fingerprint className="w-5 h-5" />
+                            {isRegisteringFingerprint ? 'Place finger on sensor...' : 'Use laptop fingerprint'}
+                          </button>
+                          <div
+                            onClick={() => document.getElementById('fingerprint-input')?.focus()}
+                            className="flex flex-col items-center justify-center py-4 rounded-xl border-2 border-dashed border-amber-300 dark:border-amber-700 bg-white dark:bg-gray-800/50 cursor-text hover:border-amber-500 dark:hover:border-amber-500 transition-colors"
+                          >
+                            <input
+                              id="fingerprint-input"
+                              type="text"
+                              value={staffFormData.fingerprintId}
+                              onChange={(e) => setStaffFormData(prev => ({ ...prev, fingerprintId: e.target.value }))}
+                              placeholder="Or enter ID from hardware scanner..."
+                              className="w-full max-w-[200px] text-center text-sm bg-transparent border-none focus:outline-none focus:ring-0 placeholder-gray-400 dark:placeholder-gray-500"
+                              autoComplete="off"
+                            />
+                            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">USB scanner or manual ID</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 <div className="flex justify-end gap-4 pt-4 border-t">

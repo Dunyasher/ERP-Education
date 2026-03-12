@@ -1,6 +1,8 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { useAuth, useTheme, useAppDispatch } from '../store/hooks';
+import { useQuery } from '@tanstack/react-query';
+import { useAuth, useAppDispatch } from '../store/hooks';
 import { logout } from '../store/slices/authSlice';
+import api from '../utils/api';
 import {
   LayoutDashboard,
   Users,
@@ -18,14 +20,9 @@ import {
   FileBarChart,
   School,
   Calendar,
-  Sun,
-  Moon,
   UserPlus,
   UserCheck,
-  CreditCard,
   MessageSquare,
-  Monitor,
-  Clock,
   ChevronRight,
   ChevronDown,
   Bell,
@@ -39,7 +36,6 @@ import { useState, useEffect } from 'react';
 
 const Layout = () => {
   const { user } = useAuth();
-  const { theme, toggleTheme } = useTheme();
   const dispatch = useAppDispatch();
   
   const handleLogout = () => {
@@ -49,41 +45,24 @@ const Layout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [openSubmenus, setOpenSubmenus] = useState({});
 
-  // Define submenus
+  // Define submenus (Settings has submenu with Institute)
   const submenus = {
-    'ID Card Printing': [
-      { name: 'Print Student Cards', path: '/admin/print-id-cards', icon: Users },
-      { name: 'Print Staff Cards', path: '/admin/print-staff-cards', icon: GraduationCap },
-      { name: 'ID Card Settings', path: '/admin/id-card-settings', icon: Settings },
-    ],
-    'Student Management': [
-      { name: 'All Students', path: '/admin/students', icon: Users },
-      { name: 'Student Promotion', path: '/admin/students/promotion', icon: TrendingUp },
-      { name: 'Student Reports', path: '/admin/students/reports', icon: BarChart3 },
-    ],
-    'Admission Management': [
-      { name: 'Admit Student', path: '/admin/students/new', icon: UserCheck },
-    ],
-    'Manage Attendance': [
-      { name: 'Students Attendance', path: '/admin/attendance/manual', icon: Circle },
-      { name: 'Staff Attendance', path: '/admin/attendance/staff', icon: Circle },
+    'Settings': [
+      { name: 'General Settings', path: '/admin/settings', icon: Settings },
+      { name: 'Institute Types', path: '/admin/institute-types', icon: School },
     ],
   };
 
   const adminMenu = [
     { name: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard, hasSubmenu: false },
-    { name: 'Student Management', path: '/admin/students', icon: Users, hasSubmenu: true },
-    { name: 'Admission Management', path: '/admin/students/new', icon: UserCheck, hasSubmenu: true },
-    { name: 'Fee Payment', path: '/admin/fee-payment', icon: DollarSign, hasSubmenu: false },
-    { name: 'Staff Management', path: '/admin/staff', icon: GraduationCap, hasSubmenu: false },
-    { name: 'Accountant Management', path: '/admin/accountants', icon: DollarSign, hasSubmenu: false },
-    { name: 'ID Card Printing', path: '/admin/id-card-menu', icon: CreditCard, hasSubmenu: true },
-    { name: 'Public Messages', path: '/admin/messages', icon: MessageSquare, hasSubmenu: false, badge: 3 },
+    { name: 'Students', path: '/admin/students', icon: FileText, hasSubmenu: false },
+    { name: 'Teachers', path: '/admin/teachers', icon: Users, hasSubmenu: false },
     { name: 'Classes', path: '/admin/classes', icon: BookOpen, hasSubmenu: false },
-    { name: 'Institute Types', path: '/admin/institute-types', icon: School, hasSubmenu: false },
-    { name: 'Manage Attendance', path: '/admin/attendance/manual', icon: BarChart3, hasSubmenu: true },
-    { name: 'Online Classes', path: '/admin/online-classes', icon: Monitor, hasSubmenu: false },
-    { name: 'Timetable Management', path: '/admin/timetable', icon: Clock, hasSubmenu: false },
+    { name: 'Attendance', path: '/admin/attendance', icon: Calendar, hasSubmenu: false },
+    { name: 'Exams', path: '/admin/reports', icon: FileBarChart, hasSubmenu: false },
+    { name: 'Accounting', path: '/admin/accountant-settings', icon: DollarSign, hasSubmenu: false },
+    { name: 'Settings', path: '/admin/settings', icon: Settings, hasSubmenu: true },
+    { name: 'Messages', path: '/admin/messages', icon: MessageSquare, hasSubmenu: false },
   ];
 
   const superAdminMenu = [
@@ -91,6 +70,7 @@ const Layout = () => {
     { name: 'Colleges', path: '/admin/settings', icon: School },
     { name: 'All Students', path: '/admin/students', icon: Users },
     { name: 'All Courses', path: '/admin/courses', icon: BookOpen },
+    { name: 'Expenses', path: '/admin/expenses', icon: TrendingDown },
     { name: 'Reports', path: '/admin/reports', icon: BarChart3 },
     { name: 'Settings', path: '/admin/settings', icon: Settings },
   ];
@@ -111,7 +91,10 @@ const Layout = () => {
 
   const accountantMenu = [
     { name: 'Dashboard', path: '/accountant/dashboard', icon: LayoutDashboard },
+    { name: 'Accountant Settings', path: '/admin/accountant-settings', icon: Settings },
+    { name: 'Expenses', path: '/admin/expenses', icon: TrendingDown },
     { name: 'Admissions', path: '/accountant/students', icon: Users },
+    { name: 'Fees Overview', path: '/admin/fees/overview', icon: DollarSign },
     { name: 'Monthly Payments', path: '/accountant/monthly-payments', icon: Calendar },
     { name: 'Payment Records', path: '/accountant/payment-records', icon: FileText },
     { name: 'Reports', path: '/accountant/reports', icon: BarChart3 },
@@ -126,6 +109,26 @@ const Layout = () => {
     : user?.role === 'accountant'
     ? accountantMenu
     : studentMenu;
+
+  const { data: unreadNotif } = useQuery({
+    queryKey: ['unreadNotifications'],
+    queryFn: () => api.get('/notifications/unread/count').then((r) => r.data),
+    refetchInterval: 60000,
+    retry: false
+  });
+  const unreadCount = unreadNotif?.count ?? 0;
+
+  const instituteName = (() => {
+    try {
+      const gs = localStorage.getItem('adminGeneralSettings');
+      if (gs) {
+        const parsed = JSON.parse(gs);
+        if (parsed?.schoolName) return parsed.schoolName;
+      }
+    } catch (e) {}
+    return user?.collegeId?.name || 'Education ERP';
+  })();
+  const roleLabel = user?.role === 'super_admin' ? 'Super Admin' : user?.role === 'admin' ? 'Admin Dashboard' : user?.role === 'teacher' ? 'Teacher Portal' : user?.role === 'accountant' ? 'Accountant Portal' : 'Student Portal';
 
   const toggleSubmenu = (menuName) => {
     setOpenSubmenus(prev => ({
@@ -162,28 +165,13 @@ const Layout = () => {
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 z-40 h-screen w-72 bg-blue-900 shadow-xl transform transition-transform duration-300 ease-in-out lg:translate-x-0 ${
+        className={`fixed top-0 left-0 z-40 h-screen w-72 bg-[#1e3a5f] shadow-xl transform transition-transform duration-300 ease-in-out lg:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         <div className="h-full flex flex-col">
-          <div className="p-6 border-b border-blue-800">
-            <h1 className="text-2xl font-bold text-white">Education ERP</h1>
-            <p className="text-sm text-blue-200 mt-1">
-              {user?.role === 'super_admin'
-                ? 'Super Admin Panel'
-                : user?.role === 'admin' 
-                ? 'Admin Panel' 
-                : user?.role === 'teacher' 
-                ? 'Teacher Portal'
-                : user?.role === 'accountant'
-                ? 'Accountant Portal'
-                : 'Student Portal'}
-            </p>
-          </div>
-
-          <nav className="flex-1 p-4 overflow-y-auto">
-            <ul className="space-y-0.5">
+          <nav className="flex-1 overflow-y-auto pt-4">
+            <ul className="py-2">
               {menu.map((item) => {
                 const Icon = item.icon;
                 const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
@@ -192,37 +180,35 @@ const Layout = () => {
                 const hasActiveSubmenu = submenuItems.some(subItem => 
                   location.pathname === subItem.path || location.pathname.startsWith(subItem.path + '/')
                 );
+                const isHighlighted = isActive || hasActiveSubmenu;
 
                 return (
-                  <li key={item.path}>
+                  <li key={item.path} className="border-b border-blue-800/40 last:border-b-0">
                     {item.hasSubmenu ? (
                       <>
                         <button
                           onClick={() => toggleSubmenu(item.name)}
-                          className={`w-full flex items-center justify-between px-4 py-3 transition-colors ${
-                            isActive || hasActiveSubmenu
-                              ? 'bg-blue-800 text-white'
+                          className={`w-full flex items-center justify-between px-5 py-3.5 transition-colors ${
+                            isHighlighted
+                              ? 'bg-blue-600/80 text-white'
                               : 'text-white hover:bg-blue-800/50'
                           }`}
                         >
-                          <div className="flex items-center space-x-3">
+                          <div className="flex items-center gap-3">
                             <Icon size={20} className="flex-shrink-0 text-white" />
                             <span className="font-medium text-sm text-white">{item.name}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             {item.badge && (
-                              <span className="bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0">
+                              <span className="bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 px-1 flex items-center justify-center flex-shrink-0">
                                 {item.badge}
                               </span>
                             )}
-                            <ChevronRight 
-                              size={16} 
-                              className="flex-shrink-0 text-white" 
-                            />
+                            <ChevronRight size={18} className="flex-shrink-0 text-white" />
                           </div>
                         </button>
                         {isSubmenuOpen && submenuItems.length > 0 && (
-                          <ul className="ml-4 mt-1 space-y-0.5">
+                          <ul className="bg-blue-900/50 py-1">
                             {submenuItems.map((subItem) => {
                               const SubIcon = subItem.icon;
                               const isSubActive = location.pathname === subItem.path || location.pathname.startsWith(subItem.path + '/');
@@ -231,16 +217,14 @@ const Layout = () => {
                                   <Link
                                     to={subItem.path}
                                     onClick={() => setSidebarOpen(false)}
-                                    className={`flex items-center space-x-3 px-4 py-2 transition-colors ${
+                                    className={`flex items-center gap-3 px-5 py-2.5 pl-12 transition-colors ${
                                       isSubActive
-                                        ? 'text-white'
-                                        : 'text-white hover:bg-blue-800/50'
+                                        ? 'text-white bg-blue-700/50'
+                                        : 'text-blue-100 hover:bg-blue-800/50 hover:text-white'
                                     }`}
                                   >
-                                    <SubIcon size={8} className="flex-shrink-0 fill-current" />
-                                    <span className={`text-sm font-medium ${isSubActive ? 'border-b-2 border-red-500 pb-0.5' : ''}`}>
-                                      {subItem.name}
-                                    </span>
+                                    <SubIcon size={14} className="flex-shrink-0" />
+                                    <span className="text-sm font-medium">{subItem.name}</span>
                                   </Link>
                                 </li>
                               );
@@ -252,66 +236,84 @@ const Layout = () => {
                       <Link
                         to={item.path}
                         onClick={() => setSidebarOpen(false)}
-                        className={`flex items-center justify-between px-4 py-3 transition-colors ${
+                        className={`flex items-center justify-between px-5 py-3.5 transition-colors ${
                           isActive
-                            ? 'bg-blue-800 text-white'
+                            ? 'bg-blue-600/80 text-white'
                             : 'text-white hover:bg-blue-800/50'
                         }`}
                       >
-                        <div className="flex items-center space-x-3">
+                        <div className="flex items-center gap-3">
                           <Icon size={20} className="flex-shrink-0 text-white" />
                           <span className="font-medium text-sm text-white">{item.name}</span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          {item.badge && (
-                            <span className="bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0">
-                              {item.badge}
-                            </span>
-                          )}
-                        </div>
+                        {item.badge && (
+                          <span className="bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 px-1 flex items-center justify-center flex-shrink-0">
+                            {item.badge}
+                          </span>
+                        )}
                       </Link>
                     )}
                   </li>
                 );
               })}
+              {/* Logout at bottom */}
+              <li className="border-t border-blue-800/60 mt-2 pt-2">
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-3 px-5 py-3.5 text-white hover:bg-blue-800/50 transition-colors"
+                >
+                  <LogOut size={20} className="flex-shrink-0 text-white" />
+                  <span className="font-medium text-sm">Logout</span>
+                </button>
+              </li>
             </ul>
-
-            {/* User Account Section - Inside Scroll Area */}
-            <div className="mt-6 pt-6 border-t border-blue-800">
-              {/* User Account Information */}
-              <div className="mb-4 px-4 py-2">
-                <p className="text-base font-bold text-white mb-1">
-                  {user?.role === 'admin' ? 'Admin' : user?.role === 'super_admin' ? 'Super Admin' : user?.role === 'teacher' ? 'Teacher' : user?.role === 'accountant' ? 'Accountant' : 'Student'} {user?.profile?.firstName} {user?.profile?.lastName}
-                </p>
-                <p className="text-sm text-blue-200">{user?.email}</p>
-              </div>
-              
-              {/* Dark Mode Button */}
-              <button
-                onClick={toggleTheme}
-                className="w-full mb-2 flex items-center space-x-3 px-4 py-3 bg-blue-800 text-white hover:bg-blue-700 transition-colors"
-                title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-              >
-                <Moon size={20} className="text-white" />
-                <span className="font-medium">Dark Mode</span>
-              </button>
-              
-              {/* Logout Button */}
-              <button
-                onClick={handleLogout}
-                className="w-full flex items-center space-x-3 px-4 py-3 text-white hover:bg-blue-800 transition-colors"
-              >
-                <LogOut size={20} className="text-white" />
-                <span className="font-medium">Logout</span>
-              </button>
-            </div>
           </nav>
         </div>
       </aside>
 
-      {/* Main content */}
-      <div className="lg:ml-72 pt-14 xs:pt-16 lg:pt-0">
-        <main className="p-2 xs:p-3 sm:p-4 md:p-6">
+      {/* Main content area (top header + content) */}
+      <div className="lg:ml-72 flex flex-col min-h-screen pt-14 lg:pt-0">
+        {/* Top header bar - desktop */}
+        <header className="hidden lg:flex items-center justify-between px-6 py-4 bg-gradient-to-r from-blue-700 to-blue-800 rounded-b-xl shadow-md flex-shrink-0">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
+              <School size={28} className="text-white" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-white leading-tight">{instituteName}</h1>
+              <p className="text-sm text-blue-100">{roleLabel}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 text-white">
+              <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center shrink-0">
+                <UserCircle size={20} className="text-white" />
+              </div>
+              <span className="font-medium">Welcome, {user?.role === 'admin' || user?.role === 'super_admin' ? 'Admin' : user?.profile?.firstName || user?.role}</span>
+              <ChevronDown size={16} className="opacity-80" />
+            </div>
+            <Link
+              to="/admin/settings"
+              className="relative p-2 text-white hover:bg-white/10 rounded-lg transition-colors"
+              title="Notifications"
+            >
+              <Bell size={22} className="text-white" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </Link>
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
+            >
+              Logout
+              <ChevronDown size={14} className="opacity-80" />
+            </button>
+          </div>
+        </header>
+        <main className="flex-1 p-2 xs:p-3 sm:p-4 md:p-6 pt-4 lg:pt-6">
           <Outlet />
         </main>
       </div>

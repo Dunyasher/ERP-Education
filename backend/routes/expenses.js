@@ -10,9 +10,10 @@ const { notifyFinancialUpdate } = require('../utils/notifications');
 // @access  Private (Admin)
 router.get('/', authenticate, addCollegeFilter, async (req, res) => {
   try {
-    const { startDate, endDate, category, department } = req.query;
+    const { startDate, endDate, category, department, teacherId } = req.query;
     const query = buildCollegeQuery(req);
 
+    if (teacherId) query.teacherId = teacherId;
     if (startDate || endDate) {
       query.date = {};
       if (startDate) query.date.$gte = new Date(startDate);

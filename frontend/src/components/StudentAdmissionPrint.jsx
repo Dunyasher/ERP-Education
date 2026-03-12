@@ -235,7 +235,7 @@ const StudentAdmissionPrint = ({ student, onClose }) => {
               </p>
             </div>
             <div>
-              <p className="text-sm text-gray-600">Pending Fee:</p>
+              <p className="text-sm text-gray-600">Remaining Fee:</p>
               <p className="font-semibold text-gray-900">
                 ${student.feeInfo?.pendingFee?.toLocaleString() || '0.00'}
               </p>

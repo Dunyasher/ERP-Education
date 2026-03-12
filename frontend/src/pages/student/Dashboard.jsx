@@ -124,7 +124,7 @@ const StudentDashboard = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                Pending Fees
+                Remaining Fees
               </p>
               <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">
                 {formatCurrency(stats?.pendingFees || 0)}
@@ -235,7 +235,7 @@ const StudentDashboard = () => {
               </span>
             </div>
             <div className="flex justify-between items-center p-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
-              <span className="text-gray-700 dark:text-gray-300">Pending:</span>
+              <span className="text-gray-700 dark:text-gray-300">Remaining:</span>
               <span className="font-bold text-red-600 dark:text-red-400">
                 {formatCurrency(stats?.pendingFees || 0)}
               </span>

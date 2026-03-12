@@ -30,14 +30,118 @@ import {
   Shield,
   KeyRound,
   Building2,
-  XCircle
+  XCircle,
+  Upload
 } from 'lucide-react';
 import { useAuth } from '../../store/hooks';
+
+const GENERAL_SETTINGS_KEY = 'adminGeneralSettings';
+
+const loadGeneralSettings = () => {
+  try {
+    const saved = localStorage.getItem(GENERAL_SETTINGS_KEY);
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (e) {}
+  const y = new Date().getFullYear();
+  return {
+    schoolName: '',
+    schoolAddress: '',
+    academicYear: `${y - 1} - ${y}`,
+    timeZone: 'America/New_York',
+    language: 'en',
+    dateFormat: 'MM/DD/YYYY',
+    enableParentPortal: true,
+    enableEmailNotifications: true,
+    enableSmsNotifications: false
+  };
+};
+
+const TIMEZONES = [
+  { value: 'America/New_York', label: '(GMT-05:00) Eastern Time (US & Canada)' },
+  { value: 'America/Chicago', label: '(GMT-06:00) Central Time (US & Canada)' },
+  { value: 'America/Los_Angeles', label: '(GMT-08:00) Pacific Time (US & Canada)' },
+  { value: 'Asia/Karachi', label: '(GMT+05:00) Pakistan Standard Time' },
+  { value: 'Asia/Kolkata', label: '(GMT+05:30) India Standard Time' },
+  { value: 'Europe/London', label: '(GMT+00:00) Greenwich Mean Time' },
+  { value: 'UTC', label: '(GMT+00:00) UTC' }
+];
+
+const LANGUAGES = [
+  { value: 'en', label: 'English' },
+  { value: 'ur', label: 'Urdu' },
+  { value: 'ar', label: 'Arabic' }
+];
+
+const DATE_FORMATS = [
+  { value: 'MM/DD/YYYY', label: 'MM/DD/YYYY' },
+  { value: 'DD/MM/YYYY', label: 'DD/MM/YYYY' },
+  { value: 'YYYY-MM-DD', label: 'YYYY-MM-DD' }
+];
+
+const ACADEMIC_YEARS = [
+  `${new Date().getFullYear() - 2} - ${new Date().getFullYear() - 1}`,
+  `${new Date().getFullYear() - 1} - ${new Date().getFullYear()}`,
+  `${new Date().getFullYear()} - ${new Date().getFullYear() + 1}`
+];
+
+const ACADEMIC_SETTINGS_KEY = 'adminAcademicSettings';
+
+const loadAcademicSettings = () => {
+  try {
+    const saved = localStorage.getItem(ACADEMIC_SETTINGS_KEY);
+    if (saved) return JSON.parse(saved);
+  } catch (e) {}
+  return {
+    gradingSystem: 'percentage',
+    subjectsPerClass: '6',
+    attendanceType: 'daily',
+    enableExamMarks: true,
+    passPercentage: '50%',
+    enableOnlineExams: true,
+    enableClassPromotion: true
+  };
+};
+
+const GRADING_SYSTEMS = [
+  { value: 'percentage', label: 'Percentage' },
+  { value: 'letter', label: 'Letter Grade' },
+  { value: 'gpa', label: 'GPA' }
+];
+
+const ATTENDANCE_TYPES = [
+  { value: 'daily', label: 'Daily (Present/Absent)' },
+  { value: 'period', label: 'Period-based' },
+  { value: 'hourly', label: 'Hourly' }
+];
+
+const PASS_PERCENTAGES = ['40%', '50%', '60%', '70%', '80%'];
+
+const SYSTEM_SETTINGS_KEY = 'adminSystemSettings';
+
+const loadSystemSettings = () => {
+  try {
+    const saved = localStorage.getItem(SYSTEM_SETTINGS_KEY);
+    if (saved) return JSON.parse(saved);
+  } catch (e) {}
+  return {
+    timezone: 'America/New_York',
+    dateFormat: 'MM/DD/YYYY',
+    sessionTimeout: 30,
+    allowFileUploads: true,
+    enableGoogleIntegration: true
+  };
+};
 
 const Settings = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState('profile');
+  const [activeTab, setActiveTab] = useState('general');
+  const [systemSubTab, setSystemSubTab] = useState('profile');
+  const [generalSettings, setGeneralSettings] = useState(loadGeneralSettings);
+  const [academicSettings, setAcademicSettings] = useState(loadAcademicSettings);
+  const [systemSettings, setSystemSettings] = useState(loadSystemSettings);
   const [showPassword, setShowPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
@@ -105,7 +209,7 @@ const Settings = () => {
       const response = await api.get('/settings/users');
       return response.data;
     },
-    enabled: activeTab === 'users'
+    enabled: activeTab === 'system' && systemSubTab === 'users'
   });
 
   // Fetch all college admins (Super Admin only)
@@ -115,7 +219,7 @@ const Settings = () => {
       const response = await api.get('/colleges/all-admins');
       return response.data;
     },
-    enabled: user?.role === 'super_admin' && activeTab === 'college-admins'
+    enabled: user?.role === 'super_admin' && activeTab === 'system' && systemSubTab === 'college-admins'
   });
 
   // Reset admin password mutation
@@ -434,8 +538,8 @@ const Settings = () => {
       const response = await api.get('/notifications?limit=100');
       return response.data;
     },
-    enabled: activeTab === 'notifications',
-    refetchInterval: activeTab === 'notifications' ? 30000 : false // Refetch every 30 seconds when on notifications tab
+    enabled: activeTab === 'notificationsettings',
+    refetchInterval: activeTab === 'notificationsettings' ? 30000 : false
   });
 
   const { data: unreadCount = { count: 0 } } = useQuery({
@@ -470,67 +574,326 @@ const Settings = () => {
     }
   });
 
+  // Initialize general settings from college profile when empty
+  useEffect(() => {
+    if (currentUser?.college && (!generalSettings.schoolName || !generalSettings.schoolAddress)) {
+      const addr = currentUser.college.contactInfo?.address;
+      const fullAddress = addr ? [addr.street, addr.city, addr.state, addr.zipCode, addr.country].filter(Boolean).join(', ') : '';
+      setGeneralSettings(prev => ({
+        ...prev,
+        schoolName: prev.schoolName || currentUser.college.name || '',
+        schoolAddress: prev.schoolAddress || fullAddress || ''
+      }));
+    }
+  }, [currentUser]);
+
+  const saveGeneralSettings = () => {
+    localStorage.setItem(GENERAL_SETTINGS_KEY, JSON.stringify(generalSettings));
+    toast.success('Settings saved successfully!');
+  };
+
+  const saveAcademicSettings = () => {
+    localStorage.setItem(ACADEMIC_SETTINGS_KEY, JSON.stringify(academicSettings));
+    toast.success('Academic settings saved successfully!');
+  };
+
+  const saveSystemSettings = () => {
+    localStorage.setItem(SYSTEM_SETTINGS_KEY, JSON.stringify(systemSettings));
+    toast.success('System settings saved successfully!');
+  };
+
   const tabs = [
-    { id: 'profile', name: 'My Profile', icon: User },
-    { id: 'password', name: 'Change Password', icon: Lock },
-    { id: 'users', name: 'User Management', icon: Users },
-    ...(user?.role === 'super_admin' ? [{ id: 'college-admins', name: 'College Admins', icon: Shield }] : []),
-    { id: 'notifications', name: 'Notifications', icon: Bell, badge: unreadCount.count > 0 ? unreadCount.count : null },
-    { id: 'system', name: 'System Overview', icon: BarChart3 }
+    { id: 'general', name: 'General Settings' },
+    { id: 'academic', name: 'Academic Settings' },
+    { id: 'system', name: 'System Settings' },
+    { id: 'notificationsettings', name: 'Notification Settings', badge: unreadCount.count > 0 ? unreadCount.count : null }
   ];
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 sm:p-6 lg:p-8">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-4xl mx-auto">
         {/* Header */}
-        <div className="mb-6 sm:mb-8">
-          <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
-            <SettingsIcon className="w-8 h-8 sm:w-10 sm:h-10 text-indigo-600" />
-            Settings
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Manage your account, users, and system settings
-          </p>
-        </div>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-6">
+          Settings
+        </h1>
 
-        {/* Tabs */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm mb-6">
-          <div className="border-b border-gray-200 dark:border-gray-700">
-            <nav className="flex flex-wrap -mb-px px-4 sm:px-6" aria-label="Tabs">
-              {tabs.map((tab) => {
-                const Icon = tab.icon;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`
-                      relative flex items-center gap-2 px-3 sm:px-4 py-3 sm:py-4 text-sm font-medium border-b-2 transition-colors
-                      ${activeTab === tab.id
-                        ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-                      }
-                    `}
-                  >
-                    <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
-                    <span className="hidden sm:inline">{tab.name}</span>
-                    {tab.badge && tab.badge > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                        {tab.badge > 99 ? '99+' : tab.badge}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
+        {/* Tabs - Blue active, gray inactive */}
+        <div className="bg-white dark:bg-gray-800 rounded-t-lg shadow-sm border border-gray-200 dark:border-gray-700 border-b-0 overflow-hidden">
+          <nav className="flex" aria-label="Tabs">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`
+                  relative flex-1 flex items-center justify-center gap-2 px-4 py-4 text-sm font-medium transition-colors
+                  ${activeTab === tab.id
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white dark:bg-gray-800 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+                  }
+                `}
+              >
+                {tab.name}
+                {tab.badge && tab.badge > 0 && (
+                  <span className="absolute -top-1 -right-1 sm:static sm:ml-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                    {tab.badge > 99 ? '99+' : tab.badge}
+                  </span>
+                )}
+              </button>
+            ))}
+          </nav>
         </div>
 
         {/* Tab Content */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 sm:p-6 lg:p-8">
-          {/* Profile Tab */}
-          {activeTab === 'profile' && (
+        <div className="bg-white dark:bg-gray-800 rounded-b-lg shadow-sm border border-gray-200 dark:border-gray-700 border-t-0 p-6 sm:p-8">
+          {/* General Settings Tab */}
+          {activeTab === 'general' && (
+            <div className="space-y-5 max-w-xl">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">School Name:</label>
+                <input
+                  type="text"
+                  value={generalSettings.schoolName}
+                  onChange={(e) => setGeneralSettings({ ...generalSettings, schoolName: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">School Address:</label>
+                <input
+                  type="text"
+                  value={generalSettings.schoolAddress}
+                  onChange={(e) => setGeneralSettings({ ...generalSettings, schoolAddress: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Academic Year:</label>
+                <select
+                  value={generalSettings.academicYear}
+                  onChange={(e) => setGeneralSettings({ ...generalSettings, academicYear: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  {ACADEMIC_YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Time Zone:</label>
+                <select
+                  value={generalSettings.timeZone}
+                  onChange={(e) => setGeneralSettings({ ...generalSettings, timeZone: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  {TIMEZONES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Language:</label>
+                <select
+                  value={generalSettings.language}
+                  onChange={(e) => setGeneralSettings({ ...generalSettings, language: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  {LANGUAGES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Date Format:</label>
+                <select
+                  value={generalSettings.dateFormat}
+                  onChange={(e) => setGeneralSettings({ ...generalSettings, dateFormat: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  {DATE_FORMATS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+                </select>
+              </div>
+              <div className="flex items-center justify-between py-2">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Enable Parent Portal:</label>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={generalSettings.enableParentPortal}
+                    onClick={() => setGeneralSettings({ ...generalSettings, enableParentPortal: !generalSettings.enableParentPortal })}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${generalSettings.enableParentPortal ? 'bg-green-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${generalSettings.enableParentPortal ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                  <span className="text-sm text-gray-500">{generalSettings.enableParentPortal ? 'Enabled' : 'Disabled'}</span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between py-2">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Enable Email Notifications:</label>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={generalSettings.enableEmailNotifications}
+                    onClick={() => setGeneralSettings({ ...generalSettings, enableEmailNotifications: !generalSettings.enableEmailNotifications })}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${generalSettings.enableEmailNotifications ? 'bg-green-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${generalSettings.enableEmailNotifications ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                  <span className="text-sm text-gray-500">{generalSettings.enableEmailNotifications ? 'Enabled' : 'Disabled'}</span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between py-2">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Enable SMS Notifications:</label>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={generalSettings.enableSmsNotifications}
+                    onClick={() => setGeneralSettings({ ...generalSettings, enableSmsNotifications: !generalSettings.enableSmsNotifications })}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${generalSettings.enableSmsNotifications ? 'bg-green-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${generalSettings.enableSmsNotifications ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                  <span className="text-sm text-gray-500">{generalSettings.enableSmsNotifications ? 'Enabled' : 'Disabled'}</span>
+                </div>
+              </div>
+              <button
+                onClick={saveGeneralSettings}
+                className="mt-4 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
+              >
+                <Save className="w-4 h-4" />
+                Save Changes
+              </button>
+            </div>
+          )}
+
+          {/* Academic Settings Tab */}
+          {activeTab === 'academic' && (
+            <div className="space-y-5 max-w-2xl">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6">
+                Academic Settings
+              </h2>
+              <div className="grid gap-5">
+                <div className="flex items-center justify-between gap-4">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 shrink-0 w-40">Grading System:</label>
+                  <select
+                    value={academicSettings.gradingSystem}
+                    onChange={(e) => setAcademicSettings({ ...academicSettings, gradingSystem: e.target.value })}
+                    className="flex-1 max-w-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    {GRADING_SYSTEMS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
+                  </select>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 shrink-0 w-40">Subjects Per Class:</label>
+                  <input
+                    type="text"
+                    value={academicSettings.subjectsPerClass}
+                    onChange={(e) => setAcademicSettings({ ...academicSettings, subjectsPerClass: e.target.value })}
+                    className="flex-1 max-w-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 shrink-0 w-40">Attendance Type:</label>
+                  <select
+                    value={academicSettings.attendanceType}
+                    onChange={(e) => setAcademicSettings({ ...academicSettings, attendanceType: e.target.value })}
+                    className="flex-1 max-w-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    {ATTENDANCE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                  </select>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 shrink-0 w-40">Enable Exam Marks:</label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={academicSettings.enableExamMarks}
+                      onClick={() => setAcademicSettings({ ...academicSettings, enableExamMarks: !academicSettings.enableExamMarks })}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${academicSettings.enableExamMarks ? 'bg-green-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${academicSettings.enableExamMarks ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                    <span className="text-sm text-gray-500">{academicSettings.enableExamMarks ? 'Enabled' : 'Disabled'}</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 shrink-0 w-40">Pass Percentage:</label>
+                  <select
+                    value={academicSettings.passPercentage}
+                    onChange={(e) => setAcademicSettings({ ...academicSettings, passPercentage: e.target.value })}
+                    className="flex-1 max-w-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    {PASS_PERCENTAGES.map((p) => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 shrink-0 w-40">Enable Online Exams:</label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={academicSettings.enableOnlineExams}
+                      onClick={() => setAcademicSettings({ ...academicSettings, enableOnlineExams: !academicSettings.enableOnlineExams })}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${academicSettings.enableOnlineExams ? 'bg-green-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${academicSettings.enableOnlineExams ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                    <span className="text-sm text-gray-500">{academicSettings.enableOnlineExams ? 'Enabled' : 'Disabled'}</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 shrink-0 w-40">Enable Class Promotion:</label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={academicSettings.enableClassPromotion}
+                      onClick={() => setAcademicSettings({ ...academicSettings, enableClassPromotion: !academicSettings.enableClassPromotion })}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${academicSettings.enableClassPromotion ? 'bg-green-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${academicSettings.enableClassPromotion ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                    <span className="text-sm text-gray-500">{academicSettings.enableClassPromotion ? 'Enabled' : 'Disabled'}</span>
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={saveAcademicSettings}
+                className="mt-6 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
+              >
+                <Save className="w-4 h-4" />
+                Save Changes
+              </button>
+            </div>
+          )}
+
+          {/* System Settings Tab - Profile, Password, Users, College Admins, System Overview */}
+          {activeTab === 'system' && (
             <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <div className="flex flex-wrap gap-2 border-b border-gray-200 dark:border-gray-700 pb-4 mb-4">
+                {[
+                  { id: 'profile', name: 'My Profile', icon: User },
+                  { id: 'password', name: 'Change Password', icon: Lock },
+                  { id: 'users', name: 'User Management', icon: Users },
+                  ...(user?.role === 'super_admin' ? [{ id: 'college-admins', name: 'College Admins', icon: Shield }] : []),
+                  { id: 'overview', name: 'System Settings', icon: BarChart3 }
+                ].map((t) => {
+                  const Icon = t.icon;
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => setSystemSubTab(t.id)}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        systemSubTab === t.id
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {t.name}
+                    </button>
+                  );
+                })}
+              </div>
+              {systemSubTab === 'profile' && (
+            <div className="space-y-6">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                 <User className="w-6 h-6" />
                 My Profile
               </h2>
@@ -704,8 +1067,7 @@ const Settings = () => {
             </div>
           )}
 
-          {/* Password Tab */}
-          {activeTab === 'password' && (
+          {systemSubTab === 'password' && (
             <div className="space-y-6">
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                 <Lock className="w-6 h-6" />
@@ -783,8 +1145,7 @@ const Settings = () => {
             </div>
           )}
 
-          {/* Users Management Tab */}
-          {activeTab === 'users' && (
+          {systemSubTab === 'users' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center flex-wrap gap-4">
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
@@ -886,155 +1247,6 @@ const Settings = () => {
                   </tbody>
                 </table>
               </div>
-            </div>
-          )}
-
-          {/* Notifications Tab */}
-          {activeTab === 'notifications' && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center flex-wrap gap-4">
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                  <Bell className="w-6 h-6" />
-                  Notifications
-                  {unreadCount.count > 0 && (
-                    <span className="bg-red-500 text-white text-sm font-bold rounded-full px-3 py-1">
-                      {unreadCount.count} unread
-                    </span>
-                  )}
-                </h2>
-                {notifications.length > 0 && unreadCount.count > 0 && (
-                  <button
-                    onClick={() => markAllAsReadMutation.mutate()}
-                    disabled={markAllAsReadMutation.isLoading}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2 text-sm font-semibold"
-                  >
-                    <CheckCircle className="w-4 h-4" />
-                    Mark All as Read
-                  </button>
-                )}
-              </div>
-
-              {notifications.length === 0 ? (
-                <div className="text-center py-12">
-                  <Bell className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500 dark:text-gray-400 text-lg">No notifications yet</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {notifications.map((notification) => {
-                    const getPriorityIcon = () => {
-                      switch (notification.priority) {
-                        case 'critical':
-                          return <AlertTriangle className="w-5 h-5 text-red-500" />;
-                        case 'high':
-                          return <AlertCircle className="w-5 h-5 text-orange-500" />;
-                        case 'medium':
-                          return <Info className="w-5 h-5 text-blue-500" />;
-                        default:
-                          return <Info className="w-5 h-5 text-gray-500" />;
-                      }
-                    };
-
-                    const getPriorityColor = () => {
-                      switch (notification.priority) {
-                        case 'critical':
-                          return 'border-red-500 bg-red-50 dark:bg-red-900/20';
-                        case 'high':
-                          return 'border-orange-500 bg-orange-50 dark:bg-orange-900/20';
-                        case 'medium':
-                          return 'border-blue-500 bg-blue-50 dark:bg-blue-900/20';
-                        default:
-                          return 'border-gray-300 bg-white dark:bg-gray-800';
-                      }
-                    };
-
-                    return (
-                      <div
-                        key={notification._id}
-                        className={`border-l-4 rounded-lg p-4 shadow-sm transition-all ${
-                          notification.isRead 
-                            ? 'opacity-75 ' + getPriorityColor()
-                            : getPriorityColor() + ' font-semibold'
-                        }`}
-                        onClick={() => {
-                          if (!notification.isRead) {
-                            markAsReadMutation.mutate(notification._id);
-                          }
-                        }}
-                      >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex items-start gap-3 flex-1">
-                            <div className="mt-1">
-                              {getPriorityIcon()}
-                            </div>
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <h3 className={`font-semibold ${notification.isRead ? 'text-gray-700 dark:text-gray-300' : 'text-gray-900 dark:text-white'}`}>
-                                  {notification.title}
-                                </h3>
-                                {!notification.isRead && (
-                                  <span className="bg-blue-500 text-white text-xs px-2 py-0.5 rounded-full">New</span>
-                                )}
-                              </div>
-                              <p className={`text-sm ${notification.isRead ? 'text-gray-600 dark:text-gray-400' : 'text-gray-700 dark:text-gray-300'}`}>
-                                {notification.message}
-                              </p>
-                              <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
-                                <span>
-                                  {new Date(notification.createdAt).toLocaleString()}
-                                </span>
-                                {notification.metadata?.updatedBy && (
-                                  <span>By: {notification.metadata.updatedBy}</span>
-                                )}
-                                {notification.metadata?.amount && (
-                                  <span className="font-semibold text-green-600 dark:text-green-400">
-                                    Amount: {notification.metadata.amount.toLocaleString()}
-                                  </span>
-                                )}
-                                {notification.metadata?.category && (
-                                  <span className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">
-                                    {notification.metadata.category}
-                                  </span>
-                                )}
-                              </div>
-                              {notification.metadata?.oldValues && notification.metadata?.newValues && (
-                                <div className="mt-3 p-3 bg-gray-100 dark:bg-gray-700 rounded text-xs">
-                                  <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                      <p className="font-semibold mb-1">Old Values:</p>
-                                      <pre className="text-gray-600 dark:text-gray-300 text-xs">
-                                        {JSON.stringify(notification.metadata.oldValues, null, 2)}
-                                      </pre>
-                                    </div>
-                                    <div>
-                                      <p className="font-semibold mb-1">New Values:</p>
-                                      <pre className="text-gray-600 dark:text-gray-300 text-xs">
-                                        {JSON.stringify(notification.metadata.newValues, null, 2)}
-                                      </pre>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          {!notification.isRead && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                markAsReadMutation.mutate(notification._id);
-                              }}
-                              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                              title="Mark as read"
-                            >
-                              <CheckCircle className="w-5 h-5" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
             </div>
           )}
 
@@ -1167,8 +1379,7 @@ const Settings = () => {
             </div>
           )}
 
-          {/* College Admins Tab (Super Admin Only) */}
-          {activeTab === 'college-admins' && user?.role === 'super_admin' && (
+          {systemSubTab === 'college-admins' && user?.role === 'super_admin' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center flex-wrap gap-4">
                 <div>
@@ -1620,60 +1831,179 @@ const Settings = () => {
             </div>
           )}
 
-          {/* System Overview Tab */}
-          {activeTab === 'system' && (
-            <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                <BarChart3 className="w-6 h-6" />
-                System Overview
+          {systemSubTab === 'overview' && (
+            <div className="space-y-5 max-w-2xl">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6">
+                System Settings
               </h2>
-              {stats && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                  <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900 dark:to-blue-800 p-6 rounded-lg shadow-sm">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-blue-600 dark:text-blue-300">Total Students</p>
-                        <p className="text-3xl font-bold text-blue-900 dark:text-blue-100 mt-2">{stats.students}</p>
-                      </div>
-                      <GraduationCap className="w-12 h-12 text-blue-600 dark:text-blue-300" />
-                    </div>
+              <div className="grid gap-5">
+                <div className="flex items-center justify-between gap-4">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 shrink-0 w-48">System Logo:</label>
+                  <button
+                    type="button"
+                    onClick={() => toast('Upload functionality - connect to your file API', { icon: '📁' })}
+                    className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors flex items-center gap-2 text-sm font-medium"
+                  >
+                    <Upload className="w-4 h-4" />
+                    Upload New Logo
+                  </button>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 shrink-0 w-48">Wallpaper:</label>
+                  <button
+                    type="button"
+                    onClick={() => toast('Upload functionality - connect to your file API', { icon: '📁' })}
+                    className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors flex items-center gap-2 text-sm font-medium"
+                  >
+                    <Upload className="w-4 h-4" />
+                    Upload New Wallpaper
+                  </button>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 shrink-0 w-48">Timezone:</label>
+                  <select
+                    value={systemSettings.timezone}
+                    onChange={(e) => setSystemSettings({ ...systemSettings, timezone: e.target.value })}
+                    className="flex-1 max-w-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    {TIMEZONES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                  </select>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 shrink-0 w-48">Date Format:</label>
+                  <select
+                    value={systemSettings.dateFormat}
+                    onChange={(e) => setSystemSettings({ ...systemSettings, dateFormat: e.target.value })}
+                    className="flex-1 max-w-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    {DATE_FORMATS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+                  </select>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 shrink-0 w-48">Session Timeout (minutes):</label>
+                  <input
+                    type="number"
+                    min={5}
+                    max={480}
+                    value={systemSettings.sessionTimeout}
+                    onChange={(e) => setSystemSettings({ ...systemSettings, sessionTimeout: parseInt(e.target.value) || 30 })}
+                    className="flex-1 max-w-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 shrink-0 w-48">Allow File Uploads:</label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={systemSettings.allowFileUploads}
+                      onClick={() => setSystemSettings({ ...systemSettings, allowFileUploads: !systemSettings.allowFileUploads })}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${systemSettings.allowFileUploads ? 'bg-green-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${systemSettings.allowFileUploads ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                    <span className="text-sm text-gray-500">{systemSettings.allowFileUploads ? 'Enabled' : 'Disabled'}</span>
                   </div>
-                  <div className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900 dark:to-purple-800 p-6 rounded-lg shadow-sm">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-purple-600 dark:text-purple-300">Total Teachers</p>
-                        <p className="text-3xl font-bold text-purple-900 dark:text-purple-100 mt-2">{stats.teachers}</p>
-                      </div>
-                      <Users className="w-12 h-12 text-purple-600 dark:text-purple-300" />
-                    </div>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 shrink-0 w-48">Enable Google Integration:</label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={systemSettings.enableGoogleIntegration}
+                      onClick={() => setSystemSettings({ ...systemSettings, enableGoogleIntegration: !systemSettings.enableGoogleIntegration })}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${systemSettings.enableGoogleIntegration ? 'bg-green-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${systemSettings.enableGoogleIntegration ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                    <span className="text-sm text-gray-500">{systemSettings.enableGoogleIntegration ? 'Enabled' : 'Disabled'}</span>
                   </div>
-                  <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900 dark:to-green-800 p-6 rounded-lg shadow-sm">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-green-600 dark:text-green-300">Total Courses</p>
-                        <p className="text-3xl font-bold text-green-900 dark:text-green-100 mt-2">{stats.courses}</p>
+                </div>
+              </div>
+              <button
+                onClick={saveSystemSettings}
+                className="mt-6 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
+              >
+                <Save className="w-4 h-4" />
+                Save Changes
+              </button>
+            </div>
+          )}
+            </div>
+          )}
+
+          {activeTab === 'notificationsettings' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center flex-wrap gap-4">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                  <Bell className="w-6 h-6" />
+                  Notifications
+                  {unreadCount.count > 0 && (
+                    <span className="bg-red-500 text-white text-sm font-bold rounded-full px-3 py-1">
+                      {unreadCount.count} unread
+                    </span>
+                  )}
+                </h2>
+                {notifications.length > 0 && unreadCount.count > 0 && (
+                  <button
+                    onClick={() => markAllAsReadMutation.mutate()}
+                    disabled={markAllAsReadMutation.isLoading}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2 text-sm font-semibold"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    Mark All as Read
+                  </button>
+                )}
+              </div>
+              {notifications.length === 0 ? (
+                <div className="text-center py-12">
+                  <Bell className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500 dark:text-gray-400 text-lg">No notifications yet</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {notifications.map((notification) => {
+                    const getPriorityIcon = () => {
+                      switch (notification.priority) {
+                        case 'critical': return <AlertTriangle className="w-5 h-5 text-red-500" />;
+                        case 'high': return <AlertCircle className="w-5 h-5 text-orange-500" />;
+                        case 'medium': return <Info className="w-5 h-5 text-blue-500" />;
+                        default: return <Info className="w-5 h-5 text-gray-500" />;
+                      }
+                    };
+                    const getPriorityColor = () => {
+                      switch (notification.priority) {
+                        case 'critical': return 'border-red-500 bg-red-50 dark:bg-red-900/20';
+                        case 'high': return 'border-orange-500 bg-orange-50 dark:bg-orange-900/20';
+                        case 'medium': return 'border-blue-500 bg-blue-50 dark:bg-blue-900/20';
+                        default: return 'border-gray-300 bg-white dark:bg-gray-800';
+                      }
+                    };
+                    return (
+                      <div key={notification._id} className={`border-l-4 rounded-lg p-4 shadow-sm transition-all ${notification.isRead ? 'opacity-75 ' + getPriorityColor() : getPriorityColor() + ' font-semibold'}`} onClick={() => { if (!notification.isRead) markAsReadMutation.mutate(notification._id); }}>
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex items-start gap-3 flex-1">
+                            <div className="mt-1">{getPriorityIcon()}</div>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <h3 className={`font-semibold ${notification.isRead ? 'text-gray-700 dark:text-gray-300' : 'text-gray-900 dark:text-white'}`}>{notification.title}</h3>
+                                {!notification.isRead && <span className="bg-blue-500 text-white text-xs px-2 py-0.5 rounded-full">New</span>}
+                              </div>
+                              <p className={`text-sm ${notification.isRead ? 'text-gray-600 dark:text-gray-400' : 'text-gray-700 dark:text-gray-300'}`}>{notification.message}</p>
+                              <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+                                <span>{new Date(notification.createdAt).toLocaleString()}</span>
+                                {notification.metadata?.updatedBy && <span>By: {notification.metadata.updatedBy}</span>}
+                                {notification.metadata?.amount && <span className="font-semibold text-green-600 dark:text-green-400">Amount: {notification.metadata.amount.toLocaleString()}</span>}
+                                {notification.metadata?.category && <span className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">{notification.metadata.category}</span>}
+                              </div>
+                            </div>
+                          </div>
+                          {!notification.isRead && <button onClick={(e) => { e.stopPropagation(); markAsReadMutation.mutate(notification._id); }} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" title="Mark as read"><CheckCircle className="w-5 h-5" /></button>}
+                        </div>
                       </div>
-                      <BookOpen className="w-12 h-12 text-green-600 dark:text-green-300" />
-                    </div>
-                  </div>
-                  <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-indigo-900 dark:to-indigo-800 p-6 rounded-lg shadow-sm">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-indigo-600 dark:text-indigo-300">Total Categories</p>
-                        <p className="text-3xl font-bold text-indigo-900 dark:text-indigo-100 mt-2">{stats.categories}</p>
-                      </div>
-                      <FileText className="w-12 h-12 text-indigo-600 dark:text-indigo-300" />
-                    </div>
-                  </div>
-                  <div className="bg-gradient-to-br from-pink-50 to-pink-100 dark:from-pink-900 dark:to-pink-800 p-6 rounded-lg shadow-sm">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-pink-600 dark:text-pink-300">Total Users</p>
-                        <p className="text-3xl font-bold text-pink-900 dark:text-pink-100 mt-2">{stats.users}</p>
-                      </div>
-                      <Users className="w-12 h-12 text-pink-600 dark:text-pink-300" />
-                    </div>
-                  </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

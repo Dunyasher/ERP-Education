@@ -24,7 +24,10 @@ import {
   Search,
   Settings,
   Filter,
-  XCircle
+  XCircle,
+  Eye,
+  BarChart3,
+  MoreVertical
 } from 'lucide-react';
 
 const Classes = () => {
@@ -44,6 +47,7 @@ const Classes = () => {
     categoryId: '',
     status: ''
   });
+  const [sectionFilter, setSectionFilter] = useState('');
   const [editingScheduleIndex, setEditingScheduleIndex] = useState(null);
   const [selectedInstructorId, setSelectedInstructorId] = useState('');
   const [editingCategory, setEditingCategory] = useState(null);
@@ -197,6 +201,16 @@ const Classes = () => {
       );
     }
 
+    // Section filter (A, B, C, etc. - matches name containing section)
+    if (sectionFilter) {
+      result = result.filter(classItem => {
+        const name = (classItem.name || '').toLowerCase();
+        return name.includes(`- ${sectionFilter.toLowerCase()}`) || 
+               name.includes(` ${sectionFilter.toLowerCase()} `) ||
+               name.endsWith(` ${sectionFilter.toLowerCase()}`);
+      });
+    }
+
     // Apply search term
     if (searchTerm.trim()) {
       const searchLower = searchTerm.toLowerCase();
@@ -209,7 +223,18 @@ const Classes = () => {
     }
 
     return result;
-  }, [classes, searchTerm, filters]);
+  }, [classes, searchTerm, filters, sectionFilter]);
+
+  // Summary stats for sidebar
+  const summaryStats = useMemo(() => {
+    const total = filteredClasses.length;
+    const students = filteredClasses.reduce((sum, c) => sum + (c.studentCount || 0), 0);
+    const feesCollected = filteredClasses.reduce((sum, c) => sum + (c.totalPaid || c.totalFee || 0), 0);
+    return { totalClasses: total, totalStudents: students, totalFees: feesCollected };
+  }, [filteredClasses]);
+
+  // Badge colors for class letter (cycle through)
+  const badgeColors = ['bg-blue-500', 'bg-red-500', 'bg-orange-500', 'bg-green-500', 'bg-violet-500'];
 
   // Auto-select class from URL parameter or location state
   useEffect(() => {
@@ -849,7 +874,7 @@ const Classes = () => {
                       <th>Email</th>
                       <th>Total Fee</th>
                       <th>Paid</th>
-                      <th>Pending</th>
+                      <th>Remaining</th>
                       <th>Status</th>
                     </tr>
                   </thead>
@@ -968,7 +993,7 @@ const Classes = () => {
                             Paid: <span className="font-semibold">{formatCurrency(schedulePaidFee)}</span>
                           </p>
                           <p className="text-red-600 dark:text-red-400">
-                            Pending: <span className="font-semibold">{formatCurrency(schedulePendingFee)}</span>
+                            Remaining: <span className="font-semibold">{formatCurrency(schedulePendingFee)}</span>
                           </p>
                         </div>
                       </div>
@@ -1170,271 +1195,198 @@ const Classes = () => {
   // Main classes list view
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-3 mb-2">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-              Classes
+      {/* Header with illustration */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex items-start gap-4">
+          <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shrink-0">
+            <BookOpen className="w-7 h-7 text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-1">
+              Classes A - Z
             </h1>
-            <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-2 py-1 rounded-full font-medium">
-              A-Z
-            </span>
+            <p className="text-gray-600 dark:text-gray-400 text-sm">
+              View all classes, student enrollment, and fee collection details (sorted alphabetically)
+            </p>
           </div>
-          <p className="text-gray-600 dark:text-gray-400">
-            View all classes, student enrollment, and fee collection details (sorted alphabetically)
-          </p>
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => {
-              setShowCategoryForm(true);
-              setEditingCategory(null);
-              setCategoryFormData({
-                name: '',
-                instituteType: 'college',
-                categoryType: 'course',
-                description: ''
-              });
-            }}
-            className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold transition-colors duration-200 shadow-lg hover:shadow-xl"
-          >
-            <FolderTree className="w-5 h-5" />
-            Category
-          </button>
-          <button
-            onClick={() => setShowCreateClassForm(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold transition-colors duration-200 shadow-lg hover:shadow-xl"
-          >
-            <Plus className="w-5 h-5" />
-            Add Class
-          </button>
+        {/* Decorative illustration */}
+        <div className="hidden sm:flex w-24 h-24 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30 items-center justify-center shrink-0 overflow-hidden">
+          <GraduationCap className="w-12 h-12 text-blue-600 dark:text-blue-400" />
         </div>
       </div>
 
-      {/* Search Bar and Filter */}
-      <div className="card">
-        <div className="flex gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-            <input
-              type="text"
-              placeholder="Search by name, category, or serial number..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-            />
-          </div>
-          <button
-            onClick={() => setShowFilterForm(!showFilterForm)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition-colors duration-200 ${
-              Object.values(filters).some(f => f) 
-                ? 'bg-indigo-600 hover:bg-indigo-700 text-white' 
-                : 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300'
-            }`}
-          >
-            <Filter className="w-5 h-5" />
-            Filter
-            {Object.values(filters).some(f => f) && (
-              <span className="bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                {Object.values(filters).filter(f => f).length}
-              </span>
-            )}
-          </button>
+      {/* Search and Filter Bar */}
+      <div className="flex flex-wrap gap-3 items-center">
+        <div className="relative flex-1 min-w-[220px]">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 w-5 h-5" />
+          <input
+            type="text"
+            placeholder="Search Classes..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          />
         </div>
-
-        {/* Filter Panel */}
-        {showFilterForm && (
-          <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Filter Classes</h3>
-              <button
-                onClick={() => setShowFilterForm(false)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Institute Type Filter */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Institute Type
-                </label>
-                <InstituteTypeSelect
-                  value={filters.instituteType}
-                  onChange={(value) => setFilters({ ...filters, instituteType: value })}
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
-                  placeholder="All Institute Types"
-                />
-              </div>
-
-              {/* Category Filter */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Category
-                </label>
-                <select
-                  value={filters.categoryId}
-                  onChange={(e) => setFilters({ ...filters, categoryId: e.target.value })}
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
-                >
-                  <option value="">All Categories</option>
-                  {allCategories.map((category) => (
-                    <option key={category._id} value={category._id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Status Filter */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Status
-                </label>
-                <select
-                  value={filters.status}
-                  onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
-                >
-                  <option value="">All Status</option>
-                  <option value="published">Published</option>
-                  <option value="draft">Draft</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Clear Filters Button */}
-            {Object.values(filters).some(f => f) && (
-              <div className="mt-4 flex justify-end">
-                <button
-                  onClick={() => {
-                    setFilters({
-                      instituteType: '',
-                      categoryId: '',
-                      status: ''
-                    });
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
-                >
-                  <XCircle className="w-4 h-4" />
-                  Clear All Filters
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+        <select
+          value={filters.categoryId}
+          onChange={(e) => setFilters({ ...filters, categoryId: e.target.value })}
+          className="px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[120px]"
+        >
+          <option value="">Grade</option>
+          {allCategories.map((cat) => (
+            <option key={cat._id} value={cat._id}>{cat.name}</option>
+          ))}
+        </select>
+        <select
+          value={sectionFilter}
+          onChange={(e) => setSectionFilter(e.target.value)}
+          className="px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[120px]"
+        >
+          <option value="">Section</option>
+          {['A', 'B', 'C', 'D', 'E'].map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
+        <button
+          onClick={() => setShowCreateClassForm(true)}
+          className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors shrink-0"
+        >
+          <Plus className="w-5 h-5" />
+          Add Class
+        </button>
       </div>
 
-      {/* Classes Table */}
-      <div className="card overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-          <thead className="bg-gray-50 dark:bg-gray-800">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Serial No
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Class Name
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Category
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Institute Type
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Instructor
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Students
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Fee
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Status
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-            {filteredClasses.length === 0 ? (
+      {/* Main content: Table + Sidebar */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
+        {/* Classes Table */}
+        <div className="card overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead className="bg-gray-50 dark:bg-gray-800">
               <tr>
-                <td colSpan="9" className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
-                  <BookOpen className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                  <p>{isLoading ? 'Loading classes...' : 'No classes found'}</p>
-                </td>
+                <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Class</th>
+                <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Students</th>
+                <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Enrollment</th>
+                <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Fees Collected</th>
+                <th className="px-5 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
               </tr>
-            ) : (
-              filteredClasses.map((classItem) => (
-                <tr 
-                  key={classItem._id} 
-                  className="hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
-                  onClick={() => setSelectedClass(classItem)}
-                >
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                    {classItem.srNo || 'N/A'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
-                    {classItem.name || 'N/A'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                    {classItem.category || 'N/A'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                    {classItem.instituteType 
-                      ? classItem.instituteType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())
-                      : 'N/A'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                    {classItem.instructor || 'Not Assigned'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                    <span className="font-medium">
-                      {classItem.studentCount || 0} / {classItem.capacity || 50}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                    {formatCurrency(classItem.totalFee || 0)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                      classItem.status === 'published' 
-                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                        : classItem.status === 'draft'
-                        ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-                        : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
-                    }`}>
-                      {classItem.status || 'published'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setSelectedClass(classItem)}
-                        className="text-blue-600 hover:text-blue-900 dark:text-blue-400"
-                        title="View Details"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(classItem._id, classItem.name)}
-                        className="text-red-600 hover:text-red-900 dark:text-red-400"
-                        title="Delete"
-                        disabled={deleteClassMutation.isLoading}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
+            </thead>
+            <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+              {filteredClasses.length === 0 ? (
+                <tr>
+                  <td colSpan="5" className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                    <BookOpen className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                    <p>{isLoading ? 'Loading classes...' : 'No classes found'}</p>
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                filteredClasses.map((classItem, index) => {
+                  const capacity = classItem.capacity || 30;
+                  const enrolled = classItem.studentCount || 0;
+                  const pct = Math.min(100, (enrolled / capacity) * 100);
+                  const letter = (classItem.name || 'A').split(/[- ]/).pop()?.[0] || (classItem.name || 'A')[0];
+                  const badgeColor = badgeColors[index % badgeColors.length];
+                  const feesCollected = classItem.totalPaid ?? classItem.totalFee ?? 0;
+                  return (
+                    <tr
+                      key={classItem._id}
+                      className="hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
+                      onClick={() => setSelectedClass(classItem)}
+                    >
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-full ${badgeColor} flex items-center justify-center text-white font-bold text-sm`}>
+                            {letter.toUpperCase()}
+                          </div>
+                          <span className="font-medium text-gray-900 dark:text-white">{classItem.name || 'N/A'}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-2">
+                          <Users className="w-4 h-4 text-gray-500" />
+                          <span className="text-gray-900 dark:text-white font-medium">{enrolled}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-4">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900 dark:text-white">{enrolled}/{capacity}</div>
+                          <div className="mt-1 w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${
+                                pct >= 100 ? 'bg-blue-500' : pct >= 80 ? 'bg-green-500' : 'bg-orange-500'
+                              }`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className="font-semibold text-green-600 dark:text-green-400">
+                          {formatCurrency(feesCollected)}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => setSelectedClass(classItem)}
+                            className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg"
+                            title="View Details"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => setSelectedClass(classItem)}
+                            className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg"
+                            title="Analytics"
+                          >
+                            <BarChart3 className="w-4 h-4" />
+                          </button>
+                          <button
+                            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                            title="More options"
+                          >
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Right Sidebar - Summary Cards */}
+        <div className="space-y-4">
+          <div className="rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 text-white p-5 shadow-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-blue-100 text-sm font-medium">Total Classes</p>
+                <p className="text-2xl font-bold mt-1">{summaryStats.totalClasses}</p>
+              </div>
+              <BookOpen className="w-10 h-10 text-blue-200" />
+            </div>
+          </div>
+          <div className="rounded-xl bg-gradient-to-br from-green-500 to-green-600 text-white p-5 shadow-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-green-100 text-sm font-medium">Total Students</p>
+                <p className="text-2xl font-bold mt-1">{summaryStats.totalStudents}</p>
+              </div>
+              <Users className="w-10 h-10 text-green-200" />
+            </div>
+          </div>
+          <div className="rounded-xl bg-gradient-to-br from-orange-400 to-orange-600 text-white p-5 shadow-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-orange-100 text-sm font-medium">Total Fees</p>
+                <p className="text-2xl font-bold mt-1">{formatCurrency(summaryStats.totalFees)}</p>
+              </div>
+              <DollarSign className="w-10 h-10 text-orange-200" />
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Create New Class Modal */}

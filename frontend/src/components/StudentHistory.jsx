@@ -3,17 +3,15 @@ import api from '../utils/api';
 import { X, DollarSign, Calendar, FileText, CheckCircle, Clock, AlertCircle, User } from 'lucide-react';
 
 const StudentHistory = ({ studentId, onClose }) => {
-  const { data, isLoading, error } = useQuery(
-    ['studentHistory', studentId],
-    async () => {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['studentHistory', studentId],
+    queryFn: async () => {
       const response = await api.get(`/students/${studentId}/history`);
       return response.data;
     },
-    {
-      enabled: !!studentId,
-      retry: 1
-    }
-  );
+    enabled: !!studentId,
+    retry: 1
+  });
 
   const formatCurrency = (amount) => {
     if (!amount && amount !== 0) return 'N/A';

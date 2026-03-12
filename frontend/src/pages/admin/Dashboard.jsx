@@ -1,49 +1,65 @@
-import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+import {
+  PieChart as RechartsPieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  Legend,
+  BarChart,
+  Bar,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid
+} from 'recharts';
 import api from '../../utils/api';
+import { useNavigate } from 'react-router-dom';
+import { useState, useRef, useEffect } from 'react';
 import { 
-  Users, 
   GraduationCap, 
-  BookOpen, 
   DollarSign, 
   TrendingUp, 
-  AlertCircle,
-  Building2,
-  Wallet,
-  ArrowUpCircle,
-  ArrowDownCircle,
-  PieChart,
-  Calendar,
-  CreditCard,
-  ShoppingBag,
-  TrendingDown,
   BarChart3,
   Search,
-  CheckCircle,
-  XCircle,
   FileText,
-  Eye,
-  User
+  ChevronDown,
+  Calendar
 } from 'lucide-react';
 
 const AdminDashboard = () => {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
-  
+  const [periodFilter, setPeriodFilter] = useState('today'); // 'today' | 'month' | 'year'
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const calendarRef = useRef(null);
+
   const { data: stats, isLoading } = useQuery({
-    queryKey: ['adminStats'],
+    queryKey: ['adminStats', selectedDate],
     queryFn: async () => {
-      const response = await api.get('/dashboard/admin');
+      const params = {
+        date: selectedDate.toISOString().split('T')[0],
+        month: selectedDate.getMonth() + 1,
+        year: selectedDate.getFullYear()
+      };
+      const response = await api.get('/dashboard/admin', { params });
       return response.data;
     }
   });
 
-  const { data: classWiseStats, isLoading: isLoadingClassStats } = useQuery({
-    queryKey: ['classWiseStats'],
-    queryFn: async () => {
-      const response = await api.get('/dashboard/admin/class-wise');
-      return response.data;
-    }
-  });
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (calendarRef.current && !calendarRef.current.contains(e.target)) {
+        setShowCalendar(false);
+      }
+    };
+    if (showCalendar) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showCalendar]);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -66,161 +82,441 @@ const AdminDashboard = () => {
     }).format(amount || 0);
   };
 
-  const formatAmount = (amount) => {
-    return new Intl.NumberFormat('en-PK', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount || 0);
-  };
+  // Pending fee: use Invoice-based when > 0, else Student-based (totalFee - collected) to match Fee Details
+  const pendingFromStudents = Math.max(0, (stats?.totalFeeAmount || 0) - (stats?.amountCollected || 0));
+  const invoicePending = Math.max(stats?.duesAmount || 0, stats?.pendingFees || 0);
+  const duesAmount = invoicePending > 0 ? invoicePending : pendingFromStudents;
+  const collectionRate = stats?.totalFeeAmount > 0
+    ? ((stats.amountCollected / stats.totalFeeAmount) * 100).toFixed(1)
+    : 0;
+  const remainingAmount = Math.max(0, (stats?.totalFeeAmount || 0) - (stats?.amountCollected || 0));
+  const monthlyChartData = stats?.monthlyFinancialSummary || [];
 
-  const formatDate = (date) => {
-    if (!date) return 'N/A';
-    const d = new Date(date);
-    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-  };
-
-  const statCards = [
-    {
-      title: 'Dues - Amount',
-      value: stats?.duesCount || 0,
-      amount: formatCurrency(stats?.duesAmount || 0),
-      icon: CreditCard,
-      color: 'bg-red-500',
-      subtitle: `Amount: ${formatCurrency(stats?.duesAmount || 0)}`
-    },
-    {
-      title: 'Total Income This Year',
-      value: formatCurrency(stats?.totalIncomeThisYear || 0),
-      icon: DollarSign,
-      color: 'bg-cyan-500',
-      subtitle: 'This year'
-    },
-    {
-      title: 'Income This Month',
-      value: formatCurrency(stats?.monthlyIncome || 0),
-      icon: BarChart3,
-      color: 'bg-green-500',
-      subtitle: 'This month'
-    },
-    {
-      title: 'Income Today',
-      value: formatCurrency(stats?.todayIncome || 0),
-      icon: PieChart,
-      color: 'bg-blue-500',
-      subtitle: 'Today'
-    },
-    {
-      title: 'Profit This Month',
-      value: formatCurrency(stats?.profitThisMonth || 0),
-      icon: BarChart3,
-      color: stats?.profitThisMonth >= 0 ? 'bg-green-500' : 'bg-red-500',
-      subtitle: 'Income - Expenses'
-    },
-    {
-      title: 'Total Expense This Year',
-      value: formatCurrency(stats?.totalExpenseThisYear || 0),
-      icon: TrendingUp,
-      color: 'bg-red-500',
-      subtitle: 'This year'
-    },
-    {
-      title: 'Expense This Month',
-      value: formatCurrency(stats?.monthlyExpenses || 0),
-      icon: AlertCircle,
-      color: 'bg-orange-500',
-      subtitle: 'This month'
-    },
-    {
-      title: 'Expense Today',
-      value: formatCurrency(stats?.todayExpenses || 0),
-      icon: ShoppingBag,
-      color: 'bg-cyan-500',
-      subtitle: 'Today'
-    },
-  ];
+  // Computed values per period
+  const todayProfit = (stats?.todayIncome || 0) - (stats?.todayExpenses || 0);
+  const yearlyProfit = (stats?.totalIncomeThisYear || 0) - (stats?.totalExpenseThisYear || 0);
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            Admin Dashboard
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Comprehensive overview of students, departments, and finances
-          </p>
-        </div>
-        <form onSubmit={handleSearch} className="flex items-center gap-2">
-          <div className="relative">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search students, classes..."
-              className="w-64 px-4 py-2 pl-10 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-            />
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+      {/* Header: Logo, Today/This Month toggle, Date, Search */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <h1 className="text-xl font-bold text-blue-600 dark:text-blue-400">ToBay</h1>
+          <div className="flex rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+            <button
+              type="button"
+              onClick={() => setPeriodFilter('today')}
+              className={`px-4 py-2 text-sm font-medium transition-colors ${periodFilter === 'today' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600'}`}
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              onClick={() => setPeriodFilter('month')}
+              className={`px-4 py-2 text-sm font-medium transition-colors ${periodFilter === 'month' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600'}`}
+            >
+              This Month
+            </button>
+            <button
+              type="button"
+              onClick={() => setPeriodFilter('year')}
+              className={`px-4 py-2 text-sm font-medium transition-colors ${periodFilter === 'year' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600'}`}
+            >
+              This Year
+            </button>
           </div>
-          <button
-            type="submit"
-            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
-          >
-            <Search size={18} />
-            Search
-          </button>
-        </form>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="relative" ref={calendarRef}>
+            <button
+              type="button"
+              onClick={() => setShowCalendar(!showCalendar)}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600"
+            >
+              <Calendar className="w-4 h-4" />
+              {selectedDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+              <ChevronDown className="w-4 h-4" />
+            </button>
+            {showCalendar && (
+              <div className="absolute right-0 mt-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-3 z-10">
+                <DatePicker
+                  selected={selectedDate}
+                  onChange={(date) => { setSelectedDate(date); setShowCalendar(false); }}
+                  inline
+                  className="border-0"
+                />
+              </div>
+            )}
+          </div>
+          <form onSubmit={handleSearch} className="flex items-center gap-2">
+            <div className="relative">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search..."
+                className="w-40 sm:w-48 px-4 py-2 pl-10 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+              />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            </div>
+            <button
+              type="submit"
+              className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+            >
+              Search
+            </button>
+          </form>
+        </div>
       </div>
 
-      {/* Main Statistics Cards - 2x4 Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {statCards.map((stat, index) => {
-          const Icon = stat.icon;
-          return (
-            <div key={index} className="card-hover animate-fade-in" style={{ animationDelay: `${index * 0.1}s` }}>
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <p className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
-                    {stat.title}
-                  </p>
-                  <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">
-                    {stat.value}
-                  </p>
-                  {stat.amount && (
-                    <p className="text-lg font-semibold text-gray-700 dark:text-gray-300 mt-1">
-                      {stat.amount}
-                    </p>
-                  )}
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                    {stat.subtitle}
-                  </p>
-                </div>
-                <div className={`${stat.color} p-4 rounded-xl shadow-lg`}>
-                  <Icon className="w-8 h-8 text-white" />
-                </div>
+      {/* Row 1 & 2: Period-aware stats - Today | Month | Year */}
+      {periodFilter === 'today' && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-red-500 rounded-lg">
+                <FileText className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Remaining Fee</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(duesAmount)}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Outstanding amount</p>
               </div>
             </div>
-          );
-        })}
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Income Today</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(stats?.todayIncome || 0)}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Selected date</p>
+              </div>
+              <div className="p-3 bg-blue-500 rounded-full">
+                <DollarSign className="w-6 h-6 text-white" />
+              </div>
+            </div>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Expense Today</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(stats?.todayExpenses || 0)}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Selected date</p>
+              </div>
+              <div className="p-3 bg-orange-500 rounded-full">
+                <TrendingUp className="w-6 h-6 text-white" />
+              </div>
+            </div>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Profit Today</p>
+                <p className={`text-2xl font-bold ${todayProfit >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                  {formatCurrency(todayProfit)}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Income − Expenses</p>
+              </div>
+              <div className={`p-3 rounded-lg ${todayProfit >= 0 ? 'bg-green-500' : 'bg-red-500'}`}>
+                <BarChart3 className="w-6 h-6 text-white" />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {periodFilter === 'month' && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-red-500 rounded-lg">
+                <FileText className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Remaining Fee</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(duesAmount)}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Outstanding amount</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Income This Month</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(stats?.monthlyIncome || 0)}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Selected month</p>
+              </div>
+              <div className="p-3 bg-green-500 rounded-full">
+                <DollarSign className="w-6 h-6 text-white" />
+              </div>
+            </div>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Expense This Month</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(stats?.monthlyExpenses || 0)}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Selected month</p>
+              </div>
+              <div className="p-3 bg-orange-500 rounded-full">
+                <TrendingUp className="w-6 h-6 text-white" />
+              </div>
+            </div>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Profit This Month</p>
+                <p className={`text-2xl font-bold ${(stats?.profitThisMonth || 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                  {formatCurrency(stats?.profitThisMonth || 0)}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Income − Expenses</p>
+              </div>
+              <div className={`p-3 rounded-lg ${(stats?.profitThisMonth || 0) >= 0 ? 'bg-green-500' : 'bg-red-500'}`}>
+                <BarChart3 className="w-6 h-6 text-white" />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {periodFilter === 'year' && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-red-500 rounded-lg">
+                <FileText className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Remaining Fee</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(duesAmount)}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Outstanding amount</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Income This Year</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(stats?.totalIncomeThisYear || 0)}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Selected year</p>
+              </div>
+              <div className="p-3 bg-cyan-500 rounded-full">
+                <DollarSign className="w-6 h-6 text-white" />
+              </div>
+            </div>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Expense This Year</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(stats?.totalExpenseThisYear || 0)}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Selected year</p>
+              </div>
+              <div className="p-3 bg-orange-500 rounded-full">
+                <TrendingUp className="w-6 h-6 text-white" />
+              </div>
+            </div>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Profit This Year</p>
+                <p className={`text-2xl font-bold ${yearlyProfit >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                  {formatCurrency(yearlyProfit)}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Income − Expenses</p>
+              </div>
+              <div className={`p-3 rounded-lg ${yearlyProfit >= 0 ? 'bg-green-500' : 'bg-red-500'}`}>
+                <BarChart3 className="w-6 h-6 text-white" />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Row 2: Summary for selected period */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {periodFilter === 'today' && (
+          <>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-5">
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(stats?.todayIncome || 0)}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Income today</p>
+            </div>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-5">
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(stats?.todayExpenses || 0)}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Expense today</p>
+            </div>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-5">
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(todayProfit)}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Net today</p>
+            </div>
+          </>
+        )}
+        {periodFilter === 'month' && (
+          <>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-5">
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(stats?.monthlyIncome || 0)}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Income this month</p>
+            </div>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-5">
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(stats?.monthlyExpenses || 0)}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Expense this month</p>
+            </div>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-5">
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(stats?.profitThisMonth || 0)}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Net this month</p>
+            </div>
+          </>
+        )}
+        {periodFilter === 'year' && (
+          <>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-5">
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(stats?.totalIncomeThisYear || 0)}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Income this year</p>
+            </div>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-5">
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(stats?.totalExpenseThisYear || 0)}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Expense this year</p>
+            </div>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-5">
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(yearlyProfit)}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Net this year</p>
+            </div>
+          </>
+        )}
       </div>
 
-      {/* Department Breakdown and Financial Summary */}
+      {/* Fee Details */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 sm:p-8">
+        <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
+              <FileText className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+            </div>
+            Fee Details
+          </h2>
+          <div className="flex gap-4 text-sm">
+            <span className="text-gray-600 dark:text-gray-400">
+              Total: <strong className="text-gray-900 dark:text-white">{formatCurrency(stats?.totalFeeAmount || 0)}</strong>
+            </span>
+            <span className="text-green-600 dark:text-green-400">
+              Collected: <strong>{formatCurrency(stats?.amountCollected || 0)}</strong>
+            </span>
+            <span className="text-red-600 dark:text-red-400">
+              Remaining: <strong>{formatCurrency(remainingAmount)}</strong>
+            </span>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-2">
+          <div className="h-64">
+            {stats?.totalFeeAmount > 0 ? (
+              <>
+                <p className="text-lg font-bold text-gray-900 dark:text-white mb-2">Collected {collectionRate}%</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
+                  {formatCurrency(stats?.amountCollected || 0)} {formatCurrency(stats?.totalFeeAmount || 0)}
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  {formatCurrency(remainingAmount)} {formatCurrency(remainingAmount)}
+                </p>
+                <ResponsiveContainer width="100%" height="70%">
+                  <RechartsPieChart>
+                    <Pie
+                      data={[
+                        { name: 'Collected', value: stats?.amountCollected || 0, color: '#22c55e' },
+                        { name: 'Remaining', value: remainingAmount, color: '#ef4444' }
+                      ].filter(d => d.value > 0)}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={50}
+                      outerRadius={80}
+                      paddingAngle={2}
+                      dataKey="value"
+                    >
+                      {[
+                        { name: 'Collected', value: stats?.amountCollected || 0, color: '#22c55e' },
+                        { name: `Remaining ${(100 - parseFloat(collectionRate)).toFixed(1)}%`, value: remainingAmount, color: '#ef4444' }
+                      ].filter(d => d.value > 0).map((entry, index) => (
+                        <Cell key={index} fill={entry.color} stroke="none" />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value) => formatCurrency(value)} />
+                    <Legend />
+                  </RechartsPieChart>
+                </ResponsiveContainer>
+                <div className="mt-4">
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Collection Rate:</p>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+                    <div
+                      className="bg-green-500 h-2.5 rounded-full transition-all duration-500"
+                      style={{ width: `${Math.min(100, parseFloat(collectionRate))}%` }}
+                    />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="h-full flex items-center justify-center text-gray-500 dark:text-gray-400 text-sm">
+                No fee data to display
+              </div>
+            )}
+          </div>
+          <div className="h-64">
+            {stats?.totalFeeAmount > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={[
+                    { name: 'Total Fee', amount: stats?.totalFeeAmount || 0 },
+                    { name: 'Collected', amount: stats?.amountCollected || 0 },
+                    { name: 'Remaining', amount: remainingAmount }
+                  ]}
+                  margin={{ top: 20, right: 20, left: 0, bottom: 20 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                  <XAxis dataKey="name" tick={{ fill: 'currentColor', fontSize: 12 }} />
+                  <YAxis tick={{ fill: 'currentColor', fontSize: 12 }} tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
+                  <Tooltip formatter={(value) => formatCurrency(value)} />
+                  <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
+                    <Cell fill="#3b82f6" />
+                    <Cell fill="#22c55e" />
+                    <Cell fill="#ef4444" />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-gray-500 dark:text-gray-400 text-sm">
+                No fee data to display
+              </div>
+            )}
+          </div>
+        </div>
+        {stats?.totalFeeAmount > 0 && (
+          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-end">
+            <span className="text-sm font-bold text-gray-700 dark:text-gray-300">{collectionRate}%</span>
+          </div>
+        )}
+      </div>
+
+      {/* Students by Department & Monthly Financial Summary */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Department Breakdown */}
-        <div className="card animate-slide-up">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
           <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
             <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
               <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                <Building2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                <GraduationCap className="w-5 h-5 text-blue-600 dark:text-blue-400" />
               </div>
               Students by Department
             </h2>
-            <span className="text-sm font-semibold text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-3 py-1 rounded-full">
-              Total: {stats?.totalStudents || 0}
-            </span>
+            <button
+              type="button"
+              onClick={() => navigate('/admin/students')}
+              className="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+            >
+              View All
+            </button>
           </div>
           <div className="space-y-3">
             {stats?.departmentBreakdown && stats.departmentBreakdown.length > 0 ? (
               stats.departmentBreakdown.map((dept, index) => {
+                const maxCount = Math.max(...stats.departmentBreakdown.map(d => d.count), 1);
+                const barWidth = (dept.count / maxCount) * 100;
                 const percentage = stats.totalStudents > 0 
                   ? ((dept.count / stats.totalStudents) * 100).toFixed(1) 
                   : 0;
@@ -243,13 +539,13 @@ const AdminDashboard = () => {
                         {dept.name}
                       </span>
                       <span className="text-sm font-bold text-gray-700 dark:text-gray-300">
-                        {dept.count} ({percentage}%)
+                        {dept.count} students
                       </span>
                     </div>
                     <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
                       <div
                         className={`${color} h-2.5 rounded-full transition-all duration-300`}
-                        style={{ width: `${percentage}%` }}
+                        style={{ width: `${barWidth}%` }}
                       ></div>
                     </div>
                   </div>
@@ -263,328 +559,46 @@ const AdminDashboard = () => {
           </div>
         </div>
 
-        {/* Financial Summary */}
-        <div className="card animate-slide-up" style={{ animationDelay: '0.1s' }}>
+        {/* Monthly Financial Summary - Line Chart */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
           <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
             <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
               <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                <PieChart className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                <TrendingUp className="w-5 h-5 text-purple-600 dark:text-purple-400" />
               </div>
               Monthly Financial Summary
             </h2>
+            <button
+              type="button"
+              onClick={() => navigate('/admin/reports')}
+              className="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+            >
+              View All
+            </button>
           </div>
-          <div className="space-y-4">
-            <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-green-700 dark:text-green-400">
-                    Total Income
-                  </p>
-                  <p className="text-2xl font-bold text-green-900 dark:text-green-300 mt-1">
-                    {formatCurrency(stats?.monthlyIncome || 0)}
-                  </p>
-                </div>
-                <ArrowUpCircle className="w-8 h-8 text-green-500" />
-              </div>
-            </div>
-            
-            <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-red-700 dark:text-red-400">
-                    Total Expenses
-                  </p>
-                  <p className="text-2xl font-bold text-red-900 dark:text-red-300 mt-1">
-                    {formatCurrency(stats?.monthlyExpenses || 0)}
-                  </p>
-                </div>
-                <ArrowDownCircle className="w-8 h-8 text-red-500" />
-              </div>
-            </div>
-            
-            <div className={`p-4 rounded-lg border ${
-              (stats?.netBalance || 0) >= 0
-                ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800'
-                : 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800'
-            }`}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className={`text-sm font-medium ${
-                    (stats?.netBalance || 0) >= 0
-                      ? 'text-indigo-700 dark:text-indigo-400'
-                      : 'text-orange-700 dark:text-orange-400'
-                  }`}>
-                    Net Balance
-                  </p>
-                  <p className={`text-2xl font-bold mt-1 ${
-                    (stats?.netBalance || 0) >= 0
-                      ? 'text-indigo-900 dark:text-indigo-300'
-                      : 'text-orange-900 dark:text-orange-300'
-                  }`}>
-                    {formatCurrency(stats?.netBalance || 0)}
-                  </p>
-                </div>
-                <TrendingUp className={`w-8 h-8 ${
-                  (stats?.netBalance || 0) >= 0 ? 'text-indigo-500' : 'text-orange-500'
-                }`} />
-              </div>
-            </div>
-
-            {/* Fee Collection Summary */}
-            <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                Fee Collection Status
-              </h3>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600 dark:text-gray-400">Total Fee Amount:</span>
-                  <span className="font-semibold text-gray-900 dark:text-white">
-                    {formatCurrency(stats?.totalFeeAmount || 0)}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600 dark:text-gray-400">Amount Collected:</span>
-                  <span className="font-semibold text-green-600 dark:text-green-400">
-                    {formatCurrency(stats?.amountCollected || 0)}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600 dark:text-gray-400">Pending Amount:</span>
-                  <span className="font-semibold text-red-600 dark:text-red-400">
-                    {formatCurrency((stats?.totalFeeAmount || 0) - (stats?.amountCollected || 0))}
-                  </span>
-                </div>
-                {stats?.totalFeeAmount > 0 && (
-                  <div className="mt-2">
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="text-gray-500 dark:text-gray-400">Collection Rate</span>
-                      <span className="text-gray-700 dark:text-gray-300">
-                        {((stats.amountCollected / stats.totalFeeAmount) * 100).toFixed(1)}%
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                      <div
-                        className="bg-green-500 h-2 rounded-full transition-all duration-300"
-                        style={{ 
-                          width: `${(stats.amountCollected / stats.totalFeeAmount) * 100}%` 
-                        }}
-                      ></div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Additional Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="card">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                Total Teachers
-              </p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
-                {stats?.totalTeachers || 0}
-              </p>
-            </div>
-            <div className="bg-green-500 p-4 rounded-lg">
-              <GraduationCap className="w-8 h-8 text-white" />
-            </div>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                Total Courses
-              </p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
-                {stats?.totalCourses || 0}
-              </p>
-            </div>
-            <div className="bg-purple-500 p-4 rounded-lg">
-              <BookOpen className="w-8 h-8 text-white" />
-            </div>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                Pending Fees
-              </p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
-                {formatCurrency(stats?.pendingFees || 0)}
-              </p>
-            </div>
-            <div className="bg-red-500 p-4 rounded-lg">
-              <AlertCircle className="w-8 h-8 text-white" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Class-wise Breakdown Table */}
-      <div className="card animate-slide-up">
-        <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-              <BarChart3 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-            </div>
-            Class-wise Statistics
-          </h2>
-        </div>
-        
-        {isLoadingClassStats ? (
-          <div className="text-center py-12">Loading class statistics...</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-blue-600 text-white">
-                  <th className="px-4 py-3 text-left font-semibold">Class</th>
-                  <th className="px-4 py-3 text-left font-semibold">Section Strength</th>
-                  <th className="px-4 py-3 text-left font-semibold">Present Today</th>
-                  <th className="px-4 py-3 text-left font-semibold">Absent Today</th>
-                  <th className="px-4 py-3 text-left font-semibold">On Leave</th>
-                  <th className="px-4 py-3 text-left font-semibold">Expected</th>
-                  <th className="px-4 py-3 text-left font-semibold">Generated</th>
-                  <th className="px-4 py-3 text-left font-semibold">Paid Amount</th>
-                  <th className="px-4 py-3 text-left font-semibold">Balance</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white dark:bg-gray-800">
-                {classWiseStats?.classStats?.map((classStat, index) => (
-                  <tr key={index} className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                    <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white">
-                      {classStat.className}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-2">
-                        {Object.entries(classStat.sectionStrength || {}).map(([section, count]) => (
-                          <span
-                            key={section}
-                            className="px-3 py-1 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium flex items-center gap-1"
-                          >
-                            <User className="w-3 h-3" />
-                            {section}: {count}
-                          </span>
-                        ))}
-                        {Object.keys(classStat.sectionStrength || {}).length === 0 && (
-                          <span className="text-gray-500 dark:text-gray-400 text-sm">-</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-lg text-sm font-semibold flex items-center gap-1 w-fit">
-                        <CheckCircle className="w-4 h-4" />
-                        {classStat.presentToday}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-lg text-sm font-semibold flex items-center gap-1 w-fit">
-                        <XCircle className="w-4 h-4" />
-                        {classStat.absentToday}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="px-3 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 rounded-lg text-sm font-semibold flex items-center gap-1 w-fit">
-                        <FileText className="w-4 h-4" />
-                        {classStat.onLeaveToday}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-lg text-sm font-semibold flex items-center gap-1 w-fit">
-                        <Eye className="w-4 h-4" />
-                        {formatAmount(classStat.expected)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-lg text-sm font-semibold flex items-center gap-1 w-fit">
-                        <Eye className="w-4 h-4" />
-                        {formatAmount(classStat.generated)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-lg text-sm font-semibold flex items-center gap-1 w-fit">
-                        <CheckCircle className="w-4 h-4" />
-                        {formatAmount(classStat.paidAmount)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-lg text-sm font-semibold flex items-center gap-1 w-fit">
-                        <CheckCircle className="w-4 h-4" />
-                        {formatAmount(classStat.balance)}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-                {/* Total Row */}
-                {classWiseStats?.totals && (
-                  <tr className="border-t-2 border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700/50 font-bold">
-                    <td className="px-4 py-3 text-gray-900 dark:text-white">
-                      {classWiseStats.totals.className}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400">-</td>
-                    <td className="px-4 py-3">
-                      <span className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-lg text-sm font-semibold flex items-center gap-1 w-fit">
-                        <CheckCircle className="w-4 h-4" />
-                        {classWiseStats.totals.presentToday}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-lg text-sm font-semibold flex items-center gap-1 w-fit">
-                        <XCircle className="w-4 h-4" />
-                        {classWiseStats.totals.absentToday}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="px-3 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 rounded-lg text-sm font-semibold flex items-center gap-1 w-fit">
-                        <FileText className="w-4 h-4" />
-                        {classWiseStats.totals.onLeaveToday}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-lg text-sm font-semibold flex items-center gap-1 w-fit">
-                        <Eye className="w-4 h-4" />
-                        {formatAmount(classWiseStats.totals.expected)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-lg text-sm font-semibold flex items-center gap-1 w-fit">
-                        <Eye className="w-4 h-4" />
-                        {formatAmount(classWiseStats.totals.generated)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-lg text-sm font-semibold flex items-center gap-1 w-fit">
-                        <CheckCircle className="w-4 h-4" />
-                        {formatAmount(classWiseStats.totals.paidAmount)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-lg text-sm font-semibold flex items-center gap-1 w-fit">
-                        <CheckCircle className="w-4 h-4" />
-                        {formatAmount(classWiseStats.totals.balance)}
-                      </span>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-            {(!classWiseStats?.classStats || classWiseStats.classStats.length === 0) && (
-              <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-                <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                <p>No class data available</p>
+          <div className="h-64">
+            {monthlyChartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={monthlyChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                  <XAxis dataKey="month" tick={{ fill: 'currentColor', fontSize: 12 }} />
+                  <YAxis tick={{ fill: 'currentColor', fontSize: 12 }} tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
+                  <Tooltip
+                    formatter={(value) => formatCurrency(value)}
+                    contentStyle={{ backgroundColor: 'var(--tw-bg-opacity)', borderRadius: '8px' }}
+                  />
+                  <Legend />
+                  <Line type="monotone" dataKey="income" name="Total Income" stroke="#3b82f6" strokeWidth={2} dot={{ fill: '#3b82f6' }} />
+                  <Line type="monotone" dataKey="expense" name="Total Expense" stroke="#f97316" strokeWidth={2} dot={{ fill: '#f97316' }} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-gray-500 dark:text-gray-400 text-sm">
+                No monthly data available
               </div>
             )}
           </div>
-        )}
+        </div>
       </div>
 
     </div>

@@ -283,7 +283,7 @@ const Courses = () => {
       } else if (error.response?.status === 403) {
         toast.error('You do not have permission to perform this action.');
       } else if (!error.response) {
-        toast.error('Cannot connect to server. Please make sure the backend server is running on port 5000.');
+        toast.error('Cannot connect to server. From project root run: npm run dev. Ensure backend (port 5000) and MongoDB are running.');
       } else {
         toast.error(error.response?.data?.message || 'Failed to save category');
       }

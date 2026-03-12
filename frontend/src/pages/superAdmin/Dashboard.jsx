@@ -22,13 +22,13 @@ import { useNavigate } from 'react-router-dom';
 const SuperAdminDashboard = () => {
   const navigate = useNavigate();
 
-  const { data: dashboardData, isLoading, refetch } = useQuery(
-    'superAdminDashboard',
-    async () => {
+  const { data: dashboardData, isLoading, refetch } = useQuery({
+    queryKey: ['superAdminDashboard'],
+    queryFn: async () => {
       const response = await api.get('/super-admin/dashboard');
       return response.data;
     }
-  );
+  });
 
   if (isLoading) {
     return (

@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
-import { Plus, Edit, Trash2, Search, Users, Eye, Printer, X, Lock, EyeOff, AlertTriangle, DollarSign, FileText, CreditCard, Receipt, CheckCircle, User } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Users, Eye, Printer, X, Lock, EyeOff, AlertTriangle, DollarSign, FileText, CreditCard, Receipt, CheckCircle, User, FileSpreadsheet, ChevronDown, Calendar, Clock, Bell } from 'lucide-react';
 import StudentAdmissionPrint from '../../components/StudentAdmissionPrint';
 import AccountantAdmissionForm from '../../components/AccountantAdmissionForm';
 import ErrorCorrection from '../../components/ErrorCorrection';
@@ -47,6 +47,12 @@ const Students = () => {
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [showPaymentSearchModal, setShowPaymentSearchModal] = useState(false);
   const [paymentSearchTerm, setPaymentSearchTerm] = useState('');
+  const [feeViewMonth, setFeeViewMonth] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [feeViewMode, setFeeViewMode] = useState('monthly'); // 'monthly' | 'yearly' | 'all'
+  const [showActionDropdown, setShowActionDropdown] = useState(null);
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -142,15 +148,17 @@ const Students = () => {
     })[0];
   };
 
-  // Format currency
+  // Format currency (Rs)
   const formatCurrency = (amount) => {
     if (!amount && amount !== 0) return 'N/A';
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
+    return `Rs ${Number(amount).toLocaleString('en-PK', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  };
+
+  const formatMonthLabel = (monthStr) => {
+    if (!monthStr) return '—';
+    const [y, m] = monthStr.split('-').map(Number);
+    const d = new Date(y, m - 1, 1);
+    return d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
   };
 
   // Format date
@@ -534,6 +542,61 @@ const Students = () => {
   });
 
 
+  const totalStudentsCount = filteredStudents.length;
+  const totalFeesAmount = filteredStudents.reduce((sum, s) => sum + (s.feeInfo?.totalFee || 0), 0);
+  const paidFeesAmount = filteredStudents.reduce((sum, s) => sum + (s.feeInfo?.paidFee || 0), 0);
+  const pendingFeesAmount = filteredStudents.reduce((sum, s) => {
+    const total = s.feeInfo?.totalFee || 0;
+    const paid = s.feeInfo?.paidFee || 0;
+    return sum + Math.max(0, total - paid);
+  }, 0);
+
+  const exportToExcel = () => {
+    const headers = ['ID', 'Name', 'Class', 'Parent Contact', 'Total Fees', 'Paid', 'Remaining'];
+    const data = filteredStudents.map(s => [
+      s.srNo || 'N/A',
+      s.personalInfo?.fullName || 'N/A',
+      s.academicInfo?.courseId?.name || s.academicInfo?.courseName || 'N/A',
+      s.parentInfo?.fatherPhone || s.parentInfo?.motherPhone || 'N/A',
+      s.feeInfo?.totalFee || 0,
+      s.feeInfo?.paidFee || 0,
+      Math.max(0, (s.feeInfo?.totalFee || 0) - (s.feeInfo?.paidFee || 0))
+    ]);
+    const csvContent = [headers, ...data].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `student-fee-history-${feeViewMonth || 'export'}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
+  const exportToCSV = () => exportToExcel();
+
+  const exportToPDF = () => {
+    toast.loading('Generating PDF...', { id: 'pdf-export' });
+    const printContent = `
+      <html><head><title>Student Fee History</title>
+      <style>body{font-family:Arial,sans-serif;padding:20px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px}th{background:#2563eb;color:white}</style>
+      </head><body><h1>Student Fee History</h1><p>Generated: ${new Date().toLocaleDateString()}</p>
+      <table><thead><tr><th>ID</th><th>Name</th><th>Class</th><th>Total</th><th>Paid</th><th>Remaining</th></tr></thead><tbody>
+      ${filteredStudents.map(s => {
+        const total = s.feeInfo?.totalFee || 0;
+        const paid = s.feeInfo?.paidFee || 0;
+        const pending = Math.max(0, total - paid);
+        return `<tr><td>${s.srNo || 'N/A'}</td><td>${s.personalInfo?.fullName || 'N/A'}</td><td>${s.academicInfo?.courseId?.name || 'N/A'}</td><td>Rs ${total.toLocaleString()}</td><td>Rs ${paid.toLocaleString()}</td><td>Rs ${pending.toLocaleString()}</td></tr>`;
+      }).join('')}
+      </tbody></table></body></html>`;
+    const win = window.open('', '_blank');
+    win.document.write(printContent);
+    win.document.close();
+    win.print();
+    win.close();
+    toast.dismiss('pdf-export');
+  };
+
+  const handlePrint = () => window.print();
+
   const handleViewDetails = (student) => {
     const path = `${getBasePath()}/${student._id}/details`;
     navigate(path);
@@ -582,15 +645,9 @@ const Students = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            {isAccountant ? 'Student Admissions' : 'Students Management'}
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            {isAccountant ? 'Add new admissions and manage student records' : 'Manage all students in the system'}
-          </p>
-        </div>
+      {/* Top header bar - dark blue */}
+      <div className="bg-blue-800 dark:bg-blue-900 rounded-lg px-6 py-4 flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-white">Student Fee History</h1>
         <div className="flex items-center gap-3">
           <button
             onClick={() => {
@@ -598,7 +655,7 @@ const Students = () => {
               setPaymentSearchTerm('');
               setSelectedStudentForPayment(null);
             }}
-            className="btn-primary flex items-center gap-2 bg-green-600 hover:bg-green-700"
+            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center gap-2 text-sm font-medium"
           >
             <Receipt className="w-5 h-5" />
             Add Payment
@@ -613,7 +670,7 @@ const Students = () => {
                 navigate('/admin/students/new');
               }
             }}
-            className="btn-primary flex items-center gap-2"
+            className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg flex items-center gap-2 text-sm font-medium"
           >
             <Plus className="w-5 h-5" />
             {isAccountant ? 'Add Admission' : 'New Admission'}
@@ -621,52 +678,117 @@ const Students = () => {
         </div>
       </div>
 
-      {/* Search Bar */}
-      <div className="card animate-fade-in">
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-5 h-5 z-10" />
-          <input
-            type="text"
-            placeholder="Search by name, father's name, or serial number..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="input-field pl-12"
-          />
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="card p-5 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Students</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{totalStudentsCount}</p>
+          </div>
+          <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+            <Users className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+          </div>
+        </div>
+        <div className="card p-5 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Fees</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{formatCurrency(totalFeesAmount)}</p>
+          </div>
+          <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+            <DollarSign className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+          </div>
+        </div>
+        <div className="card p-5 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Paid Fees</p>
+            <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">{formatCurrency(paidFeesAmount)}</p>
+          </div>
+          <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+            <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
+          </div>
+        </div>
+        <div className="card p-5 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Remaining Fees</p>
+            <p className="text-2xl font-bold text-orange-600 dark:text-orange-400 mt-1">{formatCurrency(pendingFeesAmount)}</p>
+          </div>
+          <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+            <Calendar className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+          </div>
         </div>
       </div>
 
-      {/* Students Table - Simplified */}
-      <div className="card overflow-x-auto animate-slide-up">
-        <table className="table">
-          <thead className="table-header">
-            <tr>
-              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                Serial Number
-              </th>
-              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                Student Name
-              </th>
-              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                Father's Name
-              </th>
-              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                Institute Type
-              </th>
-              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                Total Fee
-              </th>
-              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                Paid Fee
-              </th>
-              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                Pending Fee
-              </th>
-              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                Last Payment Date
-              </th>
-              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                Actions
-              </th>
+      {/* Export & filters */}
+      <div className="card flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={exportToExcel} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center gap-2 text-sm font-medium">
+            <FileSpreadsheet className="w-4 h-4" /> Excel
+          </button>
+          <button onClick={exportToCSV} className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg flex items-center gap-2 text-sm font-medium">
+            <FileText className="w-4 h-4" /> CSV
+          </button>
+          <button onClick={exportToPDF} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg flex items-center gap-2 text-sm font-medium">
+            <FileText className="w-4 h-4" /> PDF
+          </button>
+          <button onClick={handlePrint} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center gap-2 text-sm font-medium">
+            <Printer className="w-4 h-4" /> Print
+          </button>
+        </div>
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-600 dark:text-gray-400">Select Month:</label>
+            <input
+              type="month"
+              value={feeViewMonth}
+              onChange={(e) => setFeeViewMonth(e.target.value)}
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <span className="text-sm text-gray-600 dark:text-gray-400">{formatMonthLabel(feeViewMonth)}</span>
+          </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search students..."
+              className="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-48 text-sm"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* View mode tabs */}
+      <div className="flex rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 w-fit">
+        {['monthly', 'yearly', 'all'].map((mode) => (
+          <button
+            key={mode}
+            onClick={() => setFeeViewMode(mode)}
+            className={`px-4 py-2 text-sm font-medium capitalize transition-colors ${
+              feeViewMode === mode
+                ? 'bg-blue-600 text-white'
+                : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
+            }`}
+          >
+            {mode === 'monthly' ? 'Monthly' : mode === 'yearly' ? 'Yearly' : 'All Time'}
+          </button>
+        ))}
+      </div>
+
+      {/* Students Table */}
+      <div className="card overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="bg-blue-600 text-white">
+              <th className="px-4 py-3 text-left text-sm font-semibold">ID</th>
+              <th className="px-4 py-3 text-left text-sm font-semibold">Photo</th>
+              <th className="px-4 py-3 text-left text-sm font-semibold">Name</th>
+              <th className="px-4 py-3 text-left text-sm font-semibold">Class</th>
+              <th className="px-4 py-3 text-left text-sm font-semibold">Parent Contact</th>
+              <th className="px-4 py-3 text-left text-sm font-semibold">Total Fees</th>
+              <th className="px-4 py-3 text-left text-sm font-semibold">Paid</th>
+              <th className="px-4 py-3 text-left text-sm font-semibold">Remaining</th>
+              <th className="px-4 py-3 text-left text-sm font-semibold">Action</th>
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
@@ -680,90 +802,120 @@ const Students = () => {
               </tr>
             ) : (
               filteredStudents.map((student) => {
-                // Format institute type name
-                const instituteTypeName = student.academicInfo?.instituteType
-                  ? student.academicInfo.instituteType
-                      .replace(/_/g, ' ')
-                      .replace(/\b\w/g, l => l.toUpperCase())
-                  : 'N/A';
-
-                // Get fee information
                 const totalFee = student.feeInfo?.totalFee || 0;
                 const paidFee = student.feeInfo?.paidFee || 0;
-                const pendingFee = student.feeInfo?.pendingFee || (totalFee - paidFee);
-                const isFullyPaid = pendingFee <= 0 && totalFee > 0;
+                const pendingFee = student.feeInfo?.pendingFee ?? Math.max(0, totalFee - paidFee);
                 const hasNoFee = totalFee === 0;
-
-                // Get last payment date
-                const lastPaymentDate = student.lastPaymentDate 
-                  ? new Date(student.lastPaymentDate)
-                  : null;
+                const latestInv = getLatestInvoice(student._id);
+                const dueDate = latestInv?.dueDate || latestInv?.invoiceDate;
 
                 return (
-                  <tr key={student._id} className="table-row hover:bg-gray-50 dark:hover:bg-gray-800">
+                  <tr key={student._id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                     <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                      {student.srNo || 'N/A'}
+                      {student.srNo || `S-${String(student._id).slice(-4)}`}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center overflow-hidden">
+                        {student.personalInfo?.photo ? (
+                          <img src={student.personalInfo.photo} alt="" className="w-10 h-10 object-cover" />
+                        ) : (
+                          <User className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
                       {student.personalInfo?.fullName || 'N/A'}
                     </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                      {student.parentInfo?.fatherName || 'N/A'}
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                      {student.academicInfo?.courseId?.name || student.academicInfo?.courseName || 'N/A'}
                     </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                      {instituteTypeName}
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                      {student.parentInfo?.fatherPhone || student.parentInfo?.motherPhone || 'N/A'}
                     </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                      {formatCurrency(totalFee)}
+                    <td className="px-4 py-4 whitespace-nowrap text-sm">
+                      <div>
+                        <span className="font-medium text-gray-900 dark:text-white">{formatCurrency(totalFee)}</span>
+                        {dueDate && (
+                          <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                            {formatDate(dueDate)}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-green-600 dark:text-green-400">
                       {formatCurrency(paidFee)}
                     </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
+                    <td className="px-4 py-4 whitespace-nowrap text-sm">
                       {hasNoFee ? (
                         <span className="text-gray-500 dark:text-gray-400">N/A</span>
-                      ) : isFullyPaid ? (
-                        <span className="text-green-600 dark:text-green-400 flex items-center gap-1">
-                          <CheckCircle className="w-4 h-4" />
-                          {formatCurrency(0)}
-                        </span>
-                      ) : (
-                        <span className="text-red-600 dark:text-red-400 font-semibold">
-                          {formatCurrency(pendingFee)}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                      {lastPaymentDate ? (
-                        <div className="flex flex-col">
-                          <span>{formatDate(lastPaymentDate)}</span>
-                          <span className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                            {Math.floor((new Date() - lastPaymentDate) / (1000 * 60 * 60 * 24))} days ago
-                          </span>
+                      ) : pendingFee > 0 ? (
+                        <div>
+                          <span className="text-red-600 dark:text-red-400 font-semibold">{formatCurrency(pendingFee)}</span>
+                          {dueDate && (
+                            <span className="block text-xs text-red-500 dark:text-red-400 mt-0.5">
+                              Due {formatDate(dueDate)}
+                            </span>
+                          )}
                         </div>
                       ) : (
-                        <span className="text-gray-400 dark:text-gray-500 italic">No payment</span>
+                        <span className="text-green-600 dark:text-green-400 flex items-center gap-1">
+                          <CheckCircle className="w-4 h-4" /> Paid
+                        </span>
                       )}
                     </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex items-center gap-2">
+                    <td className="px-4 py-4 whitespace-nowrap relative">
+                      <div className="relative">
                         <button
-                          onClick={() => handleViewDetails(student)}
-                          className="px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors duration-200 flex items-center gap-2"
-                          title="View Details"
+                          onClick={() => setShowActionDropdown(showActionDropdown === student._id ? null : student._id)}
+                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium flex items-center gap-2"
                         >
-                          <Eye className="w-4 h-4" />
-                          Details
+                          Action
+                          <ChevronDown className="w-4 h-4" />
                         </button>
-                        {(isAccountant || user?.role === 'admin' || user?.role === 'super_admin') && (
-                          <button
-                            onClick={() => handleRecordPayment(student)}
-                            className="px-4 py-2 text-sm font-medium rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors duration-200 flex items-center gap-2"
-                            title="Record Payment"
-                          >
-                            <CreditCard className="w-4 h-4" />
-                            Payment
-                          </button>
+                        {showActionDropdown === student._id && (
+                          <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-10">
+                            {(isAccountant || user?.role === 'admin' || user?.role === 'super_admin') && pendingFee > 0 && (
+                              <button
+                                onClick={() => { handleRecordPayment(student); setShowActionDropdown(null); }}
+                                className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                              >
+                                <DollarSign className="w-4 h-4" />
+                                Collect Fee
+                              </button>
+                            )}
+                            <button
+                              onClick={() => { handleViewDetails(student); setShowActionDropdown(null); }}
+                              className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                            >
+                              <Clock className="w-4 h-4" />
+                              View History
+                            </button>
+                            {(user?.role === 'admin' || user?.role === 'super_admin' || isAccountant) && (
+                              <button
+                                onClick={() => { handleEdit(student); setShowActionDropdown(null); }}
+                                className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                              >
+                                <Edit className="w-4 h-4" />
+                                Edit
+                              </button>
+                            )}
+                            {(user?.role === 'admin' || user?.role === 'super_admin') && (
+                              <button
+                                onClick={() => { handleDelete(student); setShowActionDropdown(null); }}
+                                className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                                Delete
+                              </button>
+                            )}
+                            <button
+                              onClick={() => { toast.success('Reminder sent (demo)'); setShowActionDropdown(null); }}
+                              className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                            >
+                              <Bell className="w-4 h-4" />
+                              Send Reminder
+                            </button>
+                          </div>
                         )}
                       </div>
                     </td>
@@ -1484,7 +1636,7 @@ const Students = () => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Pending Fee
+                        Remaining Fee
                       </label>
                       <input
                         type="text"

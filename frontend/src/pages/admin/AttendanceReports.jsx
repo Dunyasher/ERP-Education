@@ -39,9 +39,9 @@ const AttendanceReports = () => {
   });
 
   // Fetch attendance summary
-  const { data: reportData, isLoading } = useQuery(
-    ['attendanceReport', startDate, endDate, selectedCourse, selectedClassName, selectedSection, attendanceType],
-    async () => {
+  const { data: reportData, isLoading } = useQuery({
+    queryKey: ['attendanceReport', startDate, endDate, selectedCourse, selectedClassName, selectedSection, attendanceType],
+    queryFn: async () => {
       const params = {
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString()
@@ -53,13 +53,8 @@ const AttendanceReports = () => {
       
       const response = await api.get('/attendance/reports/summary', { params });
       return response.data;
-    },
-    {
-      onError: (error) => {
-        toast.error(error.response?.data?.message || 'Failed to fetch attendance report');
-      }
     }
-  );
+  });
 
   const { summary = {}, byStudent = [], byDate = [], records = [] } = reportData || {};
 
@@ -110,7 +105,7 @@ const AttendanceReports = () => {
     <div className="space-y-6">
       <div>
         <button
-          onClick={() => navigate('/admin/attendance/manual')}
+          onClick={() => navigate('/admin/attendance')}
           className="mb-4 flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
         >
           <ArrowLeft size={20} />

@@ -133,8 +133,8 @@ const OnlineClasses = () => {
   });
 
   // Create online class mutation
-  const createClassMutation = useMutation(
-    async (data) => {
+  const createClassMutation = useMutation({
+    mutationFn: async (data) => {
       const classData = {
         topic: data.topic,
         categoryId: data.categoryId || '',
@@ -150,8 +150,7 @@ const OnlineClasses = () => {
       };
       return api.post('/online-classes', classData);
     },
-    {
-      onSuccess: () => {
+    onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ['onlineClasses'] });
         toast.success('Online class created successfully!');
         setShowAddModal(false);
@@ -167,19 +166,15 @@ const OnlineClasses = () => {
           duration: 60
         });
       },
-      onError: (error) => {
-        toast.error(error.response?.data?.message || 'Failed to create online class');
-      }
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to create online class');
     }
-  );
+  });
 
   // Delete class mutation
-  const deleteClassMutation = useMutation(
-    async (classId) => {
-      return api.delete(`/online-classes/${classId}`);
-    },
-    {
-      onSuccess: () => {
+  const deleteClassMutation = useMutation({
+    mutationFn: async (classId) => api.delete(`/online-classes/${classId}`),
+    onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ['onlineClasses'] });
         toast.success('Online class deleted successfully!');
       },
@@ -190,20 +185,16 @@ const OnlineClasses = () => {
   );
 
   // Approve class mutation
-  const approveClassMutation = useMutation(
-    async (classId) => {
-      return api.put(`/online-classes/${classId}/approve`);
+  const approveClassMutation = useMutation({
+    mutationFn: async (classId) => api.put(`/online-classes/${classId}/approve`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['onlineClasses'] });
+      toast.success('Class approved successfully!');
     },
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['onlineClasses'] });
-        toast.success('Class approved successfully!');
-      },
-      onError: (error) => {
-        toast.error(error.response?.data?.message || 'Failed to approve class');
-      }
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to approve class');
     }
-  );
+  });
 
   const handleDelete = (classId) => {
     if (window.confirm('Are you sure you want to delete this online class?')) {

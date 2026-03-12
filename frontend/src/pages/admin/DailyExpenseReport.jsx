@@ -13,9 +13,9 @@ const DailyExpenseReport = () => {
   const [reportType, setReportType] = useState('single'); // 'single' or 'range'
 
   // Fetch daily expense report
-  const { data: reportData, isLoading, refetch } = useQuery(
-    ['dailyExpenseReport', reportDate, dateRange, reportType],
-    async () => {
+  const { data: reportData, isLoading, refetch } = useQuery({
+    queryKey: ['dailyExpenseReport', reportDate, dateRange, reportType],
+    queryFn: async () => {
       const params = new URLSearchParams();
       if (reportType === 'single') {
         params.append('date', reportDate);
@@ -27,13 +27,8 @@ const DailyExpenseReport = () => {
       const response = await api.get(`/expenses/reports/daily?${params.toString()}`);
       return response.data;
     },
-    {
-      enabled: reportType === 'single' ? !!reportDate : (!!dateRange.startDate && !!dateRange.endDate),
-      onError: (error) => {
-        toast.error('Failed to load expense report');
-      }
-    }
-  );
+    enabled: reportType === 'single' ? !!reportDate : (!!dateRange.startDate && !!dateRange.endDate)
+  });
 
   const handleGenerateReport = () => {
     if (reportType === 'range' && (!dateRange.startDate || !dateRange.endDate)) {

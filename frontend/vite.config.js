@@ -16,7 +16,7 @@ export default defineConfig({
     strictPort: false,
     proxy: {
       '/api': {
-        target: process.env.VITE_API_URL?.replace('/api', '') || process.env.BACKEND_URL || '',
+        target: process.env.VITE_API_URL?.replace('/api', '') || process.env.BACKEND_URL || 'http://localhost:5000',
         changeOrigin: true,
         secure: false,
         ws: true, // Enable WebSocket proxying
@@ -31,7 +31,7 @@ export default defineConfig({
             // Log only in development for cleaner output
             const isDev = process.env.NODE_ENV !== 'production';
             if (isDev) {
-              const target = process.env.VITE_API_URL?.replace('/api', '') || process.env.BACKEND_URL || '';
+              const target = process.env.VITE_API_URL?.replace('/api', '') || process.env.BACKEND_URL || 'http://localhost:5000';
               console.log(`🔄 ${req.method} ${req.url} -> ${target}${req.url}`);
             }
           });

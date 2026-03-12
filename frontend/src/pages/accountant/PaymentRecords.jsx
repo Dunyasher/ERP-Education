@@ -23,9 +23,9 @@ const PaymentRecords = () => {
   });
 
   // Fetch all monthly payments
-  const { data: monthlyPayments = [], isLoading: paymentsLoading, refetch } = useQuery(
-    ['allMonthlyPayments', filters],
-    async () => {
+  const { data: monthlyPayments = [], isLoading: paymentsLoading, refetch } = useQuery({
+    queryKey: ['allMonthlyPayments', filters],
+    queryFn: async () => {
       const params = new URLSearchParams();
       if (filters.month) params.append('month', filters.month);
       if (filters.year) params.append('year', filters.year);
@@ -34,16 +34,16 @@ const PaymentRecords = () => {
       const response = await api.get(`/accountant/monthly-payments?${params.toString()}`);
       return response.data || [];
     }
-  );
+  });
 
   // Fetch all students for detailed info
-  const { data: students = [] } = useQuery(
-    ['allStudents'],
-    async () => {
+  const { data: students = [] } = useQuery({
+    queryKey: ['allStudents'],
+    queryFn: async () => {
       const response = await api.get('/students');
       return response.data || [];
     }
-  );
+  });
 
   const months = [
     { value: '', label: 'All Months' },
